@@ -88,10 +88,10 @@ impl Connector {
 /// Applies source defaults and classification, then sanitizes.
 fn finish(mut o: Opportunity, spec: &SourceSpec) -> Opportunity {
     classify::enrich(&mut o);
-    if o.category == Category::Other {
-        if let Some(category) = spec.category {
-            o.category = category;
-        }
+    if o.category == Category::Other
+        && let Some(category) = spec.category
+    {
+        o.category = category;
     }
     o.tags.extend(spec.tags.iter().cloned());
     o.sanitized()

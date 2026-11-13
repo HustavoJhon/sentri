@@ -58,6 +58,22 @@ impl Default for HttpConfig {
     }
 }
 
+/// Background collection settings.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct DaemonConfig {
+    /// Minutes between collection cycles (minimum 15).
+    pub interval_minutes: u64,
+}
+
+impl Default for DaemonConfig {
+    fn default() -> Self {
+        Self {
+            interval_minutes: 120,
+        }
+    }
+}
+
 /// One configured source instance.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -104,6 +120,7 @@ pub struct Config {
     pub profile: Profile,
     pub scoring: Weights,
     pub http: HttpConfig,
+    pub daemon: DaemonConfig,
     pub sources: Vec<SourceConfig>,
 }
 
@@ -192,6 +209,11 @@ impl Config {
                 )));
             }
         }
+        if self.daemon.interval_minutes < 15 {
+            return Err(ConfigError::Invalid(
+                "daemon.interval_minutes must be at least 15 (be polite with sources)".into(),
+            ));
+        }
         if self.http.max_body_bytes == 0 || self.http.timeout_secs == 0 {
             return Err(ConfigError::Invalid(
                 "http.max_body_bytes and http.timeout_secs must be positive".into(),
@@ -246,6 +268,7 @@ mod tests {
             "[[sources]]\nname = \"a\"\nkind = \"rss\"\nurl = \"file:///etc/passwd\"",
             "[[sources]]\nname = \"a\"\nkind = \"nope\"",
             "[[sources]]\nname = \"a\"\nkind = \"rss\"\nmax_items = 0",
+            "[daemon]\ninterval_minutes = 1",
         ];
         for text in bad {
             assert!(

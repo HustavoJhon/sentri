@@ -4,6 +4,7 @@ mod cli;
 mod output;
 
 use std::path::PathBuf;
+use std::time::Duration;
 
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -113,6 +114,11 @@ async fn run(app: &Sentri, command: Command) -> Result<()> {
         Command::Status => status(app).await?,
         Command::Collect { source } => collect(app, source.as_deref()).await?,
         Command::Sources => sources(app).await?,
+        Command::Daemon { interval } => {
+            let minutes = interval.unwrap_or(app.config().daemon.interval_minutes);
+            app.run_daemon(Duration::from_secs(minutes * 60), shutdown_signal())
+                .await?;
+        }
         Command::Backup { target } => backup(app, target).await?,
         Command::Config(_) => unreachable!("handled before opening the database"),
     }
@@ -213,10 +219,10 @@ async fn status(app: &Sentri) -> Result<()> {
 }
 
 async fn collect(app: &Sentri, only: Option<&str>) -> Result<()> {
-    if let Some(name) = only {
-        if app.config().source(name).is_none() {
-            anyhow::bail!("no source named {name:?}; see `sentri sources`");
-        }
+    if let Some(name) = only
+        && app.config().source(name).is_none()
+    {
+        anyhow::bail!("no source named {name:?}; see `sentri sources`");
     }
     let reports = app.collect(only).await;
     if reports.is_empty() {
@@ -259,6 +265,29 @@ async fn sources(app: &Sentri) -> Result<()> {
         );
     }
     Ok(())
+}
+
+/// Resolves on Ctrl-C or SIGTERM (what systemd sends on stop).
+async fn shutdown_signal() {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{SignalKind, signal};
+        match signal(SignalKind::terminate()) {
+            Ok(mut term) => {
+                tokio::select! {
+                    _ = tokio::signal::ctrl_c() => {}
+                    _ = term.recv() => {}
+                }
+            }
+            Err(_) => {
+                let _ = tokio::signal::ctrl_c().await;
+            }
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = tokio::signal::ctrl_c().await;
+    }
 }
 
 async fn backup(app: &Sentri, target: PathBuf) -> Result<()> {

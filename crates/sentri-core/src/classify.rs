@@ -215,15 +215,15 @@ pub fn modality(text: &str) -> Option<Modality> {
 /// Fills unknown fields of `o` from explicit mentions in its own text.
 pub fn enrich(o: &mut Opportunity) {
     let text = o.haystack();
-    if o.category == Category::Other {
-        if let Some(c) = category(&text) {
-            o.category = c;
-        }
+    if o.category == Category::Other
+        && let Some(c) = category(&text)
+    {
+        o.category = c;
     }
-    if o.modality == Modality::Unknown {
-        if let Some(m) = modality(&text) {
-            o.modality = m;
-        }
+    if o.modality == Modality::Unknown
+        && let Some(m) = modality(&text)
+    {
+        o.modality = m;
     }
     if o.cost == Cost::Unknown && any(&text, FREE) {
         o.cost = Cost::Free;

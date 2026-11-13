@@ -24,7 +24,7 @@ like, guardarlos, descartarlos o convertirlos en actividades de calendario.
 
 ## Requisitos
 
-- Rust stable (edición 2024, MSRV 1.85).
+- Rust stable (edición 2024, MSRV 1.89).
 - Nada más: SQLite va embebido (`sqlx` con `sqlite-bundled`).
 
 ## Uso rápido

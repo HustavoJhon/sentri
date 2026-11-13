@@ -60,6 +60,9 @@ timeout_secs = 20
 max_body_bytes = 3_000_000
 max_redirects = 5
 
+[daemon]
+interval_minutes = 120
+
 # Sources. Each one is independent: if it fails, the others keep working.
 [[sources]]
 name = "freecodecamp-news"

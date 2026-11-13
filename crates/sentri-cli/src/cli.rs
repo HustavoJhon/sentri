@@ -85,6 +85,12 @@ pub enum Command {
     },
     /// List configured sources and their last run.
     Sources,
+    /// Collect continuously in the background (use with systemd).
+    Daemon {
+        /// Minutes between cycles (default: `daemon.interval_minutes`).
+        #[arg(long, value_parser = clap::value_parser!(u64).range(15..))]
+        interval: Option<u64>,
+    },
     /// Manage the configuration file.
     #[command(subcommand)]
     Config(ConfigCommand),
