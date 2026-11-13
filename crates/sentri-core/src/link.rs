@@ -70,9 +70,7 @@ impl CanonicalUrl {
         url.set_host(Some(&host))
             .map_err(|e| LinkError::Invalid(e.to_string()))?;
         url.set_fragment(None);
-        if url.port() == url.port_or_known_default() && url.port().is_some() {
-            let _ = url.set_port(None);
-        }
+        // Default ports are already dropped by the parser; others are kept.
         // Scheme is not part of identity: http and https point to the same page.
         let _ = url.set_scheme("https");
 
@@ -148,6 +146,15 @@ mod tests {
         let b = CanonicalUrl::parse("http://www.example.com/event/?fbclid=abc&id=7#x").unwrap();
         assert_eq!(a.fingerprint(), b.fingerprint());
         assert_eq!(a.fingerprint().len(), 64);
+    }
+
+    #[test]
+    fn keeps_non_default_ports() {
+        assert_eq!(
+            canon("http://example.com:8080/x"),
+            "https://example.com:8080/x"
+        );
+        assert_eq!(canon("https://example.com:443/x"), "https://example.com/x");
     }
 
     #[test]
