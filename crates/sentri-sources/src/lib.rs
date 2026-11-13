@@ -1,1 +1,9 @@
-//! SENTRI sources crate.
+//! SENTRI connectors and the safe HTTP client they share.
+//!
+//! All content obtained here is untrusted: it is size-limited, sanitized by
+//! `sentri-core` before storage and never executed.
+
+pub mod http;
+pub mod net;
+
+pub use http::{FetchError, Fetched, HttpLimits, SafeClient};

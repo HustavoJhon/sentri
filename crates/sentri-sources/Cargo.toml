@@ -1,10 +1,20 @@
 [package]
 name = "sentri-sources"
+description = "SENTRI connectors and safe outbound HTTP."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+reqwest.workspace = true
+sentri-core.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+wiremock.workspace = true
 
 [lints]
 workspace = true

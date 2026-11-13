@@ -1,0 +1,48 @@
+# Seguridad
+
+Todo contenido externo es **no confiable**: se descarga con límites, se
+sanea antes de guardarse y nunca se ejecuta.
+
+## Peticiones salientes (anti-SSRF)
+
+`sentri-sources::SafeClient` es el único cliente HTTP del proyecto:
+
+| Protección | Detalle |
+|---|---|
+| Esquemas | Solo `http` y `https`. Sin credenciales en la URL. |
+| Direcciones | Solo IPs públicas. Se bloquean loopback, redes privadas, link-local (incl. `169.254.169.254` de metadatos cloud), CGNAT `100.64.0.0/10` (Tailscale), multicast, reservadas, ULA/link-local IPv6 y formas IPv6 que envuelven IPv4 (mapped, compatible, NAT64, 6to4). |
+| DNS rebinding | Un resolver propio filtra las direcciones; la conexión usa solo las IPs ya validadas. |
+| Literales IP | Se validan antes de conectar (incluye formas como `0x7f000001`). |
+| Redirecciones | Máximo configurable; cada salto se valida igual que la URL inicial. |
+| Proxies | Se ignoran los proxies del sistema para que no eludan las comprobaciones. |
+| Tamaño | `max_body_bytes` por respuesta, comprobado en streaming. |
+| Tipo | Lista blanca de `Content-Type` (HTML, XML, feeds, JSON, iCal, texto). |
+| Tiempo | Timeout total y de conexión. |
+| Identidad | `User-Agent: sentri/<versión>`, sin datos personales. |
+
+## Texto externo
+
+`sentri_core::text::clean` elimina caracteres de control (incluido `ESC`, que
+permitiría inyectar secuencias ANSI en la terminal), caracteres bidi/zero-width
+y limita longitudes. Las URLs de imagen solo se aceptan con `https://`.
+
+## Secretos
+
+- Nunca en el repositorio ni en `config.toml`: la configuración solo guarda el
+  **nombre** de la variable de entorno (`token_env`).
+- Los tokens OAuth de Google se guardarán en `~/.local/share/sentri/` con
+  permisos `0600` (fase 7); se evaluará el keyring del sistema.
+- `.gitignore` excluye `*.db`, `.env`, `*.secret` y `secrets/`.
+- Los logs nunca incluyen tokens ni cabeceras de autorización.
+
+## Datos personales
+
+- Base de datos y backups con permisos `0600` desde su creación; directorio `0700`.
+- El perfil reutilizable para inscripciones (fase 10) es opcional campo a campo.
+- Ninguna acción externa (inscribirse, postular, aceptar términos, pagar,
+  adjuntar documentos, publicar) se ejecuta sin confirmación explícita.
+
+## Plataformas
+
+Sin scraping de LinkedIn ni X, sin cookies de sesión de cuentas personales
+(ver [ADR-0004](adr/0004-no-scraping-of-restricted-platforms.md)).
