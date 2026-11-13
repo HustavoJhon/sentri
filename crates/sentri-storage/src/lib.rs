@@ -4,6 +4,7 @@
 //! changes live in versioned files under `migrations/` that are embedded in the
 //! binary and applied by [`Store::open`].
 
+mod calendar;
 mod error;
 mod insights;
 mod interactions;
@@ -21,6 +22,7 @@ use std::time::Duration;
 use sqlx::SqlitePool;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
 
+pub use calendar::NewEntry;
 pub use error::StorageError;
 pub use insights::{Daily, DayActivity, DayEntry, Insights};
 pub use interactions::HistoryEntry;
