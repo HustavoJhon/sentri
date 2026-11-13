@@ -9,6 +9,7 @@ mod interactions;
 mod opportunities;
 mod private_fs;
 mod rows;
+mod runs;
 mod time;
 
 use std::path::Path;
@@ -21,6 +22,7 @@ use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, S
 pub use error::StorageError;
 pub use interactions::HistoryEntry;
 pub use opportunities::Upsert;
+pub use runs::{CollectionRun, RunStatus, Stats};
 
 static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
 
