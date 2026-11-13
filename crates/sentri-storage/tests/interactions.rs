@@ -112,3 +112,31 @@ async fn unknown_opportunity_is_an_error() {
         Err(StorageError::NotFound(77))
     ));
 }
+
+#[tokio::test]
+async fn news_lives_apart_from_discover() {
+    let store = Store::in_memory().await.unwrap();
+    let mut news = opp(
+        "https://news.example/1",
+        "Linux 7.0 released",
+        Category::Other,
+    );
+    news.content = sentri_core::ContentKind::News;
+    let news = store.upsert_opportunity(&news).await.unwrap().id();
+    let job = store
+        .upsert_opportunity(&opp("https://jobs.example/1", "Job", Category::Job))
+        .await
+        .unwrap()
+        .id();
+    assert_eq!(ids(&store, FeedView::News).await, [news]);
+    assert_eq!(ids(&store, FeedView::Discover).await, [job]);
+    store
+        .apply_action(news, Action::Set(Flag::Saved), now())
+        .await
+        .unwrap();
+    assert_eq!(
+        ids(&store, FeedView::Saved).await,
+        [news],
+        "personal lists keep both"
+    );
+}

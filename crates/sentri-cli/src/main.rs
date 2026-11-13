@@ -111,6 +111,7 @@ async fn run(app: &Sentri, command: Command) -> Result<()> {
         Command::Jobs(f) => list(app, FeedView::Jobs, &f).await?,
         Command::Courses(f) => list(app, FeedView::Courses, &f).await?,
         Command::Events(f) => list(app, FeedView::Events, &f).await?,
+        Command::News(f) => list(app, FeedView::News, &f).await?,
         Command::Show { id } => {
             let id = OpportunityId(id);
             app.act(id, Action::Viewed).await?;

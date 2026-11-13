@@ -70,6 +70,8 @@ pub enum Command {
     Courses(FeedArgs),
     /// Events, conferences, workshops and meetups.
     Events(FeedArgs),
+    /// Recent tech news.
+    News(FeedArgs),
     /// Details of one opportunity and why it is recommended.
     Show { id: i64 },
     /// Toggle like.
@@ -220,6 +222,7 @@ impl From<SortArg> for SortOrder {
 #[derive(Debug, Clone, Copy, ValueEnum)]
 pub enum ViewArg {
     Discover,
+    News,
     Jobs,
     Courses,
     Events,
@@ -242,6 +245,7 @@ impl From<ViewArg> for FeedView {
     fn from(v: ViewArg) -> Self {
         match v {
             ViewArg::Discover => Self::Discover,
+            ViewArg::News => Self::News,
             ViewArg::Jobs => Self::Jobs,
             ViewArg::Courses => Self::Courses,
             ViewArg::Events => Self::Events,

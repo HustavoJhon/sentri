@@ -12,6 +12,7 @@ use crate::{Category, Flag, Modality, SourceKind};
 pub enum FeedView {
     #[default]
     Discover,
+    News,
     Jobs,
     Courses,
     Events,
@@ -34,6 +35,7 @@ impl FeedView {
     pub const fn label(self) -> &'static str {
         match self {
             Self::Discover => "Discover",
+            Self::News => "Tech News",
             Self::Jobs => "Jobs",
             Self::Courses => "Courses",
             Self::Events => "Events",
@@ -86,6 +88,24 @@ impl FeedView {
             Self::Enrolled => Some(Flag::Enrolled),
             Self::Completed => Some(Flag::Completed),
             Self::Dismissed => Some(Flag::Dismissed),
+            _ => None,
+        }
+    }
+
+    /// Content shown: `Some(News)` for Tech News, `Some(Opportunity)` for
+    /// discovery views, `None` (both) for personal lists.
+    pub const fn content(self) -> Option<crate::ContentKind> {
+        match self {
+            Self::News => Some(crate::ContentKind::News),
+            Self::Discover
+            | Self::Jobs
+            | Self::Courses
+            | Self::Events
+            | Self::Hackathons
+            | Self::Scholarships
+            | Self::Volunteering
+            | Self::OpenSource
+            | Self::Travel => Some(crate::ContentKind::Opportunity),
             _ => None,
         }
     }

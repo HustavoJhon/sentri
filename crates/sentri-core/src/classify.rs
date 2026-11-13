@@ -6,7 +6,7 @@
 //! They complement structured data; they do not replace reading the offer.
 
 use crate::profile::contains_term;
-use crate::{Category, Cost, Modality, Opportunity};
+use crate::{Category, Cost, Modality, Opportunity, Stance};
 
 /// Ordered from most to least specific: the first match wins.
 const CATEGORY_RULES: &[(Category, &[&str])] = &[
@@ -184,6 +184,170 @@ const ACCOMMODATION: &[&str] = &[
 ];
 const PRIZES: &[&str] = &["prize", "prizes", "premio", "premios", "award"];
 
+/// Wording that signals unconfirmed information.
+const SPECULATION: &[&str] = &[
+    "rumor",
+    "rumors",
+    "rumour",
+    "rumoured",
+    "rumored",
+    "reportedly",
+    "leak",
+    "leaked",
+    "leaks",
+    "allegedly",
+    "sources say",
+    "sources familiar",
+    "people familiar",
+    "could be",
+    "may be",
+    "is said to",
+    "según fuentes",
+    "rumores",
+    "filtración",
+    "supuestamente",
+];
+const OPINION: &[&str] = &[
+    "opinion",
+    "op-ed",
+    "editorial",
+    "commentary",
+    "column",
+    "analysis:",
+    "why i",
+    "i think",
+    "hot take",
+    "opinión",
+    "columna",
+];
+const DISCUSSION: &[&str] = &["ask hn", "show hn", "tell hn", "discussion", "thread"];
+
+/// News topics, first match wins.
+const TOPICS: &[(&str, &[&str])] = &[
+    (
+        "security",
+        &[
+            "vulnerability",
+            "cve",
+            "exploit",
+            "breach",
+            "ransomware",
+            "malware",
+            "security",
+            "zero-day",
+        ],
+    ),
+    (
+        "ai",
+        &[
+            "ai",
+            "llm",
+            "gpt",
+            "openai",
+            "anthropic",
+            "gemini",
+            "machine learning",
+            "neural",
+            "model",
+            "chatbot",
+            "inteligencia artificial",
+        ],
+    ),
+    (
+        "hardware",
+        &[
+            "gpu",
+            "gpus",
+            "cpus",
+            "processor",
+            "chipmaker",
+            "cpu",
+            "chip",
+            "chips",
+            "semiconductor",
+            "nvidia",
+            "amd",
+            "intel",
+            "tsmc",
+            "arm",
+        ],
+    ),
+    (
+        "linux",
+        &[
+            "linux",
+            "kernel",
+            "distro",
+            "ubuntu",
+            "fedora",
+            "arch linux",
+            "debian",
+            "gnome",
+            "kde",
+            "wayland",
+        ],
+    ),
+    ("rust", &["rust", "cargo", "crates.io"]),
+    ("go", &["golang", "go 1."]),
+    (
+        "open source",
+        &["open source", "open-source", "foss", "license", "github"],
+    ),
+    (
+        "business",
+        &[
+            "acquisition",
+            "acquires",
+            "layoffs",
+            "funding",
+            "raises",
+            "ipo",
+            "valuation",
+            "revenue",
+            "antitrust",
+            "lawsuit",
+            "ceo",
+            "startup",
+        ],
+    ),
+    (
+        "dev tools",
+        &[
+            "compiler",
+            "ide",
+            "framework",
+            "database",
+            "developer",
+            "programming",
+            "api",
+        ],
+    ),
+];
+
+/// Companies and people worth tagging when mentioned.
+const ENTITIES: &[(&str, &[&str])] = &[
+    ("nvidia", &["nvidia", "jensen huang"]),
+    ("amd", &["amd", "lisa su"]),
+    ("intel", &["intel"]),
+    ("openai", &["openai", "sam altman", "chatgpt"]),
+    ("anthropic", &["anthropic", "claude", "dario amodei"]),
+    (
+        "google",
+        &["google", "alphabet", "deepmind", "sundar pichai", "gemini"],
+    ),
+    (
+        "microsoft",
+        &["microsoft", "satya nadella", "azure", "copilot"],
+    ),
+    ("apple", &["apple", "tim cook", "iphone", "macos"]),
+    ("meta", &["meta", "facebook", "mark zuckerberg", "llama"]),
+    ("amazon", &["amazon", "aws", "andy jassy"]),
+    ("tesla", &["tesla", "elon musk", "xai"]),
+    ("github", &["github"]),
+    ("linux foundation", &["linux foundation", "linus torvalds"]),
+    ("mistral", &["mistral ai"]),
+];
+
 fn any(haystack: &str, terms: &[&str]) -> bool {
     terms.iter().any(|t| contains_term(haystack, t))
 }
@@ -195,6 +359,54 @@ pub fn category(text: &str) -> Option<Category> {
         .iter()
         .find(|(_, terms)| any(&text, terms))
         .map(|(category, _)| *category)
+}
+
+/// How a news item presents itself. Falls back to `fallback` (e.g. the
+/// source's configured stance) and finally to a plain report.
+pub fn stance(text: &str, fallback: Option<Stance>) -> Stance {
+    let text = text.to_lowercase();
+    if any(&text, SPECULATION) || text.contains('?') && text.contains("could") {
+        Stance::Speculation
+    } else if any(&text, DISCUSSION) {
+        Stance::Discussion
+    } else if any(&text, OPINION) {
+        Stance::Opinion
+    } else {
+        fallback.unwrap_or(Stance::Report)
+    }
+}
+
+/// Main topic of a news item.
+pub fn news_topic(text: &str) -> Option<&'static str> {
+    let text = text.to_lowercase();
+    TOPICS
+        .iter()
+        .find(|(_, terms)| any(&text, terms))
+        .map(|(topic, _)| *topic)
+}
+
+/// Companies and people mentioned in the text.
+pub fn entities(text: &str) -> Vec<&'static str> {
+    let text = text.to_lowercase();
+    ENTITIES
+        .iter()
+        .filter(|(_, terms)| any(&text, terms))
+        .map(|(name, _)| *name)
+        .collect()
+}
+
+/// Marks `o` as news and fills stance, topic and entity tags. The topic is
+/// placed first among the tags.
+pub fn enrich_news(o: &mut Opportunity, fallback: Option<Stance>) {
+    let text = format!("{} {}", o.title, o.summary.as_deref().unwrap_or_default());
+    o.content = crate::ContentKind::News;
+    if o.stance.is_none() {
+        o.stance = Some(stance(&text, fallback));
+    }
+    let mut tags: Vec<String> = news_topic(&text).map(str::to_owned).into_iter().collect();
+    tags.extend(entities(&text).into_iter().map(str::to_owned));
+    tags.append(&mut o.tags);
+    o.tags = tags;
 }
 
 /// Infers the modality from text. Ambiguous mentions yield hybrid.
@@ -271,6 +483,30 @@ mod tests {
         assert_eq!(category("Nothing to see"), None);
         // Whole words only.
         assert_eq!(category("Jobsite safety"), None);
+    }
+
+    #[test]
+    fn classifies_news_without_claiming_verification() {
+        assert_eq!(
+            stance("NVIDIA reportedly plans new GPU", None),
+            Stance::Speculation
+        );
+        assert_eq!(
+            stance("Ask HN: Is Rust worth it?", None),
+            Stance::Discussion
+        );
+        assert_eq!(stance("Opinion: the AI bubble", None), Stance::Opinion);
+        assert_eq!(stance("Linux 7.0 released", None), Stance::Report);
+        assert_eq!(
+            stance("Rust 1.99 released", Some(Stance::Official)),
+            Stance::Official
+        );
+        assert_eq!(news_topic("Critical CVE in OpenSSH"), Some("security"));
+        assert_eq!(news_topic("Jensen Huang says GPUs…"), Some("hardware"));
+        assert_eq!(
+            entities("Jensen Huang and Sam Altman"),
+            ["nvidia", "openai"]
+        );
     }
 
     #[test]

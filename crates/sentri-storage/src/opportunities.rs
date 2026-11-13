@@ -345,6 +345,10 @@ fn push_filters(qb: &mut QueryBuilder<Sqlite>, q: &FeedQuery, now: DateTime<Utc>
     if let Some(flag) = view.required_flag() {
         qb.push(format!(" AND {} = 1", flag_column(flag)));
     }
+    if let Some(content) = view.content() {
+        qb.push(" AND o.content_kind = ")
+            .push_bind(content.as_str());
+    }
     if view == FeedView::History {
         qb.push(" AND i.last_viewed_at IS NOT NULL");
     }
