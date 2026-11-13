@@ -92,3 +92,152 @@ query = "topic:cli language:rust stars:>200 pushed:>2026-01-01"
 category = "open_source"
 max_items = 20
 token_env = "SENTRI_GITHUB_TOKEN"
+
+# ── Tech News ────────────────────────────────────────────────────────────
+# `content = "news"` sends items to the Tech News section. `stance` sets the
+# default nature of a source; company blogs are "official". Items are never
+# marked as verified: reports are attributed to their outlet, and wording such
+# as "reportedly" or "leak" marks them as unconfirmed.
+
+[[sources]]
+name = "hn-front-page"
+kind = "hackernews"
+content = "news"
+max_items = 30
+
+[[sources]]
+name = "hn-nvidia-amd"
+kind = "hackernews"
+content = "news"
+query = "nvidia amd"
+enabled = false
+max_items = 20
+
+# Google News RSS: personal, non-commercial reading only (see docs/sources.md).
+[[sources]]
+name = "google-news-ai"
+kind = "googlenews"
+content = "news"
+url = "https://news.google.com/rss/search?q=%22artificial+intelligence%22+OR+OpenAI+OR+Anthropic+when:2d&hl=en-US&gl=US&ceid=US:en"
+max_items = 25
+
+[[sources]]
+name = "google-news-chips"
+kind = "googlenews"
+content = "news"
+url = "https://news.google.com/rss/search?q=NVIDIA+OR+AMD+OR+%22Jensen+Huang%22+when:3d&hl=en-US&gl=US&ceid=US:en"
+max_items = 20
+
+[[sources]]
+name = "ars-technica"
+kind = "rss"
+content = "news"
+url = "https://feeds.arstechnica.com/arstechnica/technology-lab"
+max_items = 20
+
+[[sources]]
+name = "the-verge"
+kind = "rss"
+content = "news"
+url = "https://www.theverge.com/rss/index.xml"
+max_items = 15
+
+[[sources]]
+name = "techcrunch"
+kind = "rss"
+content = "news"
+url = "https://techcrunch.com/feed/"
+max_items = 15
+
+[[sources]]
+name = "phoronix"
+kind = "rss"
+content = "news"
+url = "https://www.phoronix.com/rss.php"
+tags = ["linux"]
+max_items = 20
+
+[[sources]]
+name = "lwn"
+kind = "rss"
+content = "news"
+url = "https://lwn.net/headlines/rss"
+tags = ["linux"]
+max_items = 15
+
+[[sources]]
+name = "bleepingcomputer"
+kind = "rss"
+content = "news"
+url = "https://www.bleepingcomputer.com/feed/"
+tags = ["security"]
+max_items = 15
+
+[[sources]]
+name = "rust-blog"
+kind = "rss"
+content = "news"
+stance = "official"
+url = "https://blog.rust-lang.org/feed.xml"
+tags = ["rust"]
+max_items = 10
+
+[[sources]]
+name = "go-blog"
+kind = "rss"
+content = "news"
+stance = "official"
+url = "https://go.dev/blog/feed.atom"
+tags = ["go"]
+max_items = 10
+
+[[sources]]
+name = "github-blog"
+kind = "rss"
+content = "news"
+stance = "official"
+url = "https://github.blog/feed/"
+max_items = 10
+
+[[sources]]
+name = "openai-news"
+kind = "rss"
+content = "news"
+stance = "official"
+url = "https://openai.com/news/rss.xml"
+max_items = 15
+
+[[sources]]
+name = "nvidia-blog"
+kind = "rss"
+content = "news"
+stance = "official"
+url = "https://blogs.nvidia.com/feed/"
+max_items = 10
+
+# Social networks with open feeds (disabled examples; edit to taste).
+[[sources]]
+name = "mastodon-rust"
+kind = "mastodon"
+content = "news"
+stance = "discussion"
+enabled = false
+url = "https://mastodon.social/tags/rust.rss"
+max_items = 20
+
+[[sources]]
+name = "bluesky-example"
+kind = "bluesky"
+content = "news"
+stance = "discussion"
+enabled = false
+url = "https://bsky.app/profile/bsky.app/rss"
+max_items = 10
+
+[[sources]]
+name = "youtube-example"
+kind = "youtube"
+content = "news"
+enabled = false
+url = "https://www.youtube.com/feeds/videos.xml?channel_id=UCsBjURrPoezykLs9EqgamOA"
+max_items = 10

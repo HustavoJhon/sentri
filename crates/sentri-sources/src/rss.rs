@@ -31,7 +31,12 @@ impl Feed {
         now: DateTime<Utc>,
     ) -> Result<Vec<Opportunity>, SourceError> {
         let page = http.get(&self.url).await?;
-        parse(&page.body, &self.spec.name, now)
+        let mut items = parse(&page.body, &self.spec.name, now)?;
+        // Keep the platform badge (Mastodon, YouTube…) for feed-based sources.
+        for item in &mut items {
+            item.source = self.spec.kind;
+        }
+        Ok(items)
     }
 }
 

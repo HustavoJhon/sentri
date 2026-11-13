@@ -58,7 +58,12 @@ impl Connector {
     /// Builds the connector for `spec`, validating its configuration.
     pub fn from_spec(spec: SourceSpec) -> Result<Self, SourceError> {
         match spec.kind {
-            SourceKind::Rss => Feed::new(spec).map(Self::Feed),
+            // Platforms that publish standard feeds use the feed connector.
+            SourceKind::Rss
+            | SourceKind::GoogleNews
+            | SourceKind::Mastodon
+            | SourceKind::Bluesky
+            | SourceKind::YouTube => Feed::new(spec).map(Self::Feed),
             SourceKind::GitHub => GitHub::new(spec).map(Self::GitHub),
             SourceKind::HackerNews => HackerNews::new(spec).map(Self::HackerNews),
             other => Err(SourceError::Unsupported(other)),
