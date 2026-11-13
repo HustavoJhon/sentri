@@ -9,13 +9,13 @@ Las fases son incrementales; cada una termina con funcionalidad probada.
 | 2 | Normalización, deduplicación, búsqueda, filtros | ✅ |
 | 3 | Likes, guardados, descartes, historial, `sentri add` | ✅ (edición manual desde la TUI pendiente) |
 | 4 | TUI: Gruvbox, dashboard, feed, detalles, atajos, command palette | ✅ |
-| 5 | Conectores: RSS/Atom, GitHub, Hacker News, iCalendar (Reddit descartado, ver sources.md) | ⏳ |
+| 5 | Conectores: RSS/Atom ✅, GitHub ✅, Hacker News, iCalendar (Reddit descartado, ver sources.md) | 🚧 |
 | 6 | Intereses, scoring, explicaciones, personalización | 🚧 (base hecha en fase 1) |
 | 7 | Eventos y Google Calendar (OAuth2) | ⏳ |
 | 8 | Cursos, certificados, proyectos open source, aprendizaje | ⏳ |
 | 9 | Empleos, perfil profesional, compatibilidad | ⏳ |
 | 10 | Asistencia a inscripciones con confirmación explícita | ⏳ |
-| 11 | Daemon, systemd, reintentos, supervisión | ⏳ |
+| 11 | Daemon, systemd, reintentos, supervisión | ✅ base (reintentos con backoff por fuente pendientes) |
 | 12 | Acceso remoto (SSH + Tailscale), preparación VPS | ⏳ |
 | 13 | API Axum, PWA | ⏳ |
 

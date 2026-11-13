@@ -65,6 +65,7 @@ Documentación:
 - [Investigación de fuentes](docs/sources.md)
 - [Seguridad](docs/security.md)
 - [TUI y atajos](docs/tui.md)
+- [Daemon y systemd](docs/daemon.md)
 - [Configuración](docs/configuration.md)
 - [Base de datos](docs/database.md)
 - [Roadmap](docs/roadmap.md)

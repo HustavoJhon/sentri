@@ -1,0 +1,30 @@
+# SENTRI collection daemon (systemd *user* unit).
+#
+#   install -Dm644 contrib/systemd/sentri.service ~/.config/systemd/user/sentri.service
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now sentri.service
+#   journalctl --user -u sentri -f
+#
+# Optional tokens (e.g. SENTRI_GITHUB_TOKEN=...) go in ~/.config/sentri/env
+# with permissions 0600; they are never stored in config.toml.
+
+[Unit]
+Description=SENTRI opportunity collector
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/.cargo/bin/sentri daemon
+EnvironmentFile=-%h/.config/sentri/env
+Environment=SENTRI_LOG=info
+Restart=on-failure
+RestartSec=60
+# Hardening that works for user units.
+NoNewPrivileges=yes
+LockPersonality=yes
+RestrictRealtime=yes
+UMask=0077
+
+[Install]
+WantedBy=default.target
