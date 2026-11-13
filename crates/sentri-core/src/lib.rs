@@ -1,1 +1,14 @@
-//! SENTRI core crate.
+//! SENTRI domain: opportunity models and business rules.
+//!
+//! This crate is pure: it performs no I/O and has no async runtime, so it can be
+//! reused from the TUI, the CLI, the daemon and a future HTTP API.
+
+pub mod category;
+pub mod error;
+pub mod modality;
+pub mod source;
+
+pub use category::Category;
+pub use error::ParseError;
+pub use modality::Modality;
+pub use source::SourceKind;
