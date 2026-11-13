@@ -207,11 +207,13 @@ stance = "official"
 url = "https://openai.com/news/rss.xml"
 max_items = 15
 
+# Disabled: as of 2026-11-13 this feed fails to parse (feed-rs "missing text").
 [[sources]]
 name = "nvidia-blog"
 kind = "rss"
 content = "news"
 stance = "official"
+enabled = false
 url = "https://blogs.nvidia.com/feed/"
 max_items = 10
 

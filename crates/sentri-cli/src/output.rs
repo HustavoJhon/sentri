@@ -26,6 +26,18 @@ fn flags(state: &InteractionState) -> String {
         .collect()
 }
 
+/// Category for opportunities; topic and stance for news.
+fn kind_label(o: &sentri_core::Opportunity) -> String {
+    match (o.content, o.stance) {
+        (sentri_core::ContentKind::News, stance) => {
+            let topic = o.tags.first().map_or("news", String::as_str);
+            let stance = stance.map_or("", sentri_core::Stance::label);
+            format!("{topic}·{stance}")
+        }
+        _ => o.category.label().to_owned(),
+    }
+}
+
 /// One line per item: `id  score  badge  category  title  [deadline]  flags`.
 pub fn feed(items: &[Ranked]) -> String {
     if items.is_empty() {
@@ -41,11 +53,11 @@ pub fn feed(items: &[Ranked]) -> String {
             .unwrap_or_default();
         let _ = writeln!(
             out,
-            "{:>5}  {:>4}  {:<3}  {:<12}  {}{}  {}",
+            "{:>5}  {:>4}  {:<3}  {:<18}  {}{}  {}",
             r.item.id,
             r.relevance.score,
             o.source.badge(),
-            o.category.label(),
+            kind_label(o),
             o.title,
             deadline,
             flags(&r.item.state),

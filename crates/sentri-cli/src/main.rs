@@ -101,7 +101,7 @@ async fn run(app: &Sentri, command: Command) -> Result<()> {
             }
         }
         Command::Search { words, filters } => {
-            let mut query = feed_query(FeedView::Discover, &filters);
+            let mut query = feed_query(FeedView::All, &filters);
             query.text = Some(words.join(" "));
             print!("{}", output::feed(&app.feed(&query).await?));
         }

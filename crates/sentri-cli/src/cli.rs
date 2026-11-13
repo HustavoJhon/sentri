@@ -223,6 +223,7 @@ impl From<SortArg> for SortOrder {
 pub enum ViewArg {
     Discover,
     News,
+    All,
     Jobs,
     Courses,
     Events,
@@ -246,6 +247,7 @@ impl From<ViewArg> for FeedView {
         match v {
             ViewArg::Discover => Self::Discover,
             ViewArg::News => Self::News,
+            ViewArg::All => Self::All,
             ViewArg::Jobs => Self::Jobs,
             ViewArg::Courses => Self::Courses,
             ViewArg::Events => Self::Events,

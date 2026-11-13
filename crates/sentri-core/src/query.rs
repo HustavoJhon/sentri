@@ -13,6 +13,8 @@ pub enum FeedView {
     #[default]
     Discover,
     News,
+    /// Opportunities and news together (global search).
+    All,
     Jobs,
     Courses,
     Events,
@@ -36,6 +38,7 @@ impl FeedView {
         match self {
             Self::Discover => "Discover",
             Self::News => "Tech News",
+            Self::All => "Everything",
             Self::Jobs => "Jobs",
             Self::Courses => "Courses",
             Self::Events => "Events",

@@ -38,6 +38,10 @@ pub struct Weights {
     pub affinity_cap: i32,
     /// Days before a deadline considered "soon".
     pub deadline_soon_days: i64,
+    /// News published in the last 24 hours.
+    pub news_fresh: i32,
+    /// News older than a week.
+    pub news_stale: i32,
 }
 
 impl Default for Weights {
@@ -60,6 +64,8 @@ impl Default for Weights {
             affinity_unit: 3,
             affinity_cap: 24,
             deadline_soon_days: 14,
+            news_fresh: 12,
+            news_stale: -15,
         }
     }
 }
@@ -163,6 +169,7 @@ impl Scorer<'_> {
         self.location(o, &mut r);
         self.conditions(o, &mut r);
         self.deadline(o, &mut r);
+        self.freshness(o, &mut r);
         self.avoid(&haystack, &mut r);
         self.learned(o, &mut r);
         r.reasons.sort_by_key(|reason| -reason.points.abs());
@@ -258,6 +265,19 @@ impl Scorer<'_> {
             r.add(w.deadline_passed, "Deadline has passed");
         } else if deadline - self.now <= Duration::days(w.deadline_soon_days) {
             r.add(w.deadline_soon, "Deadline is coming up soon");
+        }
+    }
+
+    fn freshness(&self, o: &Opportunity, r: &mut Relevance) {
+        if o.content != crate::ContentKind::News {
+            return;
+        }
+        let published = o.dates.published_at.unwrap_or(o.discovered_at);
+        let age = self.now - published;
+        if age <= Duration::hours(24) {
+            r.add(self.weights.news_fresh, "Published in the last 24 hours");
+        } else if age > Duration::days(7) {
+            r.add(self.weights.news_stale, "Older than a week");
         }
     }
 
@@ -399,6 +419,22 @@ mod tests {
 
         let job = opp("PHP job", Category::Job);
         assert!(score(&job, &affinity).score < 0);
+    }
+
+    #[test]
+    fn fresh_news_ranks_above_old_news() {
+        let mut fresh = opp("Linux news", Category::Other);
+        fresh.content = crate::ContentKind::News;
+        fresh.dates.published_at = Some(now() - Duration::hours(2));
+        let mut old = fresh.clone();
+        old.dates.published_at = Some(now() - Duration::days(30));
+        let base = Affinity::default();
+        assert_eq!(score(&fresh, &base).score, 12);
+        assert_eq!(score(&old, &base).score, -15);
+        // Opportunities are unaffected.
+        let mut course = opp("Course", Category::Course);
+        course.dates.published_at = Some(now() - Duration::days(30));
+        assert_eq!(score(&course, &base).score, 0);
     }
 
     #[test]
