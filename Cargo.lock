@@ -2744,7 +2744,9 @@ dependencies = [
 name = "sentri-tui"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "ratatui",
+ "sentri-app",
  "sentri-core",
 ]
 
