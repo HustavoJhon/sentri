@@ -2,7 +2,8 @@
 
 use chrono::{DateTime, Utc};
 use sentri_core::{
-    CanonicalUrl, Category, Cost, FeedItem, LinkError, Modality, Opportunity, SourceKind, classify,
+    CanonicalUrl, Category, Cost, FeedItem, Field, LinkError, Modality, Opportunity, SourceKind,
+    classify,
 };
 use sentri_sources::metadata::{self, PageMetadata, StructuredKind};
 use sentri_sources::{FetchError, SafeClient};
@@ -66,13 +67,23 @@ pub(crate) async fn build(
         Ok(None) => warnings.push("The link is not an HTML page; metadata not extracted.".into()),
         Err(error) => warnings.push(format!("Could not download the page: {error}")),
     }
-    apply_overrides(&mut o, overrides);
     classify::enrich(&mut o);
+    // Classify from the text the user typed when the page said nothing.
+    if o.category == Category::Other && overrides.category.is_none() {
+        let typed = [overrides.title.as_deref(), overrides.summary.as_deref()]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+            .join(" ");
+        if let Some(category) = classify::category(&typed) {
+            o.category = category;
+        }
+    }
     let o = o.sanitized();
-    if o.title == o.canonical_url {
+    if o.title == o.canonical_url && overrides.title.is_none() {
         warnings.push("No title found; edit the item to add one.".into());
     }
-    if o.category == Category::Other {
+    if o.category == Category::Other && overrides.category.is_none() {
         warnings.push("Category could not be determined; edit the item to set it.".into());
     }
     (o, warnings)
@@ -128,27 +139,33 @@ fn apply_metadata(o: &mut Opportunity, meta: PageMetadata) {
     o.tags = tags;
 }
 
-pub(crate) fn apply_overrides(o: &mut Opportunity, v: &LinkOverrides) {
-    if let Some(title) = &v.title {
-        o.title.clone_from(title);
+impl LinkOverrides {
+    /// Field values to store as manual overrides on top of `current`.
+    pub fn values(&self, current: &Opportunity) -> Vec<(Field, String)> {
+        let date = |d: Option<DateTime<Utc>>| d.map(sentri_core::edit::format_date);
+        let mut values: Vec<(Field, String)> = [
+            (Field::Title, self.title.clone()),
+            (Field::Summary, self.summary.clone()),
+            (
+                Field::Category,
+                self.category.map(|c| c.as_str().to_owned()),
+            ),
+            (
+                Field::Modality,
+                self.modality.map(|m| m.as_str().to_owned()),
+            ),
+            (Field::Location, self.location.clone()),
+            (Field::StartsAt, date(self.starts_at)),
+            (Field::Deadline, date(self.deadline)),
+        ]
+        .into_iter()
+        .filter_map(|(field, value)| value.map(|v| (field, v)))
+        .collect();
+        if !self.tags.is_empty() {
+            let mut tags = current.tags.clone();
+            tags.extend(self.tags.iter().cloned());
+            values.push((Field::Tags, tags.join(", ")));
+        }
+        values
     }
-    if v.summary.is_some() {
-        o.summary.clone_from(&v.summary);
-    }
-    if let Some(category) = v.category {
-        o.category = category;
-    }
-    if let Some(modality) = v.modality {
-        o.modality = modality;
-    }
-    if v.location.is_some() {
-        o.location.clone_from(&v.location);
-    }
-    if v.starts_at.is_some() {
-        o.dates.starts_at = v.starts_at;
-    }
-    if v.deadline.is_some() {
-        o.dates.deadline = v.deadline;
-    }
-    o.tags.extend(v.tags.iter().cloned());
 }

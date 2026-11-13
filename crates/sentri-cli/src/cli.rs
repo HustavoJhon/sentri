@@ -31,7 +31,21 @@ pub enum Command {
         id: i64,
         #[command(flatten)]
         fields: FieldArgs,
+        /// Set any field: `--set author_handle=@ana` (see `sentri fields`).
+        #[arg(long = "set", value_name = "FIELD=VALUE")]
+        set: Vec<String>,
+        /// Restore a field to its detected value (repeatable).
+        #[arg(long = "reset", value_name = "FIELD")]
+        reset: Vec<String>,
+        /// Personal notes (empty string clears them).
+        #[arg(long)]
+        notes: Option<String>,
+        /// Personal priority: low, medium or high.
+        #[arg(long)]
+        priority: Option<String>,
     },
+    /// List editable fields.
+    Fields,
     /// Search opportunities by keywords.
     Search {
         #[arg(required = true)]

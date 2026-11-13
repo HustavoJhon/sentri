@@ -4,10 +4,11 @@ use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use sentri_core::{
-    Action, Affinity, CanonicalUrl, FeedQuery, Flag, InteractionState, Opportunity, OpportunityId,
+    Action, Affinity, Annotations, CanonicalUrl, FeedQuery, Field, Flag, InteractionState,
+    OpportunityId,
 };
 use sentri_sources::{FetchError, HttpLimits, SafeClient};
-use sentri_storage::{HistoryEntry, Stats, StorageError, Store};
+use sentri_storage::{EditState, HistoryEntry, Stats, StorageError, Store};
 
 use crate::links::{self, AddLinkError, AddOutcome, LinkOverrides};
 use crate::{Config, Ranked, rank};
@@ -84,6 +85,12 @@ impl Sentri {
         let (opportunity, warnings) =
             links::build(&self.http, &url, input.trim(), overrides, Utc::now()).await;
         let id = self.store.upsert_opportunity(&opportunity).await?.id();
+        // What the user typed is manual data: it overrides, never replaces,
+        // what the page said.
+        let values = overrides.values(&opportunity);
+        if !values.is_empty() {
+            self.store.set_overrides(id, &values, Utc::now()).await?;
+        }
         let item = self.store.get(id).await?;
         Ok(AddOutcome::Added { item, warnings })
     }
@@ -147,23 +154,44 @@ impl Sentri {
     }
 
     /// Saves manual corrections to an opportunity.
-    pub async fn edit(&self, id: OpportunityId, edited: Opportunity) -> Result<(), AppError> {
-        Ok(self
-            .store
-            .update_opportunity(id, &edited.sanitized())
-            .await?)
-    }
-
     /// Applies user corrections to an existing opportunity and returns it.
     pub async fn correct(
         &self,
         id: OpportunityId,
         overrides: &LinkOverrides,
     ) -> Result<sentri_core::FeedItem, AppError> {
-        let mut opportunity = self.store.get(id).await?.opportunity;
-        links::apply_overrides(&mut opportunity, overrides);
-        self.edit(id, opportunity).await?;
+        let current = self.store.get(id).await?.opportunity;
+        self.store
+            .set_overrides(id, &overrides.values(&current), Utc::now())
+            .await?;
         Ok(self.store.get(id).await?)
+    }
+
+    /// Detected values, manual overrides and personal notes of an item.
+    pub async fn edit_state(&self, id: OpportunityId) -> Result<EditState, AppError> {
+        Ok(self.store.edit_state(id).await?)
+    }
+
+    /// Saves an editor session atomically per layer: manual values, fields
+    /// reset to their detected value, and annotations.
+    pub async fn save_edit(
+        &self,
+        id: OpportunityId,
+        values: &[(Field, String)],
+        reset: &[Field],
+        annotations: Option<&Annotations>,
+    ) -> Result<(), AppError> {
+        let now = Utc::now();
+        if !reset.is_empty() {
+            self.store.reset_overrides(id, reset).await?;
+        }
+        if !values.is_empty() {
+            self.store.set_overrides(id, values, now).await?;
+        }
+        if let Some(annotations) = annotations {
+            self.store.set_annotations(id, annotations, now).await?;
+        }
+        Ok(())
     }
 
     pub async fn history(&self, limit: u32) -> Result<Vec<HistoryEntry>, AppError> {

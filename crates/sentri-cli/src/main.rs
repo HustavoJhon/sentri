@@ -9,7 +9,7 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use clap::Parser;
 use sentri_app::{AddOutcome, Config, LinkOverrides, Sentri, paths};
-use sentri_core::{Action, FeedQuery, FeedView, OpportunityId, PriceFilter};
+use sentri_core::{Action, FeedQuery, FeedView, Field, FieldKind, OpportunityId, PriceFilter};
 use tracing_subscriber::EnvFilter;
 
 use crate::cli::{AddArgs, Cli, Command, ConfigCommand, FeedArgs, FieldArgs};
@@ -72,9 +72,33 @@ fn config_command(cmd: &ConfigCommand, path: &std::path::Path) -> Result<()> {
 async fn run(app: &Sentri, command: Command) -> Result<()> {
     match command {
         Command::Add(args) => add(app, args).await?,
-        Command::Edit { id, fields } => {
-            let item = app.correct(OpportunityId(id), &overrides(fields)).await?;
-            println!("Updated #{}: {}", item.id, item.opportunity.title);
+        Command::Edit {
+            id,
+            fields,
+            set,
+            reset,
+            notes,
+            priority,
+        } => {
+            edit(
+                app,
+                OpportunityId(id),
+                fields,
+                &set,
+                &reset,
+                notes,
+                priority,
+            )
+            .await?;
+        }
+        Command::Fields => {
+            for field in Field::ALL {
+                let kind = match field.kind() {
+                    FieldKind::Choice(options) => options.join("|"),
+                    other => format!("{other:?}").to_lowercase(),
+                };
+                println!("{:<16} {:<16} {kind}", field.as_str(), field.label());
+            }
         }
         Command::Search { words, filters } => {
             let mut query = feed_query(FeedView::Discover, &filters);
@@ -157,6 +181,59 @@ async fn add(app: &Sentri, args: AddArgs) -> Result<()> {
                 item.id, item.opportunity.title
             );
         }
+    }
+    Ok(())
+}
+
+async fn edit(
+    app: &Sentri,
+    id: OpportunityId,
+    fields: FieldArgs,
+    set: &[String],
+    reset: &[String],
+    notes: Option<String>,
+    priority: Option<String>,
+) -> Result<()> {
+    let current = app.store().get(id).await?.opportunity;
+    let mut values = overrides(fields).values(&current);
+    for pair in set {
+        let (field, value) = pair
+            .split_once('=')
+            .with_context(|| format!("expected FIELD=VALUE, got {pair:?}"))?;
+        values.push((field.trim().parse::<Field>()?, value.to_owned()));
+    }
+    let reset: Vec<Field> = reset
+        .iter()
+        .map(|f| f.trim().parse::<Field>())
+        .collect::<Result<_, _>>()?;
+    let annotations = if notes.is_some() || priority.is_some() {
+        let mut a = app.edit_state(id).await?.annotations;
+        if let Some(notes) = notes {
+            a.notes = Some(notes).filter(|n| !n.trim().is_empty());
+        }
+        if let Some(p) = priority {
+            a.priority = Some(
+                sentri_core::Priority::from_db(&p)
+                    .with_context(|| format!("priority must be low, medium or high, not {p:?}"))?,
+            );
+        }
+        Some(a)
+    } else {
+        None
+    };
+    app.save_edit(id, &values, &reset, annotations.as_ref())
+        .await?;
+    let state = app.edit_state(id).await?;
+    println!("Updated #{id}: {}", state.effective.title);
+    for o in &state.overrides {
+        println!(
+            "  ✎ {:<14} {}  (detected: {})",
+            o.field.label(),
+            o.value,
+            Some(o.field.get(&state.detected))
+                .filter(|v| !v.is_empty())
+                .unwrap_or_else(|| "—".into())
+        );
     }
     Ok(())
 }

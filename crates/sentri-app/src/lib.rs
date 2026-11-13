@@ -16,5 +16,5 @@ pub use config::{Config, ConfigError, DaemonConfig, HttpConfig, SourceConfig};
 pub use daemon::DaemonError;
 pub use links::{AddLinkError, AddOutcome, LinkOverrides};
 pub use ranking::{Ranked, rank};
-pub use sentri_storage::{CollectionRun, HistoryEntry, RunStatus, Stats};
+pub use sentri_storage::{CollectionRun, EditState, HistoryEntry, Override, RunStatus, Stats};
 pub use service::{AppError, Sentri};
