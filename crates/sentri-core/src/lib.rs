@@ -5,6 +5,7 @@
 
 pub mod category;
 pub mod classify;
+pub mod edit;
 pub mod error;
 pub mod interaction;
 pub mod link;
@@ -17,6 +18,7 @@ pub mod source;
 pub mod text;
 
 pub use category::Category;
+pub use edit::{EditError, Field, FieldKind};
 pub use error::ParseError;
 pub use interaction::{Action, Flag, InteractionState};
 pub use link::{CanonicalUrl, LinkError};
