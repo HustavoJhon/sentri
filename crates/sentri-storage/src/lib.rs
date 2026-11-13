@@ -5,6 +5,7 @@
 //! binary and applied by [`Store::open`].
 
 mod error;
+mod interactions;
 mod opportunities;
 mod private_fs;
 mod rows;
@@ -18,6 +19,7 @@ use sqlx::SqlitePool;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
 
 pub use error::StorageError;
+pub use interactions::HistoryEntry;
 pub use opportunities::Upsert;
 
 static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
