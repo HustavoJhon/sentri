@@ -26,6 +26,12 @@ pub struct Cli {
 pub enum Command {
     /// Add a link found while browsing.
     Add(AddArgs),
+    /// Correct or complete an opportunity's data.
+    Edit {
+        id: i64,
+        #[command(flatten)]
+        fields: FieldArgs,
+    },
     /// Search opportunities by keywords.
     Search {
         #[arg(required = true)]
@@ -111,6 +117,13 @@ pub enum ConfigCommand {
 #[derive(Debug, Args)]
 pub struct AddArgs {
     pub url: String,
+    #[command(flatten)]
+    pub fields: FieldArgs,
+}
+
+/// Fields the user can set when adding or editing.
+#[derive(Debug, Args, Default)]
+pub struct FieldArgs {
     /// Title, if the page does not provide a good one.
     #[arg(long)]
     pub title: Option<String>,
@@ -308,10 +321,10 @@ mod tests {
         let Some(Command::Add(args)) = cli.command else {
             panic!("expected add");
         };
-        assert_eq!(args.category, Some(Category::Hackathon));
-        assert_eq!(args.tags, ["ai"]);
+        assert_eq!(args.fields.category, Some(Category::Hackathon));
+        assert_eq!(args.fields.tags, ["ai"]);
         assert_eq!(
-            args.deadline.unwrap().to_rfc3339(),
+            args.fields.deadline.unwrap().to_rfc3339(),
             "2026-12-01T00:00:00+00:00"
         );
     }

@@ -154,6 +154,18 @@ impl Sentri {
             .await?)
     }
 
+    /// Applies user corrections to an existing opportunity and returns it.
+    pub async fn correct(
+        &self,
+        id: OpportunityId,
+        overrides: &LinkOverrides,
+    ) -> Result<sentri_core::FeedItem, AppError> {
+        let mut opportunity = self.store.get(id).await?.opportunity;
+        links::apply_overrides(&mut opportunity, overrides);
+        self.edit(id, opportunity).await?;
+        Ok(self.store.get(id).await?)
+    }
+
     pub async fn history(&self, limit: u32) -> Result<Vec<HistoryEntry>, AppError> {
         Ok(self.store.history(limit).await?)
     }

@@ -100,3 +100,35 @@ async fn rejects_invalid_urls() {
             .is_err()
     );
 }
+
+#[tokio::test]
+async fn corrections_are_applied_after_adding() {
+    let server = MockServer::start().await;
+    Mock::given(path("/x"))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&server)
+        .await;
+    let app = app().await;
+    let AddOutcome::Added { item, .. } = app
+        .add_link(&format!("{}/x", server.uri()), &LinkOverrides::default())
+        .await
+        .unwrap()
+    else {
+        panic!("expected a new item");
+    };
+    let fixed = app
+        .correct(
+            item.id,
+            &LinkOverrides {
+                title: Some("GDG Cusco Meetup".into()),
+                category: Some(Category::Meetup),
+                modality: Some(Modality::InPerson),
+                ..LinkOverrides::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(fixed.opportunity.title, "GDG Cusco Meetup");
+    assert_eq!(fixed.opportunity.category, Category::Meetup);
+    assert_eq!(fixed.opportunity.modality, Modality::InPerson);
+}

@@ -12,7 +12,7 @@ use sentri_app::{AddOutcome, Config, LinkOverrides, Sentri, paths};
 use sentri_core::{Action, FeedQuery, FeedView, OpportunityId, PriceFilter};
 use tracing_subscriber::EnvFilter;
 
-use crate::cli::{AddArgs, Cli, Command, ConfigCommand, FeedArgs};
+use crate::cli::{AddArgs, Cli, Command, ConfigCommand, FeedArgs, FieldArgs};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -72,6 +72,10 @@ fn config_command(cmd: &ConfigCommand, path: &std::path::Path) -> Result<()> {
 async fn run(app: &Sentri, command: Command) -> Result<()> {
     match command {
         Command::Add(args) => add(app, args).await?,
+        Command::Edit { id, fields } => {
+            let item = app.correct(OpportunityId(id), &overrides(fields)).await?;
+            println!("Updated #{}: {}", item.id, item.opportunity.title);
+        }
         Command::Search { words, filters } => {
             let mut query = feed_query(FeedView::Discover, &filters);
             query.text = Some(words.join(" "));
@@ -125,18 +129,21 @@ async fn run(app: &Sentri, command: Command) -> Result<()> {
     Ok(())
 }
 
+fn overrides(fields: FieldArgs) -> LinkOverrides {
+    LinkOverrides {
+        title: fields.title,
+        summary: fields.summary,
+        category: fields.category,
+        modality: fields.modality,
+        location: fields.location,
+        starts_at: fields.starts,
+        deadline: fields.deadline,
+        tags: fields.tags,
+    }
+}
+
 async fn add(app: &Sentri, args: AddArgs) -> Result<()> {
-    let overrides = LinkOverrides {
-        title: args.title,
-        summary: args.summary,
-        category: args.category,
-        modality: args.modality,
-        location: args.location,
-        starts_at: args.starts,
-        deadline: args.deadline,
-        tags: args.tags,
-    };
-    match app.add_link(&args.url, &overrides).await? {
+    match app.add_link(&args.url, &overrides(args.fields)).await? {
         AddOutcome::Added { item, warnings } => {
             println!("Added #{}: {}", item.id, item.opportunity.title);
             for warning in warnings {

@@ -127,7 +127,7 @@ fn apply_metadata(o: &mut Opportunity, meta: PageMetadata) {
     o.tags = tags;
 }
 
-fn apply_overrides(o: &mut Opportunity, v: &LinkOverrides) {
+pub(crate) fn apply_overrides(o: &mut Opportunity, v: &LinkOverrides) {
     if let Some(title) = &v.title {
         o.title.clone_from(title);
     }
