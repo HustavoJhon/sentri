@@ -435,6 +435,10 @@ fn push_order(qb: &mut QueryBuilder<Sqlite>, q: &FeedQuery) {
         (_, SortOrder::Deadline) => {
             " ORDER BY o.deadline IS NULL, o.deadline ASC, o.discovered_at DESC, o.id DESC"
         }
+        // News is ordered by publication; opportunities by discovery.
+        (FeedView::News, SortOrder::Newest | SortOrder::Relevance) => {
+            " ORDER BY COALESCE(o.published_at, o.discovered_at) DESC, o.id DESC"
+        }
         (_, SortOrder::Newest | SortOrder::Relevance) => {
             " ORDER BY o.discovered_at DESC, o.id DESC"
         }

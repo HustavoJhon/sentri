@@ -19,7 +19,7 @@ const DAYS: i64 = 14;
 pub fn render(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
     let compact = area.height < 34;
     let [tiles, charts, lists] = Layout::vertical([
-        Constraint::Length(if area.width < 100 { 6 } else { 3 }),
+        Constraint::Length(if area.width < 100 { 8 } else { 4 }),
         Constraint::Length(if compact { 9 } else { 12 }),
         Constraint::Min(6),
     ])
@@ -50,18 +50,20 @@ fn draw_tiles(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
     } else {
         vec![&tiles[..]]
     };
-    let row_areas = Layout::vertical(vec![Constraint::Length(3); rows.len()]).split(area);
+    let row_areas = Layout::vertical(vec![Constraint::Length(4); rows.len()]).split(area);
     for (row, row_area) in rows.iter().zip(row_areas.iter()) {
         let cells = Layout::horizontal(vec![Constraint::Fill(1); row.len()]).split(*row_area);
         for ((icon, label, value, color), cell) in row.iter().zip(cells.iter()) {
-            let line = Line::from(vec![
-                Span::styled(format!("{icon} "), Style::new().fg(*color)),
-                Span::styled(
-                    value.to_string(),
-                    Style::new().fg(*color).add_modifier(Modifier::BOLD),
-                ),
-                Span::styled(format!(" {label}"), theme.muted()),
-            ]);
+            let line = vec![
+                Line::from(vec![
+                    Span::styled(format!("{icon} "), Style::new().fg(*color)),
+                    Span::styled(
+                        value.to_string(),
+                        Style::new().fg(*color).add_modifier(Modifier::BOLD),
+                    ),
+                ]),
+                Line::from(Span::styled(*label, theme.muted())),
+            ];
             frame.render_widget(
                 Paragraph::new(line)
                     .centered()
