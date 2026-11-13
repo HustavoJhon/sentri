@@ -8,6 +8,7 @@ use sentri_core::{Category, Opportunity, SourceKind, classify};
 use thiserror::Error;
 
 use crate::SafeClient;
+use crate::github::GitHub;
 use crate::http::FetchError;
 use crate::rss::Feed;
 
@@ -44,6 +45,7 @@ pub enum SourceError {
 #[derive(Debug, Clone)]
 pub enum Connector {
     Feed(Feed),
+    GitHub(GitHub),
 }
 
 impl Connector {
@@ -51,6 +53,7 @@ impl Connector {
     pub fn from_spec(spec: SourceSpec) -> Result<Self, SourceError> {
         match spec.kind {
             SourceKind::Rss => Feed::new(spec).map(Self::Feed),
+            SourceKind::GitHub => GitHub::new(spec).map(Self::GitHub),
             other => Err(SourceError::Unsupported(other)),
         }
     }
@@ -58,6 +61,7 @@ impl Connector {
     pub fn spec(&self) -> &SourceSpec {
         match self {
             Self::Feed(c) => &c.spec,
+            Self::GitHub(c) => &c.spec,
         }
     }
 
@@ -70,6 +74,7 @@ impl Connector {
     ) -> Result<Vec<Opportunity>, SourceError> {
         let items = match self {
             Self::Feed(c) => c.fetch(http, now).await?,
+            Self::GitHub(c) => c.fetch(http, now).await?,
         };
         let spec = self.spec();
         Ok(items

@@ -4,6 +4,7 @@
 //! `sentri-core` before storage and never executed.
 
 pub mod connector;
+pub mod github;
 pub mod http;
 pub mod metadata;
 pub mod net;
