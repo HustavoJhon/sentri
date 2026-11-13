@@ -73,6 +73,14 @@ mod tests {
     use super::*;
 
     #[test]
+    fn serde_form_matches_as_str() {
+        for v in Modality::ALL {
+            let json = serde_json::to_string(&v).unwrap();
+            assert_eq!(json, format!("\"{}\"", v.as_str()));
+        }
+    }
+
+    #[test]
     fn parses_aliases() {
         assert_eq!("Remote".parse(), Ok(Modality::Online));
         assert_eq!("presencial".parse(), Ok(Modality::InPerson));

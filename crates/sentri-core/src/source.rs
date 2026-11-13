@@ -11,10 +11,14 @@ use crate::ParseError;
 pub enum SourceKind {
     Manual,
     Rss,
+    #[serde(rename = "ical")]
     ICal,
+    #[serde(rename = "github")]
     GitHub,
+    #[serde(rename = "hackernews")]
     HackerNews,
     Reddit,
+    #[serde(rename = "linkedin")]
     LinkedIn,
     X,
     Luma,
@@ -23,6 +27,7 @@ pub enum SourceKind {
     Meetup,
     Eventbrite,
     Kaggle,
+    #[serde(rename = "mslearn")]
     MicrosoftLearn,
     Web,
 }
@@ -191,6 +196,8 @@ mod tests {
         for kind in SourceKind::ALL {
             assert_eq!(kind.as_str().parse(), Ok(kind));
             assert!(kind.badge().len() <= 3);
+            let json = serde_json::to_string(&kind).unwrap();
+            assert_eq!(json, format!("\"{}\"", kind.as_str()));
         }
     }
 }

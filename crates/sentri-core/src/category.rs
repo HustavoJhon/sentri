@@ -137,6 +137,14 @@ mod tests {
     use super::*;
 
     #[test]
+    fn serde_form_matches_as_str() {
+        for v in Category::ALL {
+            let json = serde_json::to_string(&v).unwrap();
+            assert_eq!(json, format!("\"{}\"", v.as_str()));
+        }
+    }
+
+    #[test]
     fn round_trips_every_category() {
         for category in Category::ALL {
             assert_eq!(category.as_str().parse::<Category>(), Ok(category));
