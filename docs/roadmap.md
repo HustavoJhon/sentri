@@ -9,7 +9,7 @@ Las fases son incrementales; cada una termina con funcionalidad probada.
 | 2 | Normalización, deduplicación, búsqueda, filtros | ⏳ |
 | 3 | Likes, guardados, descartes, historial, `sentri add` | ⏳ |
 | 4 | TUI: Gruvbox, dashboard, feed, detalles, atajos, command palette | ⏳ |
-| 5 | Conectores: RSS/Atom, Reddit, GitHub | ⏳ |
+| 5 | Conectores: RSS/Atom, GitHub, Hacker News, iCalendar (Reddit descartado, ver sources.md) | ⏳ |
 | 6 | Intereses, scoring, explicaciones, personalización | ⏳ |
 | 7 | Eventos y Google Calendar (OAuth2) | ⏳ |
 | 8 | Cursos, certificados, proyectos open source, aprendizaje | ⏳ |
