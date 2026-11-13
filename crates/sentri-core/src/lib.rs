@@ -4,6 +4,7 @@
 //! reused from the TUI, the CLI, the daemon and a future HTTP API.
 
 pub mod category;
+pub mod classify;
 pub mod error;
 pub mod interaction;
 pub mod link;
