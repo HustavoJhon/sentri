@@ -1,5 +1,6 @@
 [package]
 name = "sentri-cli"
+description = "The `sentri` command: TUI launcher and CLI."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,6 +10,14 @@ name = "sentri"
 path = "src/main.rs"
 
 [dependencies]
+anyhow.workspace = true
+chrono.workspace = true
+clap.workspace = true
+sentri-app.workspace = true
+sentri-core.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
 
 [lints]
 workspace = true
