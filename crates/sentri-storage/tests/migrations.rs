@@ -13,8 +13,9 @@ async fn opens_file_database_and_applies_migrations_twice() {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let mode = std::fs::metadata(&path).unwrap().permissions().mode();
-        assert_eq!(mode & 0o777, 0o600);
+        let mode = |p: &std::path::Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode(&path), 0o600);
+        assert_eq!(mode(path.parent().unwrap()), 0o700);
     }
 }
 
@@ -25,6 +26,12 @@ async fn backup_writes_snapshot_and_refuses_overwrite() {
     let target = dir.path().join("backup.db");
     store.backup(&target).await.unwrap();
     assert!(target.exists());
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(&target).unwrap().permissions().mode();
+        assert_eq!(mode & 0o777, 0o600);
+    }
     assert!(store.backup(&target).await.is_err());
     Store::open(&target).await.unwrap();
 }

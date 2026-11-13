@@ -5,6 +5,7 @@
 //! binary and applied by [`Store::open`].
 
 mod error;
+mod private_fs;
 
 use std::path::Path;
 use std::str::FromStr;
@@ -26,9 +27,7 @@ pub struct Store {
 impl Store {
     /// Opens (creating if needed) the database file and applies migrations.
     pub async fn open(path: &Path) -> Result<Self, StorageError> {
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
+        private_fs::prepare_database_file(path)?;
         let options = SqliteConnectOptions::new()
             .filename(path)
             .create_if_missing(true)
@@ -40,8 +39,10 @@ impl Store {
             .max_connections(4)
             .connect_with(options)
             .await?;
-        restrict_permissions(path);
-        Self::migrate(pool).await
+        let store = Self::migrate(pool).await?;
+        // WAL and shared-memory files exist once the first write happened.
+        private_fs::restrict_sidecars(path)?;
+        Ok(store)
     }
 
     /// Opens a private in-memory database (tests, dry runs).
@@ -62,9 +63,14 @@ impl Store {
 
     /// Writes a consistent snapshot of the database to `target` (`VACUUM INTO`).
     pub async fn backup(&self, target: &Path) -> Result<(), StorageError> {
-        if target.exists() {
-            return Err(StorageError::BackupExists(target.to_path_buf()));
-        }
+        // Pre-create an empty owner-only file; SQLite accepts an empty target.
+        private_fs::create_private_file(target).map_err(|e| {
+            if e.kind() == std::io::ErrorKind::AlreadyExists {
+                StorageError::BackupExists(target.to_path_buf())
+            } else {
+                StorageError::Io(e)
+            }
+        })?;
         let target_str = target
             .to_str()
             .ok_or_else(|| StorageError::InvalidPath(target.to_path_buf()))?;
@@ -72,22 +78,10 @@ impl Store {
             .bind(target_str)
             .execute(&self.pool)
             .await?;
-        restrict_permissions(target);
         Ok(())
     }
 
     pub async fn close(&self) {
         self.pool.close().await;
-    }
-}
-
-/// The database holds personal data: make it readable by the owner only.
-fn restrict_permissions(path: &Path) {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        if let Err(error) = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600)) {
-            tracing::warn!(%error, path = %path.display(), "could not restrict database permissions");
-        }
     }
 }
