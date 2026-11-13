@@ -8,7 +8,9 @@ use sentri_core::{
     OpportunityId,
 };
 use sentri_sources::{FetchError, HttpLimits, SafeClient};
-use sentri_storage::{EditState, HistoryEntry, Stats, StorageError, Store};
+use sentri_storage::{
+    DayActivity, DayEntry, EditState, HistoryEntry, Insights, Stats, StorageError, Store,
+};
 
 use crate::links::{self, AddLinkError, AddOutcome, LinkOverrides};
 use crate::{Config, Ranked, rank};
@@ -194,6 +196,28 @@ impl Sentri {
         Ok(())
     }
 
+    /// Dashboard aggregates over the last `days` days (local time).
+    pub async fn insights(&self, days: i64) -> Result<Insights, AppError> {
+        Ok(self
+            .store
+            .insights(Utc::now(), days, local_offset_secs())
+            .await?)
+    }
+
+    /// Deduplicated activity per local day since `days` ago.
+    pub async fn activity(
+        &self,
+        days: i64,
+    ) -> Result<std::collections::BTreeMap<chrono::NaiveDate, DayActivity>, AppError> {
+        let since = Utc::now() - chrono::Duration::days(days);
+        Ok(self.store.activity(since, local_offset_secs()).await?)
+    }
+
+    /// What happened on one local day.
+    pub async fn day_entries(&self, day: chrono::NaiveDate) -> Result<Vec<DayEntry>, AppError> {
+        Ok(self.store.day_entries(day, local_offset_secs()).await?)
+    }
+
     pub async fn history(&self, limit: u32) -> Result<Vec<HistoryEntry>, AppError> {
         Ok(self.store.history(limit).await?)
     }
@@ -206,4 +230,9 @@ impl Sentri {
             .stats(now - chrono::Duration::hours(24), now)
             .await?)
     }
+}
+
+/// Offset of the local time zone, so "today" matches the user's clock.
+pub fn local_offset_secs() -> i64 {
+    i64::from(chrono::Local::now().offset().local_minus_utc())
 }
