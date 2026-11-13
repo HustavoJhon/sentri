@@ -218,6 +218,15 @@ impl Sentri {
         Ok(self.store.day_entries(day, local_offset_secs()).await?)
     }
 
+    /// Recent actions on one opportunity.
+    pub async fn history_for(
+        &self,
+        id: OpportunityId,
+        limit: u32,
+    ) -> Result<Vec<HistoryEntry>, AppError> {
+        Ok(self.store.history_for(id, limit).await?)
+    }
+
     pub async fn history(&self, limit: u32) -> Result<Vec<HistoryEntry>, AppError> {
         Ok(self.store.history(limit).await?)
     }

@@ -86,6 +86,9 @@ async fn history_records_every_action() {
     assert_eq!(history[0].action, Action::Set(Flag::Applied));
     assert_eq!(history[1].title, "A");
     assert_eq!(ids(&store, FeedView::History).await, [a]);
+    let only_b = store.history_for(b, 10).await.unwrap();
+    assert_eq!(only_b.len(), 1);
+    assert_eq!(only_b[0].opportunity_id, b);
     assert_eq!(ids(&store, FeedView::Applied).await, [b]);
 }
 

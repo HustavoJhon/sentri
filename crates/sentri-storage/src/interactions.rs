@@ -102,11 +102,31 @@ impl Store {
 
     /// Most recent actions first.
     pub async fn history(&self, limit: u32) -> Result<Vec<HistoryEntry>, StorageError> {
+        self.history_where(None, limit).await
+    }
+
+    /// Most recent actions on one opportunity.
+    pub async fn history_for(
+        &self,
+        id: OpportunityId,
+        limit: u32,
+    ) -> Result<Vec<HistoryEntry>, StorageError> {
+        self.history_where(Some(id), limit).await
+    }
+
+    async fn history_where(
+        &self,
+        id: Option<OpportunityId>,
+        limit: u32,
+    ) -> Result<Vec<HistoryEntry>, StorageError> {
         let rows = sqlx::query(
             "SELECT e.opportunity_id, o.title, e.action, e.at
              FROM interaction_events e JOIN opportunities o ON o.id = e.opportunity_id
+             WHERE ? IS NULL OR e.opportunity_id = ?
              ORDER BY e.at DESC, e.id DESC LIMIT ?",
         )
+        .bind(id.map(|i| i.0))
+        .bind(id.map(|i| i.0))
         .bind(i64::from(limit))
         .fetch_all(&self.pool)
         .await?;
