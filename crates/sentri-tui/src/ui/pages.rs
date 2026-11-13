@@ -1,122 +1,15 @@
 //! Non-feed pages: dashboard, sources and settings.
 
-use chrono::Utc;
 use ratatui::Frame;
-use ratatui::layout::{Constraint, Layout, Rect};
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::layout::Rect;
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Paragraph, Wrap};
 use sentri_app::RunStatus;
 
-use super::widgets::{deadline_style, panel, relative, score_pill, source_badge};
+use super::widgets::{panel, source_badge};
 use crate::state::State;
 use crate::theme::Theme;
-
-fn stat_card(frame: &mut Frame, area: Rect, theme: &Theme, label: &str, value: i64, color: Color) {
-    let text = vec![
-        Line::from(Span::styled(
-            value.to_string(),
-            Style::new().fg(color).add_modifier(Modifier::BOLD),
-        )),
-        Line::from(Span::styled(label, theme.muted())),
-    ];
-    frame.render_widget(
-        Paragraph::new(text)
-            .centered()
-            .block(panel(theme, "", false)),
-        area,
-    );
-}
-
-pub fn dashboard(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
-    let s = &state.overview.stats;
-    let [cards, body] = Layout::vertical([Constraint::Length(4), Constraint::Min(0)]).areas(area);
-    let p = theme.p;
-    let entries = [
-        ("opportunities", s.total, p.fg),
-        ("new · 24h", s.new_since, p.green),
-        ("saved", s.saved, p.yellow),
-        ("liked", s.liked, p.red),
-        ("applied", s.applied, p.blue),
-        ("open deadlines", s.upcoming_deadlines, p.orange),
-    ];
-    let shown = if area.width < 90 { 3 } else { entries.len() };
-    let cells = Layout::horizontal(vec![Constraint::Fill(1); shown]).split(cards);
-    for ((label, value, color), cell) in entries.iter().zip(cells.iter()) {
-        stat_card(frame, *cell, theme, label, *value, *color);
-    }
-
-    let [top, upcoming] = if body.width >= 100 {
-        Layout::horizontal([Constraint::Percentage(55), Constraint::Percentage(45)]).areas(body)
-    } else {
-        Layout::vertical([Constraint::Percentage(55), Constraint::Percentage(45)]).areas(body)
-    };
-    let now = Utc::now();
-    let best: Vec<Line> = state
-        .items
-        .iter()
-        .take(usize::from(top.height.saturating_sub(2)))
-        .map(|r| {
-            Line::from(vec![
-                score_pill(theme, r.relevance.score),
-                source_badge(theme, r.item.opportunity.source),
-                Span::raw(" "),
-                Span::raw(r.item.opportunity.title.as_str()),
-            ])
-        })
-        .collect();
-    let best = if best.is_empty() {
-        vec![Line::from(Span::styled(
-            "Nothing yet — press n to add your first link.",
-            theme.muted(),
-        ))]
-    } else {
-        best
-    };
-    frame.render_widget(
-        Paragraph::new(best).block(panel(theme, "Top recommendations", false)),
-        top,
-    );
-
-    let mut dated: Vec<_> = state
-        .items
-        .iter()
-        .filter_map(|r| {
-            r.item
-                .opportunity
-                .dates
-                .deadline
-                .filter(|d| *d >= now)
-                .map(|d| (d, r))
-        })
-        .collect();
-    dated.sort_by_key(|(d, _)| *d);
-    let lines: Vec<Line> = dated
-        .iter()
-        .take(usize::from(upcoming.height.saturating_sub(2)))
-        .map(|(d, r)| {
-            Line::from(vec![
-                Span::styled(
-                    format!("{:<9}", relative(*d, now)),
-                    deadline_style(theme, *d, now),
-                ),
-                Span::raw(r.item.opportunity.title.as_str()),
-            ])
-        })
-        .collect();
-    let lines = if lines.is_empty() {
-        vec![Line::from(Span::styled(
-            "No upcoming deadlines.",
-            theme.muted(),
-        ))]
-    } else {
-        lines
-    };
-    frame.render_widget(
-        Paragraph::new(lines).block(panel(theme, "Upcoming deadlines", false)),
-        upcoming,
-    );
-}
 
 pub fn sources(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
     let o = &state.overview;

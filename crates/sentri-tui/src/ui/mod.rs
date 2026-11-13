@@ -4,6 +4,8 @@
 //! - ≥ 80 columns: sidebar · feed (details replace the feed when opened)
 //! - narrower: feed only (Tab switches sections)
 
+mod charts;
+mod dashboard;
 mod detail;
 mod feed;
 mod pages;
@@ -109,7 +111,7 @@ fn draw_body(frame: &mut Frame, area: Rect, state: &mut State, theme: &Theme) {
         area
     };
     match state.current() {
-        Section::Dashboard => pages::dashboard(frame, main, state, theme),
+        Section::Dashboard => dashboard::render(frame, main, state, theme),
         Section::Sources => pages::sources(frame, main, state, theme),
         Section::Settings => pages::settings(frame, main, state, theme),
         Section::Calendar => draw_feed(frame, main, state, theme, "Calendar · upcoming dates"),
@@ -303,12 +305,16 @@ mod tests {
         state.on_msg(Msg::Loaded(vec![sample()]));
         let screen = render(120, 30, &mut state);
         assert!(screen.contains("Top recommendations"));
-        assert!(screen.contains("Upcoming deadlines"));
+        assert!(screen.contains("Upcoming dates"));
+        assert!(screen.contains("Discovered · 14 days"));
+        let wide = render(160, 40, &mut state);
+        assert!(wide.contains("Latest tech news"));
+        assert!(wide.contains("Categories · sources · modality"));
 
         state.mode = Mode::Help;
         assert!(render(120, 40, &mut state).contains("command palette"));
         state.mode = Mode::Palette {
-            input: crate::input::LineInput::default(),
+            input: crate::input::LineInput::with_value("saved"),
             selected: 0,
         };
         assert!(render(120, 40, &mut state).contains("Go to Saved"));

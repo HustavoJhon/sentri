@@ -175,9 +175,19 @@ async fn load(app: &Sentri, query: &FeedQuery) -> Msg {
 
 async fn overview(app: &Sentri, config_path: String) -> Msg {
     let stats = app.stats().await.unwrap_or_default();
+    let insights = app.insights(30).await.unwrap_or_default();
+    let news_query = FeedQuery {
+        view: sentri_core::FeedView::News,
+        sort: sentri_core::SortOrder::Newest,
+        limit: Some(12),
+        ..FeedQuery::default()
+    };
+    let news = app.feed(&news_query).await.unwrap_or_default();
     let runs = app.store().latest_runs().await.unwrap_or_default();
     Msg::Overview(Box::new(Overview {
         stats,
+        insights,
+        news,
         runs,
         sources: app.config().sources.clone(),
         profile: app.config().profile.clone(),

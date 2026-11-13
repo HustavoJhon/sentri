@@ -7,7 +7,7 @@
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind};
 use ratatui::layout::{Position, Rect};
-use sentri_app::{AddOutcome, CollectionRun, Ranked, SourceConfig, Stats};
+use sentri_app::{AddOutcome, CollectionRun, Insights, Ranked, SourceConfig, Stats};
 use sentri_core::{
     Action, FeedQuery, FeedView, Flag, InteractionState, OpportunityId, Profile, SortOrder,
 };
@@ -25,9 +25,10 @@ pub enum Section {
 }
 
 impl Section {
-    pub const ALL: [Self; 17] = [
+    pub const ALL: [Self; 18] = [
         Self::Dashboard,
         Self::Feed(FeedView::Discover),
+        Self::Feed(FeedView::News),
         Self::Feed(FeedView::Jobs),
         Self::Feed(FeedView::Courses),
         Self::Feed(FeedView::Events),
@@ -60,6 +61,7 @@ impl Section {
         match self {
             Self::Dashboard => "◆",
             Self::Feed(FeedView::Discover) => "✦",
+            Self::Feed(FeedView::News) => "▤",
             Self::Feed(FeedView::Jobs) => "⚒",
             Self::Feed(FeedView::Courses) => "✎",
             Self::Feed(FeedView::Events) => "◷",
@@ -210,6 +212,9 @@ pub enum Effect {
 #[derive(Debug, Clone, Default)]
 pub struct Overview {
     pub stats: Stats,
+    pub insights: Insights,
+    /// Latest news for the dashboard.
+    pub news: Vec<Ranked>,
     pub runs: Vec<CollectionRun>,
     pub sources: Vec<SourceConfig>,
     pub profile: Profile,
@@ -793,7 +798,7 @@ mod tests {
         s.on_key(key(KeyCode::Char('g')));
         assert_eq!(s.selected, 0);
         assert_eq!(s.on_key(key(KeyCode::Tab)), vec![Effect::Load]);
-        assert_eq!(s.current(), Section::Feed(FeedView::Jobs));
+        assert_eq!(s.current(), Section::Feed(FeedView::News));
         assert_eq!(s.on_key(key(KeyCode::Char('1'))), vec![Effect::Load]);
         assert_eq!(s.current(), Section::Dashboard);
         assert_eq!(
