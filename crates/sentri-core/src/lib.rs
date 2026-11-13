@@ -5,15 +5,19 @@
 
 pub mod category;
 pub mod error;
+pub mod interaction;
 pub mod link;
 pub mod modality;
 pub mod opportunity;
+pub mod query;
 pub mod source;
 pub mod text;
 
 pub use category::Category;
 pub use error::ParseError;
+pub use interaction::{Action, Flag, InteractionState};
 pub use link::{CanonicalUrl, LinkError};
 pub use modality::Modality;
 pub use opportunity::{Cost, Dates, Eligibility, Opportunity, OpportunityId, Perks};
+pub use query::{FeedQuery, FeedView, PriceFilter, SortOrder};
 pub use source::SourceKind;
