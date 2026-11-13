@@ -1813,6 +1813,7 @@ dependencies = [
  "chrono",
  "directories",
  "sentri-core",
+ "sentri-sources",
  "sentri-storage",
  "serde",
  "tempfile",
@@ -1820,6 +1821,8 @@ dependencies = [
  "tokio",
  "toml",
  "tracing",
+ "url",
+ "wiremock",
 ]
 
 [[package]]

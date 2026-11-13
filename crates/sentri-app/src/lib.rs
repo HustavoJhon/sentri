@@ -4,8 +4,12 @@
 //! talking to storage or connectors directly.
 
 pub mod config;
+pub mod links;
 pub mod paths;
 pub mod ranking;
+pub mod service;
 
 pub use config::{Config, ConfigError, HttpConfig, SourceConfig};
+pub use links::{AddLinkError, AddOutcome, LinkOverrides};
 pub use ranking::{Ranked, rank};
+pub use service::{AppError, Sentri};
