@@ -3,6 +3,7 @@
 //! This crate is pure: it performs no I/O and has no async runtime, so it can be
 //! reused from the TUI, the CLI, the daemon and a future HTTP API.
 
+pub mod calendar;
 pub mod category;
 pub mod classify;
 pub mod edit;
@@ -17,6 +18,7 @@ pub mod scoring;
 pub mod source;
 pub mod text;
 
+pub use calendar::{CalendarEntry, EntryKind, SyncPolicy};
 pub use category::Category;
 pub use edit::{Annotations, EditError, Field, FieldKind};
 pub use error::ParseError;
