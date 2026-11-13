@@ -424,6 +424,10 @@ impl State {
             }
             Section::Dashboard | Section::Sources | Section::Settings => FeedView::Discover,
         };
+        // A search from Discover looks everywhere (opportunities and news).
+        if query.view == FeedView::Discover && query.text.is_some() {
+            query.view = FeedView::All;
+        }
         query.limit = Some(500);
         query
     }
@@ -1030,6 +1034,7 @@ mod tests {
         }
         assert_eq!(s.on_key(key(KeyCode::Enter)), vec![Effect::Load]);
         assert_eq!(s.query.text.as_deref(), Some("rust"));
+        assert_eq!(s.effective_query().view, FeedView::All);
         assert_eq!(s.on_key(key(KeyCode::Esc)), vec![Effect::Load]);
         assert_eq!(s.query.text, None);
     }
