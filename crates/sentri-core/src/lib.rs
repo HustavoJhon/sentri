@@ -7,10 +7,13 @@ pub mod category;
 pub mod error;
 pub mod link;
 pub mod modality;
+pub mod opportunity;
 pub mod source;
+pub mod text;
 
 pub use category::Category;
 pub use error::ParseError;
 pub use link::{CanonicalUrl, LinkError};
 pub use modality::Modality;
+pub use opportunity::{Cost, Dates, Eligibility, Opportunity, OpportunityId, Perks};
 pub use source::SourceKind;
