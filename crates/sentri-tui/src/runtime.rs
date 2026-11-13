@@ -190,6 +190,8 @@ fn describe(action: Action) -> String {
     match action {
         Action::Set(flag) => format!("Marked as {flag}"),
         Action::Clear(flag) => format!("Removed {flag}"),
+        Action::Edited => "Saved changes".into(),
+        Action::Scheduled => "Added to calendar".into(),
         Action::Viewed => String::new(),
     }
 }

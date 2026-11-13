@@ -71,6 +71,10 @@ pub enum Action {
     Clear(Flag),
     /// Opened the detail view or the original link.
     Viewed,
+    /// Corrected one or more fields manually.
+    Edited,
+    /// Added to SENTRI's calendar.
+    Scheduled,
 }
 
 impl Action {
@@ -80,6 +84,8 @@ impl Action {
             Self::Set(f) => format!("set:{f}"),
             Self::Clear(f) => format!("clear:{f}"),
             Self::Viewed => "viewed".into(),
+            Self::Edited => "edited".into(),
+            Self::Scheduled => "scheduled".into(),
         }
     }
 
@@ -88,6 +94,8 @@ impl Action {
             Some(("set", f)) => Ok(Self::Set(f.parse()?)),
             Some(("clear", f)) => Ok(Self::Clear(f.parse()?)),
             None if s == "viewed" => Ok(Self::Viewed),
+            None if s == "edited" => Ok(Self::Edited),
+            None if s == "scheduled" => Ok(Self::Scheduled),
             _ => Err(ParseError::new("action", s)),
         }
     }
@@ -141,6 +149,7 @@ impl InteractionState {
             Action::Set(flag) => self.set(flag, true),
             Action::Clear(flag) => self.set(flag, false),
             Action::Viewed => self.last_viewed_at = Some(at),
+            Action::Edited | Action::Scheduled => {}
         }
         self
     }
@@ -185,7 +194,9 @@ mod tests {
                 assert_eq!(Action::from_db(&a.as_db()), Ok(a));
             }
         }
-        assert_eq!(Action::from_db("viewed"), Ok(Action::Viewed));
+        for a in [Action::Viewed, Action::Edited, Action::Scheduled] {
+            assert_eq!(Action::from_db(&a.as_db()), Ok(a));
+        }
         assert!(Action::from_db("set:bogus").is_err());
     }
 }
