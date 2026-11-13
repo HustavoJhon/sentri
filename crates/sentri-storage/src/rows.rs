@@ -3,8 +3,8 @@
 use std::str::FromStr;
 
 use sentri_core::{
-    Category, Cost, Dates, Eligibility, FeedItem, InteractionState, Modality, Opportunity,
-    OpportunityId, Perks,
+    Author, Category, ContentKind, Cost, Dates, Eligibility, FeedItem, InteractionState, Modality,
+    Opportunity, OpportunityId, Perks, Stance,
 };
 use sqlx::Row;
 use sqlx::sqlite::SqliteRow;
@@ -23,6 +23,7 @@ pub(crate) const FEED_COLUMNS: &str = "
     o.modality, o.published_at, o.starts_at, o.ends_at, o.deadline, o.cost_kind,
     o.cost_detail, o.requirements, o.eligibility, o.certificate, o.prizes, o.benefits,
     o.travel_covered, o.accommodation_covered, o.discovered_at,
+    o.author_name, o.author_handle, o.author_url, o.author_avatar, o.content_kind, o.stance,
     (SELECT GROUP_CONCAT(t.tag, char(31)) FROM opportunity_tags t WHERE t.opportunity_id = o.id)
         AS tags,
     COALESCE(i.liked, 0) AS liked, COALESCE(i.saved, 0) AS saved,
@@ -100,6 +101,17 @@ pub(crate) fn feed_item(row: &SqliteRow) -> Result<FeedItem, StorageError> {
             travel_covered: row.try_get("travel_covered")?,
             accommodation_covered: row.try_get("accommodation_covered")?,
         },
+        author: Author {
+            name: row.try_get("author_name")?,
+            handle: row.try_get("author_handle")?,
+            profile_url: row.try_get("author_url")?,
+            avatar_url: row.try_get("author_avatar")?,
+        },
+        content: ContentKind::from_db(row.try_get("content_kind")?),
+        stance: row
+            .try_get::<Option<String>, _>("stance")?
+            .as_deref()
+            .and_then(Stance::from_db),
         discovered_at: from_db(row.try_get("discovered_at")?, "discovered_at")?,
     };
     let state = InteractionState {

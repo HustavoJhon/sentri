@@ -82,7 +82,8 @@ impl Store {
                 modality = ?, published_at = ?, starts_at = ?, ends_at = ?, deadline = ?,
                 cost_kind = ?, cost_detail = ?, requirements = ?, eligibility = ?,
                 certificate = ?, prizes = ?, benefits = ?, travel_covered = ?,
-                accommodation_covered = ?, updated_at = ?
+                accommodation_covered = ?, author_name = ?, author_handle = ?, author_url = ?,
+                author_avatar = ?, content_kind = ?, stance = ?, updated_at = ?
              WHERE id = ?",
         )
         .bind(&o.title)
@@ -105,6 +106,12 @@ impl Store {
         .bind(&o.perks.benefits)
         .bind(o.perks.travel_covered)
         .bind(o.perks.accommodation_covered)
+        .bind(&o.author.name)
+        .bind(&o.author.handle)
+        .bind(&o.author.profile_url)
+        .bind(&o.author.avatar_url)
+        .bind(o.content.as_str())
+        .bind(o.stance.map(sentri_core::Stance::as_str))
         .bind(to_db(Utc::now()))
         .bind(id.0)
         .execute(&mut *tx)
@@ -209,8 +216,10 @@ async fn insert(
             title, summary, image_url, category, location, country, modality, published_at,
             starts_at, ends_at, deadline, cost_kind, cost_detail, requirements, eligibility,
             certificate, prizes, benefits, travel_covered, accommodation_covered,
-            discovered_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            discovered_at, updated_at, author_name, author_handle, author_url, author_avatar,
+            content_kind, stance)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                 ?, ?, ?, ?, ?, ?)
          RETURNING id",
     )
     .bind(&o.fingerprint)
@@ -241,6 +250,12 @@ async fn insert(
     .bind(o.perks.accommodation_covered)
     .bind(to_db(o.discovered_at))
     .bind(now)
+    .bind(&o.author.name)
+    .bind(&o.author.handle)
+    .bind(&o.author.profile_url)
+    .bind(&o.author.avatar_url)
+    .bind(o.content.as_str())
+    .bind(o.stance.map(sentri_core::Stance::as_str))
     .fetch_one(&mut *conn)
     .await?;
     Ok(id)
@@ -276,6 +291,11 @@ async fn merge(
             benefits = COALESCE(benefits, ?),
             travel_covered = COALESCE(travel_covered, ?),
             accommodation_covered = COALESCE(accommodation_covered, ?),
+            author_name = COALESCE(author_name, ?),
+            author_handle = COALESCE(author_handle, ?),
+            author_url = COALESCE(author_url, ?),
+            author_avatar = COALESCE(author_avatar, ?),
+            stance = COALESCE(stance, ?),
             updated_at = ?
          WHERE id = ?",
     )
@@ -298,6 +318,11 @@ async fn merge(
     .bind(&o.perks.benefits)
     .bind(o.perks.travel_covered)
     .bind(o.perks.accommodation_covered)
+    .bind(&o.author.name)
+    .bind(&o.author.handle)
+    .bind(&o.author.profile_url)
+    .bind(&o.author.avatar_url)
+    .bind(o.stance.map(sentri_core::Stance::as_str))
     .bind(now)
     .bind(id)
     .execute(&mut *conn)

@@ -109,6 +109,123 @@ impl Perks {
     }
 }
 
+/// Who published an item. Only what the source states; never guessed.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct Author {
+    pub name: Option<String>,
+    /// Handle on the platform (e.g. `@user`, `u/user`).
+    pub handle: Option<String>,
+    pub profile_url: Option<String>,
+    pub avatar_url: Option<String>,
+}
+
+impl Author {
+    pub fn is_empty(&self) -> bool {
+        self.name.is_none()
+            && self.handle.is_none()
+            && self.profile_url.is_none()
+            && self.avatar_url.is_none()
+    }
+
+    /// Best short label: name, then handle.
+    pub fn display(&self) -> Option<&str> {
+        self.name.as_deref().or(self.handle.as_deref())
+    }
+
+    #[must_use]
+    fn sanitized(self) -> Self {
+        Self {
+            name: clean_opt(self.name.as_deref(), limits::SHORT),
+            handle: clean_opt(self.handle.as_deref(), limits::SHORT),
+            profile_url: self.profile_url.filter(|u| is_web_url(u)),
+            avatar_url: self
+                .avatar_url
+                .filter(|u| u.starts_with("https://") && u.len() < 2_048),
+        }
+    }
+}
+
+fn is_web_url(u: &str) -> bool {
+    (u.starts_with("https://") || u.starts_with("http://")) && u.len() < 2_048
+}
+
+/// Whether an item is an opportunity to act on or a news item to read.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ContentKind {
+    #[default]
+    Opportunity,
+    News,
+}
+
+impl ContentKind {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Opportunity => "opportunity",
+            Self::News => "news",
+        }
+    }
+
+    pub fn from_db(s: &str) -> Self {
+        if s == "news" {
+            Self::News
+        } else {
+            Self::Opportunity
+        }
+    }
+}
+
+/// Nature of a news item, as signalled by its own wording. SENTRI cannot
+/// verify facts, so there is deliberately no "verified" value: the default
+/// is a report attributed to its outlet.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Stance {
+    /// Reported by the outlet; attribute it, do not treat it as confirmed.
+    Report,
+    Opinion,
+    /// Rumors, leaks, "reportedly", anonymous sources.
+    Speculation,
+    /// Community discussion (e.g. Hacker News threads).
+    Discussion,
+    /// Official announcement from the company or project itself.
+    Official,
+}
+
+impl Stance {
+    pub const ALL: [Self; 5] = [
+        Self::Report,
+        Self::Opinion,
+        Self::Speculation,
+        Self::Discussion,
+        Self::Official,
+    ];
+
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Report => "report",
+            Self::Opinion => "opinion",
+            Self::Speculation => "speculation",
+            Self::Discussion => "discussion",
+            Self::Official => "official",
+        }
+    }
+
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Report => "Reported",
+            Self::Opinion => "Opinion",
+            Self::Speculation => "Unconfirmed",
+            Self::Discussion => "Discussion",
+            Self::Official => "Official",
+        }
+    }
+
+    pub fn from_db(s: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|v| v.as_str() == s)
+    }
+}
+
 /// An opportunity as produced by a connector or entered by the user.
 ///
 /// Every optional field means "unknown": SENTRI never invents data that the
@@ -138,6 +255,10 @@ pub struct Opportunity {
     pub requirements: Option<String>,
     pub eligibility: Eligibility,
     pub perks: Perks,
+    pub author: Author,
+    pub content: ContentKind,
+    /// Only meaningful for news.
+    pub stance: Option<Stance>,
     pub discovered_at: DateTime<Utc>,
 }
 
@@ -171,6 +292,9 @@ impl Opportunity {
             requirements: None,
             eligibility: Eligibility::Unknown,
             perks: Perks::default(),
+            author: Author::default(),
+            content: ContentKind::Opportunity,
+            stance: None,
             discovered_at,
         }
     }
@@ -198,6 +322,7 @@ impl Opportunity {
             *price = clean_opt(price.as_deref(), limits::SHORT);
         }
         self.tags = normalize_tags(self.tags);
+        self.author = self.author.sanitized();
         self
     }
 
@@ -295,6 +420,23 @@ mod tests {
         let mut o = sample();
         o.title = "\u{7}".into();
         assert_eq!(o.sanitized().title, "https://example.com/hack");
+    }
+
+    #[test]
+    fn author_fields_are_sanitized() {
+        let mut o = sample();
+        o.author = Author {
+            name: Some("Ana \u{1b}[1m".into()),
+            handle: Some(" ".into()),
+            profile_url: Some("javascript:x".into()),
+            avatar_url: Some("http://insecure/a.png".into()),
+        };
+        let a = o.sanitized().author;
+        assert_eq!(a.name.as_deref(), Some("Ana [1m"));
+        assert_eq!(a.handle, None);
+        assert_eq!(a.profile_url, None);
+        assert_eq!(a.avatar_url, None);
+        assert_eq!(a.display(), Some("Ana [1m"));
     }
 
     #[test]

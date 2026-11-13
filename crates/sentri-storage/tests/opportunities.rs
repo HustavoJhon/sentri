@@ -20,6 +20,14 @@ async fn round_trips_every_field() {
     o.perks.travel_covered = Some(false);
     o.dates.deadline = Some(now() + Duration::days(3));
     o.external_id = Some("guid-1".into());
+    o.author = sentri_core::Author {
+        name: Some("Ana".into()),
+        handle: Some("@ana".into()),
+        profile_url: Some("https://social.example/@ana".into()),
+        avatar_url: Some("https://social.example/ana.png".into()),
+    };
+    o.content = sentri_core::ContentKind::News;
+    o.stance = Some(sentri_core::Stance::Opinion);
 
     let id = store.upsert_opportunity(&o).await.unwrap();
     assert!(id.is_new());
