@@ -20,7 +20,7 @@ pub use error::ParseError;
 pub use interaction::{Action, Flag, InteractionState};
 pub use link::{CanonicalUrl, LinkError};
 pub use modality::Modality;
-pub use opportunity::{Cost, Dates, Eligibility, Opportunity, OpportunityId, Perks};
+pub use opportunity::{Cost, Dates, Eligibility, FeedItem, Opportunity, OpportunityId, Perks};
 pub use profile::{Interest, Priority, Profile};
 pub use query::{FeedQuery, FeedView, PriceFilter, SortOrder};
 pub use scoring::{Affinity, Reason, Relevance, Scorer, Weights};

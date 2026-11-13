@@ -5,7 +5,10 @@
 //! binary and applied by [`Store::open`].
 
 mod error;
+mod opportunities;
 mod private_fs;
+mod rows;
+mod time;
 
 use std::path::Path;
 use std::str::FromStr;
@@ -15,6 +18,7 @@ use sqlx::SqlitePool;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
 
 pub use error::StorageError;
+pub use opportunities::Upsert;
 
 static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
 

@@ -228,6 +228,14 @@ impl Opportunity {
     }
 }
 
+/// A stored opportunity together with the user's interaction state.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FeedItem {
+    pub id: OpportunityId,
+    pub opportunity: Opportunity,
+    pub state: crate::InteractionState,
+}
+
 /// Lowercases, trims, deduplicates and caps tags.
 pub fn normalize_tags(tags: Vec<String>) -> Vec<String> {
     let mut out: Vec<String> = Vec::with_capacity(tags.len().min(limits::MAX_TAGS));
