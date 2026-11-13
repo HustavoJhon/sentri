@@ -7,8 +7,10 @@
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind};
 use ratatui::layout::{Position, Rect};
-use sentri_app::{AddOutcome, Ranked};
-use sentri_core::{Action, FeedQuery, FeedView, Flag, InteractionState, OpportunityId, SortOrder};
+use sentri_app::{AddOutcome, CollectionRun, Ranked, SourceConfig, Stats};
+use sentri_core::{
+    Action, FeedQuery, FeedView, Flag, InteractionState, OpportunityId, Profile, SortOrder,
+};
 
 use crate::input::LineInput;
 
@@ -201,10 +203,22 @@ pub enum Effect {
     OpenUrl(String),
 }
 
+/// Read-only context shown by the dashboard, sources and settings pages.
+#[derive(Debug, Clone, Default)]
+pub struct Overview {
+    pub stats: Stats,
+    pub runs: Vec<CollectionRun>,
+    pub sources: Vec<SourceConfig>,
+    pub profile: Profile,
+    pub config_path: String,
+    pub database_path: String,
+}
+
 /// Results of effects.
 #[derive(Debug, Clone)]
 pub enum Msg {
     Loaded(Vec<Ranked>),
+    Overview(Box<Overview>),
     Acted(OpportunityId, InteractionState),
     Added(Box<AddOutcome>),
     Info(String),
@@ -235,6 +249,7 @@ pub struct State {
     pub detail_open: bool,
     pub detail_scroll: u16,
     pub hit: HitAreas,
+    pub overview: Overview,
     pub quit: bool,
 }
 
@@ -252,6 +267,7 @@ impl Default for State {
             detail_open: false,
             detail_scroll: 0,
             hit: HitAreas::default(),
+            overview: Overview::default(),
             quit: false,
         }
     }
@@ -698,6 +714,7 @@ impl State {
                 self.items = items;
                 self.selected = self.selected.min(self.items.len().saturating_sub(1));
             }
+            Msg::Overview(overview) => self.overview = *overview,
             Msg::Acted(id, state) => {
                 if let Some(r) = self.items.iter_mut().find(|r| r.item.id == id) {
                     r.item.state = state;

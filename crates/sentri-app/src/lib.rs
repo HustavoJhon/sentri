@@ -12,4 +12,5 @@ pub mod service;
 pub use config::{Config, ConfigError, HttpConfig, SourceConfig};
 pub use links::{AddLinkError, AddOutcome, LinkOverrides};
 pub use ranking::{Ranked, rank};
+pub use sentri_storage::{CollectionRun, HistoryEntry, RunStatus, Stats};
 pub use service::{AppError, Sentri};
