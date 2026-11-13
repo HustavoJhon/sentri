@@ -169,6 +169,11 @@ fn execute(
                 let _ = tx.send(Msg::Collected(text));
             });
         }
+        calendar @ (Effect::Schedule(_)
+        | Effect::LoadCalendar(..)
+        | Effect::CreateEntry(_)
+        | Effect::UpdateEntry(..)
+        | Effect::DeleteEntry(_)) => execute_calendar(app, calendar, tx),
         detail @ (Effect::LoadDetail(_)
         | Effect::LoadImage(_)
         | Effect::OpenEditor(_)
@@ -177,6 +182,39 @@ fn execute(
             let _ = tx.send(open_url(&url));
         }
     }
+}
+
+/// Calendar effects. Nothing here talks to Google Calendar.
+fn execute_calendar(app: Sentri, effect: Effect, tx: UnboundedSender<Msg>) {
+    tokio::spawn(async move {
+        let msg = match effect {
+            Effect::LoadCalendar(from, to) => match app.calendar(from, to).await {
+                Ok(data) => Msg::Calendar(Box::new(data)),
+                Err(e) => Msg::Failed(format!("Could not load the calendar: {e}")),
+            },
+            Effect::Schedule(id) => match app.schedule(id).await {
+                Ok(entries) => Msg::CalendarChanged(format!(
+                    "Added {} date(s) to SENTRI's calendar (this does not register you)",
+                    entries.len()
+                )),
+                Err(e) => Msg::Failed(format!("Could not add to calendar: {e}")),
+            },
+            Effect::CreateEntry(entry) => match app.create_entry(&entry).await {
+                Ok(e) => Msg::CalendarChanged(format!("Created \"{}\"", e.title)),
+                Err(e) => Msg::Failed(format!("Could not create the entry: {e}")),
+            },
+            Effect::UpdateEntry(id, entry) => match app.update_entry(id, &entry).await {
+                Ok(e) => Msg::CalendarChanged(format!("Updated \"{}\"", e.title)),
+                Err(e) => Msg::Failed(format!("Could not update the entry: {e}")),
+            },
+            Effect::DeleteEntry(id) => match app.delete_entry(id).await {
+                Ok(()) => Msg::CalendarChanged("Entry deleted".into()),
+                Err(e) => Msg::Failed(format!("Could not delete the entry: {e}")),
+            },
+            _ => return,
+        };
+        let _ = tx.send(msg);
+    });
 }
 
 /// Effects behind Details and the editor.

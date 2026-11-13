@@ -17,9 +17,11 @@ use sentri_core::{
     Action, FeedQuery, FeedView, Flag, InteractionState, OpportunityId, Profile, SortOrder,
 };
 
+pub mod calendar;
 pub mod editor;
 
 use crate::input::LineInput;
+use calendar::{CalEffect, CalendarState};
 use editor::{EditorOutcome, EditorState};
 
 /// A navigable page.
@@ -255,6 +257,11 @@ pub enum Effect {
     LoadDetail(OpportunityId),
     LoadImage(String),
     OpenEditor(OpportunityId),
+    Schedule(OpportunityId),
+    LoadCalendar(chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>),
+    CreateEntry(sentri_app::NewEntry),
+    UpdateEntry(i64, sentri_app::NewEntry),
+    DeleteEntry(i64),
     SaveEdit {
         id: OpportunityId,
         values: Vec<(sentri_core::Field, String)>,
@@ -348,6 +355,9 @@ pub enum Msg {
     Detail(Box<DetailData>),
     Image(String, Option<Thumbnail>),
     EditorReady(OpportunityId, Box<EditState>),
+    Calendar(Box<sentri_app::CalendarData>),
+    /// Calendar changed; the text describes what happened.
+    CalendarChanged(String),
     Saved(OpportunityId),
     Failed(String),
 }
@@ -384,6 +394,7 @@ pub struct State {
     pub detail_requested: Option<OpportunityId>,
     pub images: HashMap<String, ImageSlot>,
     pub overview: Overview,
+    pub calendar: CalendarState,
     pub quit: bool,
 }
 
@@ -407,6 +418,7 @@ impl Default for State {
             detail_requested: None,
             images: HashMap::new(),
             overview: Overview::default(),
+            calendar: CalendarState::default(),
             quit: false,
         }
     }
@@ -458,7 +470,43 @@ impl State {
         self.detail_open = false;
         self.detail_scroll = 0;
         self.loading = true;
-        vec![Effect::Load]
+        let mut effects = vec![Effect::Load];
+        if self.current() == Section::Calendar {
+            effects.extend(
+                self.calendar
+                    .reload()
+                    .map(|e| self.cal_effect(e))
+                    .into_iter()
+                    .flatten(),
+            );
+        }
+        effects
+    }
+
+    /// Translates calendar requests into runtime effects.
+    fn cal_effect(&mut self, effect: CalEffect) -> Vec<Effect> {
+        match effect {
+            CalEffect::Load(from, to) => vec![Effect::LoadCalendar(from, to)],
+            CalEffect::Create(entry) => vec![Effect::CreateEntry(entry)],
+            CalEffect::Update(id, entry) => vec![Effect::UpdateEntry(id, entry)],
+            CalEffect::Delete(id) => vec![Effect::DeleteEntry(id)],
+            CalEffect::Schedule(id) => vec![Effect::Schedule(id)],
+            CalEffect::Message(text) => {
+                self.info(text, Level::Info);
+                Vec::new()
+            }
+            CalEffect::Open(item) => {
+                let id = item.id;
+                self.items = vec![Ranked {
+                    item: *item,
+                    relevance: sentri_core::Relevance::default(),
+                }];
+                self.selected = 0;
+                self.detail_open = true;
+                self.focus = Focus::Detail;
+                vec![Effect::Act(id, Action::Viewed)]
+            }
+        }
     }
 
     fn move_by(&mut self, delta: isize) {
@@ -714,6 +762,18 @@ impl State {
     }
 
     fn on_normal_key(&mut self, key: KeyEvent) -> Vec<Effect> {
+        if self.current() == Section::Calendar
+            && !self.detail_open
+            && let Some(effects) = self.calendar.on_key(key)
+        {
+            return effects
+                .into_iter()
+                .flat_map(|e| self.cal_effect(e))
+                .collect();
+        }
+        if let Some(effects) = self.on_item_key(key) {
+            return effects;
+        }
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         match key.code {
             KeyCode::Char('q') => self.quit = true,
@@ -776,27 +836,6 @@ impl State {
                 }
                 return self.open_detail();
             }
-            KeyCode::Char('l') => return self.toggle_flag(Flag::Liked),
-            KeyCode::Char('s') => return self.toggle_flag(Flag::Saved),
-            KeyCode::Char('d') => return self.toggle_flag(Flag::Dismissed),
-            KeyCode::Char('i') => return self.toggle_flag(Flag::Interesting),
-            KeyCode::Char('p') => return self.toggle_flag(Flag::Applied),
-            KeyCode::Char('e') => return self.toggle_flag(Flag::Enrolled),
-            KeyCode::Char('c') => return self.toggle_flag(Flag::Completed),
-            KeyCode::Char('a') => self.info(
-                "Google Calendar sync is not available yet (phase 7). Dated items are listed under Calendar.",
-                Level::Info,
-            ),
-            KeyCode::Char('E') => {
-                if let Some(r) = self.selected_item() {
-                    return vec![Effect::OpenEditor(r.item.id)];
-                }
-            }
-            KeyCode::Char('o') => {
-                if let Some(r) = self.selected_item() {
-                    return vec![Effect::OpenUrl(r.item.opportunity.original_url.clone())];
-                }
-            }
             KeyCode::Char('S') => return self.cycle_sort(),
             KeyCode::Char('v') => {
                 self.density = self.density.next();
@@ -812,6 +851,36 @@ impl State {
             _ => {}
         }
         Vec::new()
+    }
+
+    /// Keys that act on the selected item.
+    fn on_item_key(&mut self, key: KeyEvent) -> Option<Vec<Effect>> {
+        if key.modifiers.contains(KeyModifiers::CONTROL) {
+            return None;
+        }
+        let effects = match key.code {
+            KeyCode::Char('l') => self.toggle_flag(Flag::Liked),
+            KeyCode::Char('s') => self.toggle_flag(Flag::Saved),
+            KeyCode::Char('d') => self.toggle_flag(Flag::Dismissed),
+            KeyCode::Char('i') => self.toggle_flag(Flag::Interesting),
+            KeyCode::Char('p') => self.toggle_flag(Flag::Applied),
+            KeyCode::Char('e') => self.toggle_flag(Flag::Enrolled),
+            KeyCode::Char('c') => self.toggle_flag(Flag::Completed),
+            KeyCode::Char('a') => self
+                .selected_item()
+                .map(|r| vec![Effect::Schedule(r.item.id)])
+                .unwrap_or_default(),
+            KeyCode::Char('E') => self
+                .selected_item()
+                .map(|r| vec![Effect::OpenEditor(r.item.id)])
+                .unwrap_or_default(),
+            KeyCode::Char('o') => self
+                .selected_item()
+                .map(|r| vec![Effect::OpenUrl(r.item.opportunity.original_url.clone())])
+                .unwrap_or_default(),
+            _ => return None,
+        };
+        Some(effects)
     }
 
     fn on_vertical(&mut self, delta: isize) -> Vec<Effect> {
@@ -946,6 +1015,16 @@ impl State {
             }
             Msg::Overview(overview) => self.overview = *overview,
             Msg::Detail(detail) => self.detail = Some(*detail),
+            Msg::Calendar(data) => self.calendar.set_data(*data),
+            Msg::CalendarChanged(text) => {
+                self.info(text, Level::Success);
+                self.detail_requested = None;
+                return self
+                    .calendar
+                    .reload()
+                    .map(|e| self.cal_effect(e))
+                    .unwrap_or_default();
+            }
             Msg::EditorReady(id, edit) => {
                 self.mode = Mode::Editor(Box::new(EditorState::new(id, *edit)));
             }
@@ -1132,7 +1211,7 @@ mod tests {
     }
 
     #[test]
-    fn calendar_section_lists_upcoming_by_deadline() {
+    fn calendar_section_query_is_by_deadline() {
         let mut s = loaded(0);
         s.section = Section::ALL
             .iter()

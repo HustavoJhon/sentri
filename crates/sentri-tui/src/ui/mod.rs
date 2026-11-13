@@ -4,6 +4,7 @@
 //! - ≥ 80 columns: sidebar · feed (details replace the feed when opened)
 //! - narrower: feed only (Tab switches sections)
 
+mod calendar;
 mod charts;
 mod dashboard;
 mod detail;
@@ -119,7 +120,8 @@ fn draw_body(frame: &mut Frame, area: Rect, state: &mut State, theme: &Theme) {
         Section::Dashboard => dashboard::render(frame, main, state, theme),
         Section::Sources => pages::sources(frame, main, state, theme),
         Section::Settings => pages::settings(frame, main, state, theme),
-        Section::Calendar => draw_feed(frame, main, state, theme, "Calendar · upcoming dates"),
+        Section::Calendar if state.detail_open => detail::render(frame, main, state, theme),
+        Section::Calendar => calendar::render(frame, main, &state.calendar, theme),
         Section::Feed(view) => draw_feed(frame, main, state, theme, view.label()),
     }
 }
@@ -341,6 +343,36 @@ mod tests {
             selected: 0,
         };
         assert!(render(120, 40, &mut state).contains("Go to Saved"));
+    }
+
+    #[test]
+    fn calendar_month_view_renders_entries() {
+        use crate::state::calendar::CalItem;
+        let mut state = State {
+            section: Section::ALL
+                .iter()
+                .position(|s| *s == Section::Calendar)
+                .unwrap(),
+            ..State::default()
+        };
+        let today = state.calendar.today;
+        state.calendar.items = vec![CalItem {
+            at: Utc::now(),
+            date: today,
+            time: Some("18:00".into()),
+            title: "Rust meetup".into(),
+            kind: sentri_core::EntryKind::Personal,
+            category: None,
+            entry_id: Some(1),
+            opportunity_id: None,
+        }];
+        let screen = render(160, 44, &mut state);
+        assert!(screen.contains("Month view"));
+        assert!(screen.contains("Mon"));
+        assert!(screen.contains("Rust meetup"));
+        assert!(screen.contains("Google Calendar: not connected"));
+        state.calendar.view = crate::state::calendar::CalView::Agenda;
+        assert!(render(160, 44, &mut state).contains("Agenda from"));
     }
 
     #[test]
