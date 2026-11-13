@@ -108,3 +108,42 @@ async fn authenticated_requests_do_not_follow_redirects() {
     ));
     assert!(client.get(&url).await.is_ok());
 }
+
+#[tokio::test]
+async fn images_have_their_own_type_and_size_limits() {
+    let server = MockServer::start().await;
+    Mock::given(path("/a.png"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(vec![0u8; 100], "image/png"))
+        .mount(&server)
+        .await;
+    Mock::given(path("/a.svg"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(b"<svg/>".to_vec(), "image/svg+xml"))
+        .mount(&server)
+        .await;
+    let client = local_client(1_000);
+    let url = |p: &str| Url::parse(&format!("{}{p}", server.uri())).unwrap();
+    assert_eq!(
+        client
+            .get_image(&url("/a.png"), 200)
+            .await
+            .unwrap()
+            .body
+            .len(),
+        100
+    );
+    assert!(matches!(
+        client.get_image(&url("/a.png"), 50).await,
+        Err(FetchError::TooLarge(50))
+    ));
+    assert!(matches!(
+        client.get_image(&url("/a.svg"), 200).await,
+        Err(FetchError::ContentType(_))
+    ));
+    assert!(
+        matches!(
+            client.get(&url("/a.png")).await,
+            Err(FetchError::ContentType(_))
+        ),
+        "documents and images are fetched separately"
+    );
+}

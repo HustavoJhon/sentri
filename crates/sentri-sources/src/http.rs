@@ -94,6 +94,13 @@ const ACCEPTED_TYPES: &[&str] = &[
     "text/plain",
 ];
 
+const DOCUMENT_ACCEPT: &str = "text/html,application/xhtml+xml,application/rss+xml,\
+    application/atom+xml,application/xml;q=0.9,application/json;q=0.9,*/*;q=0.1";
+
+/// Image types SENTRI decodes. SVG is excluded on purpose (it is a document
+/// that can reference external resources).
+const IMAGE_TYPES: &[&str] = &["image/png", "image/jpeg", "image/webp", "image/gif"];
+
 /// Shared, cheaply clonable HTTP client.
 #[derive(Debug, Clone)]
 pub struct SafeClient {
@@ -156,17 +163,44 @@ impl SafeClient {
         url: &Url,
         headers: &[(&str, String)],
     ) -> Result<Fetched, FetchError> {
+        self.fetch(
+            url,
+            headers,
+            ACCEPTED_TYPES,
+            DOCUMENT_ACCEPT,
+            self.limits.max_body_bytes,
+        )
+        .await
+    }
+
+    /// Downloads an image (PNG, JPEG, WebP or GIF) of at most `max_bytes`.
+    /// The bytes are untrusted: decode them with dimension limits.
+    pub async fn get_image(&self, url: &Url, max_bytes: u64) -> Result<Fetched, FetchError> {
+        self.fetch(
+            url,
+            &[],
+            IMAGE_TYPES,
+            "image/png,image/jpeg,image/webp,image/gif",
+            max_bytes,
+        )
+        .await
+    }
+
+    async fn fetch(
+        &self,
+        url: &Url,
+        headers: &[(&str, String)],
+        accepted: &[&str],
+        accept_header: &str,
+        max: u64,
+    ) -> Result<Fetched, FetchError> {
         check_url(url, self.limits.allow_private_networks).map_err(FetchError::Forbidden)?;
         let client = if headers.is_empty() {
             &self.client
         } else {
             &self.authenticated
         };
-        let mut request = client.get(url.clone()).header(
-            ACCEPT,
-            "text/html,application/xhtml+xml,application/rss+xml,application/atom+xml,\
-             application/xml;q=0.9,application/json;q=0.9,*/*;q=0.1",
-        );
+        let mut request = client.get(url.clone()).header(ACCEPT, accept_header);
         for (name, value) in headers {
             request = request.header(*name, value);
         }
@@ -182,10 +216,9 @@ impl SafeClient {
             .unwrap_or("application/octet-stream")
             .to_ascii_lowercase();
         let essence = content_type.split(';').next().unwrap_or_default().trim();
-        if !ACCEPTED_TYPES.contains(&essence) {
+        if !accepted.contains(&essence) {
             return Err(FetchError::ContentType(essence.to_owned()));
         }
-        let max = self.limits.max_body_bytes;
         if response.content_length().is_some_and(|len| len > max) {
             return Err(FetchError::TooLarge(max));
         }
