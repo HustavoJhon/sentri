@@ -10,10 +10,10 @@ sanea antes de guardarse y nunca se ejecuta.
 | Protección | Detalle |
 |---|---|
 | Esquemas | Solo `http` y `https`. Sin credenciales en la URL. |
-| Direcciones | Solo IPs públicas. Se bloquean loopback, redes privadas, link-local (incl. `169.254.169.254` de metadatos cloud), CGNAT `100.64.0.0/10` (Tailscale), multicast, reservadas, ULA/link-local IPv6 y formas IPv6 que envuelven IPv4 (mapped, compatible, NAT64, 6to4). |
+| Direcciones | Solo IPs públicas. IPv4: se bloquean loopback, privadas, link-local (incl. `169.254.169.254` de metadatos cloud), CGNAT `100.64.0.0/10` (Tailscale), multicast, reservadas, documentación, relay 6to4. IPv6: **lista blanca** de `2000::/3` menos `2001::/23`, `2001:db8::/32`, `2002::/16` y `3fff::/20`; las IPv4-mapped se validan como IPv4. |
 | DNS rebinding | Un resolver propio filtra las direcciones; la conexión usa solo las IPs ya validadas. |
 | Literales IP | Se validan antes de conectar (incluye formas como `0x7f000001`). |
-| Redirecciones | Máximo configurable; cada salto se valida igual que la URL inicial. |
+| Redirecciones | Máximo configurable; cada salto se valida igual que la URL inicial; nunca de https a http. Las peticiones con cabeceras de autenticación no siguen redirecciones, para no reenviar credenciales a otro origen. |
 | Proxies | Se ignoran los proxies del sistema para que no eludan las comprobaciones. |
 | Tamaño | `max_body_bytes` por respuesta, comprobado en streaming. |
 | Tipo | Lista blanca de `Content-Type` (HTML, XML, feeds, JSON, iCal, texto). |

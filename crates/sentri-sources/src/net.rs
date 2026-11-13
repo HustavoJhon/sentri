@@ -27,41 +27,27 @@ fn is_public_v4(ip: Ipv4Addr) -> bool {
         || a >= 240                                 // reserved
         || (a == 100 && (64..=127).contains(&b))    // CGNAT, includes Tailscale
         || (a == 192 && b == 0 && c == 0)           // IETF protocol assignments
+        || (a == 192 && b == 88 && c == 99)         // 6to4 relay anycast
         || (a == 198 && (18..=19).contains(&b)); // benchmarking
     !blocked
 }
 
+/// IPv6 uses an allowlist: only global unicast (`2000::/3`) minus
+/// special-purpose ranges. Everything else (NAT64, ULA, link-local, IPv4
+/// embeddings other than mapped addresses, discard-only…) is refused.
 fn is_public_v6(ip: Ipv6Addr) -> bool {
-    if let Some(v4) = embedded_v4(ip) {
+    if let Some(v4) = ip.to_ipv4_mapped() {
         return is_public_v4(v4);
     }
-    let first = ip.segments()[0];
-    let blocked = ip.is_unspecified()
-        || ip.is_loopback()
-        || ip.is_multicast()
-        || (first & 0xfe00) == 0xfc00                      // unique local
-        || (first & 0xffc0) == 0xfe80                      // link local
-        || (first & 0xffc0) == 0xfec0                      // site local (deprecated)
-        || (first == 0x2001 && ip.segments()[1] == 0x0db8) // documentation
-        || first == 0x2002; // 6to4 may wrap private IPv4
-    !blocked
-}
-
-/// IPv4 addresses hidden in IPv4-mapped, IPv4-compatible and NAT64 forms.
-fn embedded_v4(ip: Ipv6Addr) -> Option<Ipv4Addr> {
-    if let Some(v4) = ip.to_ipv4_mapped() {
-        return Some(v4);
-    }
     let s = ip.segments();
-    let o = ip.octets();
-    let tail = || Ipv4Addr::new(o[12], o[13], o[14], o[15]);
-    if s[..6] == [0; 6] && !ip.is_unspecified() && !ip.is_loopback() {
-        return Some(tail()); // deprecated IPv4-compatible
-    }
-    if s[0] == 0x0064 && s[1] == 0xff9b && s[2..6] == [0; 4] {
-        return Some(tail()); // NAT64 well-known prefix
-    }
-    None
+    let global_unicast = (s[0] & 0xe000) == 0x2000;
+    let special = match s[0] {
+        0x2001 => s[1] < 0x0200 || s[1] == 0x0db8, // IETF assignments (Teredo…), documentation
+        0x2002 => true,                            // 6to4 may wrap private IPv4
+        0x3fff => s[1] < 0x1000,                   // 3fff::/20 documentation
+        _ => false,
+    };
+    global_unicast && !special
 }
 
 #[cfg(test)]
@@ -100,6 +86,12 @@ mod tests {
             "::127.0.0.1",
             "64:ff9b::10.0.0.1",
             "2002:7f00:1::",
+            "64:ff9b:1::a00:1",
+            "2001::1",
+            "100::1",
+            "::ffff:0:7f00:1",
+            "3fff::1",
+            "192.88.99.1",
         ] {
             assert!(!public(ip), "{ip} should be blocked");
         }

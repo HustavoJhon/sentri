@@ -97,7 +97,11 @@ const ACCEPTED_TYPES: &[&str] = &[
 /// Shared, cheaply clonable HTTP client.
 #[derive(Debug, Clone)]
 pub struct SafeClient {
+    /// Follows validated redirects; used for anonymous requests.
     client: reqwest::Client,
+    /// Never follows redirects; used when credentials are attached so they
+    /// cannot be forwarded to another origin.
+    authenticated: reqwest::Client,
     limits: HttpLimits,
 }
 
@@ -106,23 +110,33 @@ impl SafeClient {
         let allow_private = limits.allow_private_networks;
         let max_redirects = usize::from(limits.max_redirects);
         let policy = redirect::Policy::custom(move |attempt| {
+            let downgrade = attempt.url().scheme() == "http"
+                && attempt.previous().iter().any(|u| u.scheme() == "https");
             if attempt.previous().len() >= max_redirects {
                 attempt.error("too many redirects")
+            } else if downgrade {
+                attempt.error("redirect from https to http refused")
             } else if let Err(reason) = check_url(attempt.url(), allow_private) {
                 attempt.error(reason)
             } else {
                 attempt.follow()
             }
         });
-        let client = reqwest::Client::builder()
-            .user_agent(USER_AGENT)
-            .timeout(limits.timeout)
-            .connect_timeout(limits.timeout.min(Duration::from_secs(10)))
-            .redirect(policy)
-            .no_proxy()
-            .dns_resolver(Arc::new(PublicOnlyResolver { allow_private }))
-            .build()?;
-        Ok(Self { client, limits })
+        let build = |policy| {
+            reqwest::Client::builder()
+                .user_agent(USER_AGENT)
+                .timeout(limits.timeout)
+                .connect_timeout(limits.timeout.min(Duration::from_secs(10)))
+                .redirect(policy)
+                .no_proxy()
+                .dns_resolver(Arc::new(PublicOnlyResolver { allow_private }))
+                .build()
+        };
+        Ok(Self {
+            client: build(policy)?,
+            authenticated: build(redirect::Policy::none())?,
+            limits,
+        })
     }
 
     pub const fn limits(&self) -> HttpLimits {
@@ -135,13 +149,20 @@ impl SafeClient {
     }
 
     /// Like [`get`](Self::get) with extra request headers (e.g. API auth).
+    /// Redirects are not followed when headers are given, so credentials are
+    /// only ever sent to the requested origin.
     pub async fn get_with(
         &self,
         url: &Url,
         headers: &[(&str, String)],
     ) -> Result<Fetched, FetchError> {
         check_url(url, self.limits.allow_private_networks).map_err(FetchError::Forbidden)?;
-        let mut request = self.client.get(url.clone()).header(
+        let client = if headers.is_empty() {
+            &self.client
+        } else {
+            &self.authenticated
+        };
+        let mut request = client.get(url.clone()).header(
             ACCEPT,
             "text/html,application/xhtml+xml,application/rss+xml,application/atom+xml,\
              application/xml;q=0.9,application/json;q=0.9,*/*;q=0.1",

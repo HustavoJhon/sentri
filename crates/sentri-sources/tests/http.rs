@@ -87,3 +87,24 @@ async fn production_client_refuses_local_servers() {
         Err(FetchError::Forbidden(_))
     ));
 }
+
+#[tokio::test]
+async fn authenticated_requests_do_not_follow_redirects() {
+    let server = MockServer::start().await;
+    Mock::given(path("/api"))
+        .respond_with(ResponseTemplate::new(302).insert_header("location", "/elsewhere"))
+        .mount(&server)
+        .await;
+    Mock::given(path("/elsewhere"))
+        .respond_with(html("leaked"))
+        .mount(&server)
+        .await;
+    let client = local_client(1_000);
+    let url = Url::parse(&format!("{}/api", server.uri())).unwrap();
+    let auth = [("authorization", "Bearer secret".to_owned())];
+    assert!(matches!(
+        client.get_with(&url, &auth).await,
+        Err(FetchError::Status(302))
+    ));
+    assert!(client.get(&url).await.is_ok());
+}
