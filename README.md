@@ -64,4 +64,7 @@ Documentación:
 - [Decisiones (ADR)](docs/adr/)
 - [Investigación de fuentes](docs/sources.md)
 - [Seguridad](docs/security.md)
+- [TUI y atajos](docs/tui.md)
+- [Configuración](docs/configuration.md)
+- [Base de datos](docs/database.md)
 - [Roadmap](docs/roadmap.md)
