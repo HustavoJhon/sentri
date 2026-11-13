@@ -112,3 +112,48 @@ Fuentes: [Firecrawl](https://www.firecrawl.dev/blog/google-search-json-api-alter
 - Respetar límites de uso y `Retry-After`; límite por fuente configurable.
 - Guardar solo metadatos necesarios y siempre la URL original.
 - Un conector que falla registra el error en `collection_runs` y no detiene al resto.
+
+## Redes sociales (revisión 2026-11-13)
+
+| Plataforma | API oficial y acceso | Coste / límites | Automatización en SENTRI |
+|---|---|---|---|
+| **Instagram** | Graph API solo para cuentas profesionales propias; búsqueda de hashtags requiere app revisada y cuenta business. Basic Display API retirada (dic-2024) *(verificar)*. oEmbed requiere token de app. | Gratis con revisión de Meta | ❌ Solo `sentri add` (se guarda la URL; título, autor e imagen se completan a mano si Instagram bloquea la página). |
+| **Threads** | Threads API para publicaciones propias; búsqueda por palabra clave requiere permiso revisado *(verificar)*. | Gratis con revisión | ❌ `sentri add`. |
+| **Facebook** | Contenido público de páginas requiere revisión (PPCA) *(verificar)*. | — | ❌ `sentri add`. |
+| **TikTok** | Research API solo para investigación académica; Display API solo contenido propio *(verificar)*. | — | ❌ `sentri add`. |
+| **X** | API v2 de pago por uso (ver arriba). | ~0,005 USD/post leído | 🟡 Futuro conector opcional con tope de gasto; hoy `sentri add`. |
+| **LinkedIn / Reddit** | Ver secciones anteriores. | — | ❌ `sentri add`. |
+| **YouTube** | Data API v3 con clave (10 000 unidades/día gratis) y **feeds RSS por canal sin clave**. | Gratis | ✅ `kind = "youtube"` con `url = …/feeds/videos.xml?channel_id=…` (probado). |
+| **Bluesky** | AT Protocol abierto; AppView pública sin autenticación; **RSS por perfil**. | Gratis | ✅ `kind = "bluesky"` con `url = https://bsky.app/profile/<handle>/rss` (probado; redirige a la URL con DID). |
+| **Mastodon** | API pública por instancia y **RSS por cuenta y hashtag** (`/@user.rss`, `/tags/<tag>.rss`). | Gratis; respetar normas de cada instancia | ✅ `kind = "mastodon"` (probado con `mastodon.social/tags/rust.rss`). |
+
+Captura manual universal: `sentri add URL` detecta la plataforma por dominio
+(incluidas instancias Mastodon por la forma `/@usuario/123`), intenta leer
+Open Graph/JSON-LD (título, descripción, imagen, autor) y, si la plataforma
+bloquea la página, **guarda igualmente la URL** con avisos. Después se puede
+completar todo desde la TUI (`E` en Details) o con
+`sentri edit ID --set source=instagram --set author_handle=@cuenta`.
+Nunca se usan cookies ni credenciales de cuentas personales.
+
+## Noticias tecnológicas (probadas el 2026-11-13)
+
+| Fuente | Mecanismo | Resultado |
+|---|---|---|
+| Hacker News | API pública de Algolia (`hn.algolia.com/api/v1`), sin clave | ✅ portada, búsquedas y empleos |
+| Google News | RSS de búsqueda (`news.google.com/rss/search?q=…`) | ✅ 100 ítems por consulta. Solo lectura personal no comercial; los enlaces pasan por `news.google.com`. El medio aparece al final del titular. |
+| Ars Technica, The Verge, TechCrunch, Phoronix, LWN, BleepingComputer | RSS | ✅ |
+| Blogs oficiales: Rust, Go, GitHub, OpenAI | RSS/Atom | ✅ (`stance = "official"`) |
+| Blog de NVIDIA | RSS | ❌ el parser (`feed-rs`) falla con este feed; desactivado. |
+| Reddit | — | ❌ RSS retirado el 13-nov-2026 (ver arriba). |
+
+### Naturaleza de las noticias
+
+SENTRI **no verifica hechos** y por eso no existe la etiqueta "verificada":
+
+| Etiqueta | Cuándo |
+|---|---|
+| Reported | Por defecto: lo publica un medio; se atribuye a la fuente. |
+| Official | La fuente es el blog oficial de la empresa/proyecto (configurado). |
+| Unconfirmed | El titular o el resumen usa "reportedly", "rumor", "leak", "allegedly", "sources say", "según fuentes"… Tiene prioridad sobre las demás. |
+| Opinion | El titular indica opinión, editorial o columna. |
+| Discussion | Hilos comunitarios (Ask/Show HN, fuentes sociales configuradas así). |
