@@ -308,6 +308,19 @@ impl Default for UiPrefs {
     }
 }
 
+impl UiPrefs {
+    pub fn from_config(ui: &sentri_app::UiConfig, indexed_colors: bool) -> Self {
+        Self {
+            images: ui.images,
+            indexed_colors,
+            ascii_icons: ui.ascii_icons,
+            show_sidebar: ui.show_sidebar,
+            show_details: ui.show_details,
+            feed_width: ui.feed_width,
+        }
+    }
+}
+
 /// Thumbnail size requested for detail images and avatars, in pixels.
 pub const IMAGE_PX: (u32, u32) = (80, 48);
 
