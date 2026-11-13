@@ -139,6 +139,27 @@ fn execute(
                 let _ = tx.send(msg);
             });
         }
+        Effect::Collect => {
+            tokio::spawn(async move {
+                let reports = app.collect(None).await;
+                let new: i64 = reports
+                    .iter()
+                    .filter_map(|r| r.result.as_ref().ok())
+                    .map(|(_, n)| n)
+                    .sum();
+                let failed: Vec<&str> = reports
+                    .iter()
+                    .filter(|r| r.result.is_err())
+                    .map(|r| r.source.as_str())
+                    .collect();
+                let mut text = format!("Collected from {} sources: {new} new", reports.len());
+                if !failed.is_empty() {
+                    text.push_str(" · failed: ");
+                    text.push_str(&failed.join(", "));
+                }
+                let _ = tx.send(Msg::Collected(text));
+            });
+        }
         Effect::OpenUrl(url) => {
             let _ = tx.send(open_url(&url));
         }

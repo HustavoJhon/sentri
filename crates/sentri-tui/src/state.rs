@@ -124,6 +124,7 @@ pub enum Command {
     Toggle(QuickFilter),
     Search,
     AddLink,
+    Collect,
     Reload,
     Help,
     Quit,
@@ -139,6 +140,7 @@ impl Command {
             Self::Toggle(filter) => format!("Toggle filter: {}", filter.label()),
             Self::Search => "Search…".into(),
             Self::AddLink => "Add link…".into(),
+            Self::Collect => "Collect from sources now".into(),
             Self::Reload => "Reload".into(),
             Self::Help => "Keyboard shortcuts".into(),
             Self::Quit => "Quit".into(),
@@ -146,7 +148,7 @@ impl Command {
     }
 
     pub fn all() -> Vec<Self> {
-        let mut commands: Vec<Self> = vec![Self::AddLink, Self::Search];
+        let mut commands: Vec<Self> = vec![Self::AddLink, Self::Search, Self::Collect];
         commands.extend(Section::ALL.map(Self::GoTo));
         commands.extend([
             Self::Sort(SortOrder::Relevance),
@@ -201,6 +203,7 @@ pub enum Effect {
     Act(OpportunityId, Action),
     AddLink(String),
     OpenUrl(String),
+    Collect,
 }
 
 /// Read-only context shown by the dashboard, sources and settings pages.
@@ -222,6 +225,8 @@ pub enum Msg {
     Acted(OpportunityId, InteractionState),
     Added(Box<AddOutcome>),
     Info(String),
+    /// Collection finished; the text summarizes it. Triggers a reload.
+    Collected(String),
     Failed(String),
 }
 
@@ -412,6 +417,11 @@ impl State {
             Command::AddLink => {
                 self.mode = Mode::AddLink(LineInput::default());
                 Vec::new()
+            }
+            Command::Collect => {
+                self.loading = true;
+                self.info("Collecting from enabled sources…", Level::Info);
+                vec![Effect::Collect]
             }
             Command::Reload => self.reload(),
             Command::Help => {
@@ -626,6 +636,7 @@ impl State {
             KeyCode::Char('E') => return self.toggle_filter(QuickFilter::Eligible),
             KeyCode::Char('C') => return self.toggle_filter(QuickFilter::Certificate),
             KeyCode::Char('r') => return self.reload(),
+            KeyCode::Char('R') => return self.run_command(Command::Collect),
             _ => {}
         }
         Vec::new()
@@ -724,6 +735,10 @@ impl State {
             }
             Msg::Added(outcome) => return self.on_added(*outcome),
             Msg::Info(text) => self.info(text, Level::Info),
+            Msg::Collected(text) => {
+                self.info(text, Level::Success);
+                return self.reload();
+            }
             Msg::Failed(text) => {
                 self.loading = false;
                 self.info(text, Level::Error);
@@ -898,6 +913,13 @@ mod tests {
         assert!(fuzzy_match("gtsv", "Go to Saved"));
         assert!(fuzzy_match("", "anything"));
         assert!(!fuzzy_match("xyz", "Go to Saved"));
+    }
+
+    #[test]
+    fn collect_key_emits_effect() {
+        let mut s = loaded(0);
+        assert_eq!(s.on_key(key(KeyCode::Char('R'))), vec![Effect::Collect]);
+        assert!(s.loading);
     }
 
     #[test]

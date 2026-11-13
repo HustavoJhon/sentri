@@ -111,6 +111,8 @@ async fn run(app: &Sentri, command: Command) -> Result<()> {
             }
         }
         Command::Status => status(app).await?,
+        Command::Collect { source } => collect(app, source.as_deref()).await?,
+        Command::Sources => sources(app).await?,
         Command::Backup { target } => backup(app, target).await?,
         Command::Config(_) => unreachable!("handled before opening the database"),
     }
@@ -205,6 +207,55 @@ async fn status(app: &Sentri) -> Result<()> {
             run.error
                 .map(|e| format!("  error: {e}"))
                 .unwrap_or_default()
+        );
+    }
+    Ok(())
+}
+
+async fn collect(app: &Sentri, only: Option<&str>) -> Result<()> {
+    if let Some(name) = only {
+        if app.config().source(name).is_none() {
+            anyhow::bail!("no source named {name:?}; see `sentri sources`");
+        }
+    }
+    let reports = app.collect(only).await;
+    if reports.is_empty() {
+        println!(
+            "No enabled sources. Enable some in the [[sources]] section of the configuration."
+        );
+    }
+    for report in reports {
+        match report.result {
+            Ok((seen, new)) => println!("  ✓ {:<28} {seen} seen, {new} new", report.source),
+            Err(error) => println!("  ✗ {:<28} {error}", report.source),
+        }
+    }
+    Ok(())
+}
+
+async fn sources(app: &Sentri) -> Result<()> {
+    let runs = app.store().latest_runs().await?;
+    for source in &app.config().sources {
+        let run = runs.iter().find(|r| r.source_name == source.name);
+        println!(
+            "{} [{:<3}] {:<28} {}",
+            if source.enabled { "●" } else { "○" },
+            source.kind.badge(),
+            source.name,
+            run.map_or_else(
+                || "never run".to_owned(),
+                |r| format!(
+                    "{:?} {} · seen {} new {}{}",
+                    r.status,
+                    r.started_at.format("%Y-%m-%d %H:%M"),
+                    r.items_seen,
+                    r.items_new,
+                    r.error
+                        .as_deref()
+                        .map(|e| format!(" · {e}"))
+                        .unwrap_or_default()
+                )
+            )
         );
     }
     Ok(())

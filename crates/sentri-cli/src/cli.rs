@@ -77,6 +77,14 @@ pub enum Command {
     },
     /// Database statistics and source status.
     Status,
+    /// Fetch new opportunities from enabled sources now.
+    Collect {
+        /// Only this source (also works for disabled sources).
+        #[arg(long)]
+        source: Option<String>,
+    },
+    /// List configured sources and their last run.
+    Sources,
     /// Manage the configuration file.
     #[command(subcommand)]
     Config(ConfigCommand),

@@ -35,6 +35,7 @@ const HELP: &[(&str, &str)] = &[
         "free / travel / upcoming / eligible / certificate",
     ),
     ("r", "reload"),
+    ("R", "collect from sources now"),
     ("q Ctrl-c", "quit"),
 ];
 

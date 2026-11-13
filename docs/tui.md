@@ -34,6 +34,7 @@ sentri            # abre la TUI
 | `S` | cambiar orden (relevancia → recientes → deadline) |
 | `F` `T` `U` `E` `C` | filtros: gratis, viaje, próximos, elegible, certificado |
 | `r` | recargar |
+| `R` | recopilar ahora de las fuentes habilitadas |
 | `?` | ayuda |
 | `q` `Ctrl-c` | salir |
 
