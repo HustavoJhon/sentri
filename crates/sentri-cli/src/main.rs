@@ -25,8 +25,10 @@ async fn main() -> Result<()> {
             run(&app, command).await
         }
         None => {
-            println!("The TUI is not available yet. Try `sentri --help`.");
-            Ok(())
+            let app = open(&config_path).await?;
+            sentri_tui::run(app, config_path.display().to_string())
+                .await
+                .context("TUI failed")
         }
     }
 }

@@ -438,6 +438,8 @@ impl State {
     }
 
     pub fn on_key(&mut self, key: KeyEvent) -> Vec<Effect> {
+        // Any key acknowledges the previous message.
+        self.message = None;
         if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
             self.quit = true;
             return Vec::new();

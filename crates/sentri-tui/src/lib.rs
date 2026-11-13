@@ -5,8 +5,10 @@
 //! protocols.
 
 pub mod input;
+mod runtime;
 pub mod state;
 pub mod theme;
 pub mod ui;
 
+pub use runtime::{TuiError, run};
 pub use theme::{Palette, Theme};

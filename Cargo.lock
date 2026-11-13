@@ -2694,6 +2694,7 @@ dependencies = [
  "clap",
  "sentri-app",
  "sentri-core",
+ "sentri-tui",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -2748,6 +2749,8 @@ dependencies = [
  "ratatui",
  "sentri-app",
  "sentri-core",
+ "thiserror 2.0.21",
+ "tokio",
 ]
 
 [[package]]
