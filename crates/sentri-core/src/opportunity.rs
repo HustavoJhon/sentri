@@ -343,6 +343,15 @@ impl Opportunity {
         text
     }
 
+    /// Topic of a news item, derived from its text (tags are unordered).
+    pub fn news_topic(&self) -> Option<&'static str> {
+        crate::classify::news_topic(&format!(
+            "{} {}",
+            self.title,
+            self.summary.as_deref().unwrap_or_default()
+        ))
+    }
+
     /// The next relevant date in the future, preferring the deadline.
     pub fn next_date(&self, now: DateTime<Utc>) -> Option<DateTime<Utc>> {
         [self.dates.deadline, self.dates.starts_at]

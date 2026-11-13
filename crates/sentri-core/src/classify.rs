@@ -199,8 +199,6 @@ const SPECULATION: &[&str] = &[
     "sources say",
     "sources familiar",
     "people familiar",
-    "could be",
-    "may be",
     "is said to",
     "según fuentes",
     "rumores",
@@ -220,7 +218,7 @@ const OPINION: &[&str] = &[
     "opinión",
     "columna",
 ];
-const DISCUSSION: &[&str] = &["ask hn", "show hn", "tell hn", "discussion", "thread"];
+const DISCUSSION: &[&str] = &["ask hn", "show hn", "tell hn", "launch hn"];
 
 /// News topics, first match wins.
 const TOPICS: &[(&str, &[&str])] = &[
@@ -363,13 +361,15 @@ pub fn category(text: &str) -> Option<Category> {
 
 /// How a news item presents itself. Falls back to `fallback` (e.g. the
 /// source's configured stance) and finally to a plain report.
-pub fn stance(text: &str, fallback: Option<Stance>) -> Stance {
-    let text = text.to_lowercase();
-    if any(&text, SPECULATION) || text.contains('?') && text.contains("could") {
+pub fn stance(headline: &str, body: &str, fallback: Option<Stance>) -> Stance {
+    let headline = headline.to_lowercase();
+    let all = format!("{headline} {}", body.to_lowercase());
+    // Unconfirmed wording anywhere wins: rumors must never look like facts.
+    if any(&all, SPECULATION) {
         Stance::Speculation
-    } else if any(&text, DISCUSSION) {
+    } else if any(&headline, DISCUSSION) {
         Stance::Discussion
-    } else if any(&text, OPINION) {
+    } else if any(&headline, OPINION) {
         Stance::Opinion
     } else {
         fallback.unwrap_or(Stance::Report)
@@ -398,10 +398,11 @@ pub fn entities(text: &str) -> Vec<&'static str> {
 /// Marks `o` as news and fills stance, topic and entity tags. The topic is
 /// placed first among the tags.
 pub fn enrich_news(o: &mut Opportunity, fallback: Option<Stance>) {
-    let text = format!("{} {}", o.title, o.summary.as_deref().unwrap_or_default());
+    let body = o.summary.clone().unwrap_or_default();
+    let text = format!("{} {body}", o.title);
     o.content = crate::ContentKind::News;
     if o.stance.is_none() {
-        o.stance = Some(stance(&text, fallback));
+        o.stance = Some(stance(&o.title, &body, fallback));
     }
     let mut tags: Vec<String> = news_topic(&text).map(str::to_owned).into_iter().collect();
     tags.extend(entities(&text).into_iter().map(str::to_owned));
@@ -488,17 +489,20 @@ mod tests {
     #[test]
     fn classifies_news_without_claiming_verification() {
         assert_eq!(
-            stance("NVIDIA reportedly plans new GPU", None),
+            stance("NVIDIA plans new GPU", "according to a leak", None),
             Stance::Speculation
         );
         assert_eq!(
-            stance("Ask HN: Is Rust worth it?", None),
+            stance("Ask HN: Is Rust worth it?", "", None),
             Stance::Discussion
         );
-        assert_eq!(stance("Opinion: the AI bubble", None), Stance::Opinion);
-        assert_eq!(stance("Linux 7.0 released", None), Stance::Report);
+        assert_eq!(stance("Opinion: the AI bubble", "", None), Stance::Opinion);
         assert_eq!(
-            stance("Rust 1.99 released", Some(Stance::Official)),
+            stance("Linux 7.0 released", "discussion: https://hn", None),
+            Stance::Report
+        );
+        assert_eq!(
+            stance("Rust 1.99 released", "", Some(Stance::Official)),
             Stance::Official
         );
         assert_eq!(news_topic("Critical CVE in OpenSSH"), Some("security"));

@@ -30,7 +30,7 @@ fn flags(state: &InteractionState) -> String {
 fn kind_label(o: &sentri_core::Opportunity) -> String {
     match (o.content, o.stance) {
         (sentri_core::ContentKind::News, stance) => {
-            let topic = o.tags.first().map_or("news", String::as_str);
+            let topic = o.news_topic().unwrap_or("news");
             let stance = stance.map_or("", sentri_core::Stance::label);
             format!("{topic}·{stance}")
         }
