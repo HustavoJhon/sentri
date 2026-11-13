@@ -7,7 +7,7 @@ Las fases son incrementales; cada una termina con funcionalidad probada.
 | 0 | Auditoría, rama `dev`, workspace, calidad, docs | ✅ |
 | 1 | Modelos, SQLite, migraciones, repositorios, configuración | ✅ |
 | 2 | Normalización, deduplicación, búsqueda, filtros | ✅ |
-| 3 | Likes, guardados, descartes, historial, `sentri add` | ✅ (edición manual desde la TUI pendiente) |
+| 3 | Likes, guardados, descartes, historial, `sentri add`, `sentri edit` | ✅ (formulario de edición en la TUI pendiente) |
 | 4 | TUI: Gruvbox, dashboard, feed, detalles, atajos, command palette | ✅ |
 | 5 | Conectores: RSS/Atom ✅, GitHub ✅, Hacker News, iCalendar (Reddit descartado, ver sources.md) | 🚧 |
 | 6 | Intereses, scoring, explicaciones, personalización | 🚧 (base hecha en fase 1) |
@@ -22,3 +22,12 @@ Las fases son incrementales; cada una termina con funcionalidad probada.
 Reordenación respecto al plan original: el motor de scoring (fase 6) se
 introduce en su forma básica junto al núcleo (fase 1), porque el feed necesita
 un orden desde el primer día; la fase 6 lo amplía con personalización.
+
+## Próximos pasos
+
+1. Formulario de edición y de alta completo en la TUI (hoy: alta por URL y `sentri edit`).
+2. Conectores Hacker News (*Who is hiring?*), iCalendar (Luma/GDG/Meetup) y Microsoft Learn.
+3. Reintentos con backoff por fuente en el daemon y límite de frecuencia por fuente.
+4. Fase 7: Google Calendar con OAuth2 (requiere crear credenciales en Google Cloud;
+   se dejará documentado sin inventar credenciales).
+5. Afinidad: excluir la propia oportunidad al explicar "similar a lo que guardaste".
