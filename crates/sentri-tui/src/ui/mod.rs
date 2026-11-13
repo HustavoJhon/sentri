@@ -102,7 +102,7 @@ fn active_filters(state: &State) -> Vec<&'static str> {
 }
 
 fn draw_body(frame: &mut Frame, area: Rect, state: &mut State, theme: &Theme) {
-    let main = if area.width >= MEDIUM {
+    let main = if area.width >= MEDIUM && state.ui.show_sidebar {
         let [sidebar, main] =
             Layout::horizontal([Constraint::Length(SIDEBAR_WIDTH), Constraint::Min(0)]).areas(area);
         draw_sidebar(frame, sidebar, state, theme);
@@ -121,10 +121,15 @@ fn draw_body(frame: &mut Frame, area: Rect, state: &mut State, theme: &Theme) {
 }
 
 fn draw_feed(frame: &mut Frame, area: Rect, state: &mut State, theme: &Theme, title: &str) {
-    if frame.area().width >= WIDE {
-        let [list, detail] =
-            Layout::horizontal([Constraint::Percentage(55), Constraint::Percentage(45)])
-                .areas(area);
+    let side_by_side = frame.area().width >= WIDE && state.ui.show_details;
+    state.hit.detail_visible = side_by_side || state.detail_open;
+    if side_by_side {
+        let feed_width = state.ui.feed_width.clamp(30, 80);
+        let [list, detail] = Layout::horizontal([
+            Constraint::Percentage(feed_width),
+            Constraint::Percentage(100 - feed_width),
+        ])
+        .areas(area);
         feed::render(frame, list, state, theme, title);
         detail::render(frame, detail, state, theme);
     } else if state.detail_open {
@@ -275,7 +280,7 @@ mod tests {
         assert!(screen.contains("AI Hackathon Cusco"));
         assert!(screen.contains(" DP "), "source badge");
         assert!(screen.contains("in 5d"));
-        assert!(screen.contains("Why this score"));
+        assert!(screen.contains("SENTRI recommendation"));
         assert!(screen.contains("Matches interest 'AI'"));
         assert!(screen.contains('★'));
     }
@@ -287,7 +292,7 @@ mod tests {
         let screen = render(60, 20, &mut state);
         assert!(!screen.contains("Dashboard"));
         assert!(screen.contains("AI Hackathon"));
-        assert!(!screen.contains("Why this score"));
+        assert!(!screen.contains("SENTRI recommendation"));
     }
 
     #[test]

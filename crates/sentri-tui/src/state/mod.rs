@@ -7,7 +7,12 @@
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind};
 use ratatui::layout::{Position, Rect};
-use sentri_app::{AddOutcome, CollectionRun, Insights, Ranked, SourceConfig, Stats};
+use std::collections::HashMap;
+
+use sentri_app::{
+    AddOutcome, CollectionRun, EditState, HistoryEntry, ImageMode, Insights, Ranked, SourceConfig,
+    Stats, Thumbnail,
+};
 use sentri_core::{
     Action, FeedQuery, FeedView, Flag, InteractionState, OpportunityId, Profile, SortOrder,
 };
@@ -243,6 +248,8 @@ pub enum Effect {
     AddLink(String),
     OpenUrl(String),
     Collect,
+    LoadDetail(OpportunityId),
+    LoadImage(String),
 }
 
 /// Read-only context shown by the dashboard, sources and settings pages.
@@ -259,6 +266,51 @@ pub struct Overview {
     pub database_path: String,
 }
 
+/// Data shown in Details besides the feed item itself.
+#[derive(Debug, Clone)]
+pub struct DetailData {
+    pub id: OpportunityId,
+    pub edit: EditState,
+    pub history: Vec<HistoryEntry>,
+}
+
+/// An image being loaded or ready to draw.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ImageSlot {
+    Loading,
+    Ready(Thumbnail),
+    Failed,
+}
+
+/// Interface preferences (from `[ui]` in the configuration).
+// Independent on/off preferences, mirrored from the configuration file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct UiPrefs {
+    pub images: ImageMode,
+    pub indexed_colors: bool,
+    pub ascii_icons: bool,
+    pub show_sidebar: bool,
+    pub show_details: bool,
+    pub feed_width: u16,
+}
+
+impl Default for UiPrefs {
+    fn default() -> Self {
+        Self {
+            images: ImageMode::Halfblock,
+            indexed_colors: false,
+            ascii_icons: false,
+            show_sidebar: true,
+            show_details: true,
+            feed_width: 55,
+        }
+    }
+}
+
+/// Thumbnail size requested for detail images and avatars, in pixels.
+pub const IMAGE_PX: (u32, u32) = (80, 48);
+
 /// Results of effects.
 #[derive(Debug, Clone)]
 pub enum Msg {
@@ -269,6 +321,8 @@ pub enum Msg {
     Info(String),
     /// Collection finished; the text summarizes it. Triggers a reload.
     Collected(String),
+    Detail(Box<DetailData>),
+    Image(String, Option<Thumbnail>),
     Failed(String),
 }
 
@@ -280,6 +334,8 @@ pub struct HitAreas {
     /// Rows each list item occupies.
     pub item_height: u16,
     pub list_offset: usize,
+    /// Whether the last frame showed the details pane.
+    pub detail_visible: bool,
 }
 
 /// Complete UI state.
@@ -297,6 +353,10 @@ pub struct State {
     pub detail_scroll: u16,
     pub hit: HitAreas,
     pub density: Density,
+    pub ui: UiPrefs,
+    pub detail: Option<DetailData>,
+    pub detail_requested: Option<OpportunityId>,
+    pub images: HashMap<String, ImageSlot>,
     pub overview: Overview,
     pub quit: bool,
 }
@@ -316,6 +376,10 @@ impl Default for State {
             detail_scroll: 0,
             hit: HitAreas::default(),
             density: Density::default(),
+            ui: UiPrefs::default(),
+            detail: None,
+            detail_requested: None,
+            images: HashMap::new(),
             overview: Overview::default(),
             quit: false,
         }
@@ -768,6 +832,51 @@ impl State {
         }
     }
 
+    /// Background loads the current screen needs (details, images). Each is
+    /// requested once; results arrive as messages.
+    pub fn pending(&mut self) -> Vec<Effect> {
+        let mut effects = Vec::new();
+        let visible = self.hit.detail_visible || self.detail_open;
+        let Some(item) = self.selected_item() else {
+            return effects;
+        };
+        let id = item.item.id;
+        let o = &item.item.opportunity;
+        let urls: Vec<String> = [o.image_url.clone(), o.author.avatar_url.clone()]
+            .into_iter()
+            .flatten()
+            .collect();
+        if !visible {
+            return effects;
+        }
+        if self.detail_requested != Some(id) {
+            self.detail_requested = Some(id);
+            effects.push(Effect::LoadDetail(id));
+        }
+        if self.ui.images != ImageMode::Off {
+            for url in urls {
+                if !self.images.contains_key(&url) {
+                    self.images.insert(url.clone(), ImageSlot::Loading);
+                    effects.push(Effect::LoadImage(url));
+                }
+            }
+        }
+        effects
+    }
+
+    /// Details for the selected item, if already loaded.
+    pub fn detail_for_selected(&self) -> Option<&DetailData> {
+        let id = self.selected_item()?.item.id;
+        self.detail.as_ref().filter(|d| d.id == id)
+    }
+
+    pub fn image(&self, url: Option<&str>) -> Option<&Thumbnail> {
+        match self.images.get(url?) {
+            Some(ImageSlot::Ready(thumb)) => Some(thumb),
+            _ => None,
+        }
+    }
+
     pub fn on_msg(&mut self, msg: Msg) -> Vec<Effect> {
         match msg {
             Msg::Loaded(items) => {
@@ -776,7 +885,16 @@ impl State {
                 self.selected = self.selected.min(self.items.len().saturating_sub(1));
             }
             Msg::Overview(overview) => self.overview = *overview,
+            Msg::Detail(detail) => self.detail = Some(*detail),
+            Msg::Image(url, thumb) => {
+                let slot = thumb.map_or(ImageSlot::Failed, ImageSlot::Ready);
+                self.images.insert(url, slot);
+            }
             Msg::Acted(id, state) => {
+                if self.detail_requested == Some(id) {
+                    // Refresh history in Details.
+                    self.detail_requested = None;
+                }
                 if let Some(r) = self.items.iter_mut().find(|r| r.item.id == id) {
                     r.item.state = state;
                 }
@@ -961,6 +1079,28 @@ mod tests {
         assert!(fuzzy_match("gtsv", "Go to Saved"));
         assert!(fuzzy_match("", "anything"));
         assert!(!fuzzy_match("xyz", "Go to Saved"));
+    }
+
+    #[test]
+    fn requests_detail_and_images_once_when_visible() {
+        let mut s = loaded(2);
+        assert_eq!(s.pending(), vec![], "details hidden");
+        s.hit.detail_visible = true;
+        s.items[0].item.opportunity.image_url = Some("https://img.example/a.png".into());
+        assert_eq!(
+            s.pending(),
+            vec![
+                Effect::LoadDetail(OpportunityId(1)),
+                Effect::LoadImage("https://img.example/a.png".into())
+            ]
+        );
+        assert_eq!(s.pending(), vec![], "not requested twice");
+        s.on_key(key(KeyCode::Down));
+        assert_eq!(s.pending(), vec![Effect::LoadDetail(OpportunityId(2))]);
+        s.ui.images = ImageMode::Off;
+        s.on_key(key(KeyCode::Up));
+        s.images.clear();
+        assert_eq!(s.pending(), vec![Effect::LoadDetail(OpportunityId(1))]);
     }
 
     #[test]

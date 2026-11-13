@@ -65,7 +65,8 @@ async fn event_loop(
             Some(msg) = msgs.recv() => state.on_msg(msg),
             else => break,
         };
-        for effect in effects {
+        let pending = state.pending();
+        for effect in effects.into_iter().chain(pending) {
             execute(&app, &state, effect, &config_path, &msg_tx);
         }
     }
@@ -158,6 +159,30 @@ fn execute(
                     text.push_str(&failed.join(", "));
                 }
                 let _ = tx.send(Msg::Collected(text));
+            });
+        }
+        Effect::LoadDetail(id) => {
+            tokio::spawn(async move {
+                let msg = match (app.edit_state(id).await, app.history_for(id, 20).await) {
+                    (Ok(edit), Ok(history)) => {
+                        Msg::Detail(Box::new(crate::state::DetailData { id, edit, history }))
+                    }
+                    (Err(e), _) | (_, Err(e)) => Msg::Failed(format!("Could not load #{id}: {e}")),
+                };
+                let _ = tx.send(msg);
+            });
+        }
+        Effect::LoadImage(url) => {
+            tokio::spawn(async move {
+                let (w, h) = crate::state::IMAGE_PX;
+                let thumb = match app.image_thumbnail(&url, w, h).await {
+                    Ok(thumb) => Some(thumb),
+                    Err(error) => {
+                        tracing::debug!(%error, "image unavailable");
+                        None
+                    }
+                };
+                let _ = tx.send(Msg::Image(url, thumb));
             });
         }
         Effect::OpenUrl(url) => {
