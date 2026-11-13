@@ -85,7 +85,7 @@ impl Store {
             .bind(kind.as_str())
             .bind(&item.opportunity.title)
             .bind(to_db(date))
-            .bind(date.format("%H:%M").to_string() == "00:00")
+            .bind(sentri_core::dates::is_all_day(date))
             .bind(to_db(at))
             .bind(to_db(at))
             .execute(&mut *tx)

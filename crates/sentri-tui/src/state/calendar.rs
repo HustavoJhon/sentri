@@ -157,7 +157,7 @@ pub fn parse_entry(text: &str, date: NaiveDate) -> Result<NewEntry, String> {
     if title.trim().is_empty() {
         return Err("Write a title, e.g. \"18:00-20:00 Rust meetup\"".into());
     }
-    let starts_at = local(date, start.unwrap_or(NaiveTime::MIN));
+    let starts_at = start.map_or_else(|| sentri_core::dates::all_day(date), |t| local(date, t));
     let ends_at = end.map(|e| local(date, e));
     if ends_at.is_some_and(|e| e < starts_at) {
         return Err("The end time is before the start time".into());
@@ -182,11 +182,11 @@ fn to_item(
     opportunity_id: Option<OpportunityId>,
 ) -> CalItem {
     let local = at.with_timezone(&Local);
-    let midnight = local.format("%H:%M").to_string() == "00:00";
+    let whole_day = all_day || sentri_core::dates::is_all_day(at);
     CalItem {
         at,
-        date: local.date_naive(),
-        time: (!all_day && !midnight).then(|| local.format("%H:%M").to_string()),
+        date: sentri_core::dates::calendar_date(at, |d| d.with_timezone(&Local).date_naive()),
+        time: (!whole_day).then(|| local.format("%H:%M").to_string()),
         title,
         kind,
         category,

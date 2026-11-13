@@ -248,9 +248,7 @@ async fn schedule(app: &Sentri, id: OpportunityId) -> Result<()> {
             "  {} {:<14} {}  {}",
             e.kind.icon(),
             e.kind.label(),
-            e.starts_at
-                .with_timezone(&chrono::Local)
-                .format("%Y-%m-%d %H:%M"),
+            when(e.starts_at),
             e.title
         );
     }
@@ -264,6 +262,17 @@ fn sync(app: &Sentri) {
             "Google Calendar is not connected: OAuth credentials are not configured yet.\n\
              Nothing was synchronized. See docs/calendar.md."
         ),
+    }
+}
+
+/// Local date and time, or just the date for all-day values.
+fn when(d: chrono::DateTime<chrono::Utc>) -> String {
+    if sentri_core::dates::is_all_day(d) {
+        d.format("%a %Y-%m-%d (all day)").to_string()
+    } else {
+        d.with_timezone(&chrono::Local)
+            .format("%a %Y-%m-%d %H:%M")
+            .to_string()
     }
 }
 
@@ -302,11 +311,7 @@ async fn calendar(app: &Sentri, days: i64) -> Result<()> {
         println!("Nothing in the next {days} days.");
     }
     for (date, text) in rows {
-        println!(
-            "{}  {text}",
-            date.with_timezone(&chrono::Local)
-                .format("%a %Y-%m-%d %H:%M")
-        );
+        println!("{}  {text}", when(date));
     }
     Ok(())
 }
