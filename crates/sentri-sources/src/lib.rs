@@ -4,6 +4,7 @@
 //! `sentri-core` before storage and never executed.
 
 pub mod http;
+pub mod metadata;
 pub mod net;
 
 pub use http::{FetchError, Fetched, HttpLimits, SafeClient};
