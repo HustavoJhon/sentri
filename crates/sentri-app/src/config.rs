@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-use sentri_core::{CanonicalUrl, Category, Profile, SourceKind, Weights};
+use sentri_core::{CanonicalUrl, Category, ContentKind, Profile, SourceKind, Stance, Weights};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -102,6 +102,12 @@ pub struct SourceConfig {
     /// Name of the environment variable holding a token, never the token.
     #[serde(default)]
     pub token_env: Option<String>,
+    /// `opportunity` (default) or `news`.
+    #[serde(default)]
+    pub content: ContentKind,
+    /// Default stance of a news source (`official` for company blogs).
+    #[serde(default)]
+    pub stance: Option<Stance>,
 }
 
 const fn enabled_by_default() -> bool {

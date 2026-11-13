@@ -76,6 +76,14 @@ pub fn parse(
                 .map(|html| html_to_text(&html));
             o.dates.published_at = entry.published.or(entry.updated);
             o.tags = entry.categories.iter().map(|c| c.term.clone()).collect();
+            if let Some(person) = entry.authors.first() {
+                o.author = sentri_core::Author {
+                    name: person.name.clone().filter(|n| !n.trim().is_empty()),
+                    handle: None,
+                    profile_url: person.uri.clone(),
+                    avatar_url: None,
+                };
+            }
             o.image_url = entry
                 .media
                 .iter()
@@ -105,6 +113,7 @@ mod tests {
     const ATOM: &str = r#"<?xml version="1.0" encoding="utf-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom"><title>Dev</title><id>x</id><updated>2026-11-01T00:00:00Z</updated>
 <entry><title>Rust workshop</title><id>tag:1</id><updated>2026-11-02T00:00:00Z</updated>
+<author><name>Ferris</name><uri>https://dev.example/ferris</uri></author>
 <link rel="alternate" href="https://dev.example/rust"/><summary>Online workshop</summary></entry>
 </feed>"#;
 
@@ -126,6 +135,11 @@ mod tests {
         let items = parse(ATOM.as_bytes(), "dev", Utc::now()).unwrap();
         assert_eq!(items[0].original_url, "https://dev.example/rust");
         assert_eq!(items[0].summary.as_deref(), Some("Online workshop"));
+        assert_eq!(items[0].author.name.as_deref(), Some("Ferris"));
+        assert_eq!(
+            items[0].author.profile_url.as_deref(),
+            Some("https://dev.example/ferris")
+        );
     }
 
     #[test]

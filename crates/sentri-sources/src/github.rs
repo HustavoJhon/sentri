@@ -223,6 +223,8 @@ mod tests {
             tags: vec![],
             max_items: 20,
             token: None,
+            content: sentri_core::ContentKind::Opportunity,
+            stance: None,
         }
     }
 

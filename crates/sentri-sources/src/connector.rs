@@ -4,11 +4,12 @@
 //! which keeps dispatch simple and avoids boxed async traits.
 
 use chrono::{DateTime, Utc};
-use sentri_core::{Category, Opportunity, SourceKind, classify};
+use sentri_core::{Category, ContentKind, Opportunity, SourceKind, Stance, classify};
 use thiserror::Error;
 
 use crate::SafeClient;
 use crate::github::GitHub;
+use crate::hackernews::HackerNews;
 use crate::http::FetchError;
 use crate::rss::Feed;
 
@@ -27,6 +28,10 @@ pub struct SourceSpec {
     pub max_items: usize,
     /// Secret token, already read from the environment. Never logged.
     pub token: Option<String>,
+    /// Whether the source publishes opportunities or news.
+    pub content: ContentKind,
+    /// Default stance for news (e.g. `Official` for a company blog).
+    pub stance: Option<Stance>,
 }
 
 #[derive(Debug, Error)]
@@ -46,6 +51,7 @@ pub enum SourceError {
 pub enum Connector {
     Feed(Feed),
     GitHub(GitHub),
+    HackerNews(HackerNews),
 }
 
 impl Connector {
@@ -54,6 +60,7 @@ impl Connector {
         match spec.kind {
             SourceKind::Rss => Feed::new(spec).map(Self::Feed),
             SourceKind::GitHub => GitHub::new(spec).map(Self::GitHub),
+            SourceKind::HackerNews => HackerNews::new(spec).map(Self::HackerNews),
             other => Err(SourceError::Unsupported(other)),
         }
     }
@@ -62,6 +69,7 @@ impl Connector {
         match self {
             Self::Feed(c) => &c.spec,
             Self::GitHub(c) => &c.spec,
+            Self::HackerNews(c) => &c.spec,
         }
     }
 
@@ -75,6 +83,7 @@ impl Connector {
         let items = match self {
             Self::Feed(c) => c.fetch(http, now).await?,
             Self::GitHub(c) => c.fetch(http, now).await?,
+            Self::HackerNews(c) => c.fetch(http, now).await?,
         };
         let spec = self.spec();
         Ok(items
@@ -87,12 +96,16 @@ impl Connector {
 
 /// Applies source defaults and classification, then sanitizes.
 fn finish(mut o: Opportunity, spec: &SourceSpec) -> Opportunity {
+    o.tags.extend(spec.tags.iter().cloned());
+    if spec.content == ContentKind::News {
+        classify::enrich_news(&mut o, spec.stance);
+        return o.sanitized();
+    }
     classify::enrich(&mut o);
     if o.category == Category::Other
         && let Some(category) = spec.category
     {
         o.category = category;
     }
-    o.tags.extend(spec.tags.iter().cloned());
     o.sanitized()
 }

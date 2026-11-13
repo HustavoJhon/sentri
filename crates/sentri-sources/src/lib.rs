@@ -5,6 +5,7 @@
 
 pub mod connector;
 pub mod github;
+pub mod hackernews;
 pub mod http;
 pub mod metadata;
 pub mod net;

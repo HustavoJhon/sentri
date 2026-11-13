@@ -34,6 +34,8 @@ fn spec(config: &SourceConfig) -> SourceSpec {
         tags: config.tags.clone(),
         max_items: config.max_items,
         token,
+        content: config.content,
+        stance: config.stance,
     }
 }
 
