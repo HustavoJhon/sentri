@@ -192,9 +192,6 @@ const SPECULATION: &[&str] = &[
     "rumoured",
     "rumored",
     "reportedly",
-    "leak",
-    "leaked",
-    "leaks",
     "allegedly",
     "sources say",
     "sources familiar",
@@ -202,7 +199,6 @@ const SPECULATION: &[&str] = &[
     "is said to",
     "según fuentes",
     "rumores",
-    "filtración",
     "supuestamente",
 ];
 const OPINION: &[&str] = &[
@@ -489,7 +485,11 @@ mod tests {
     #[test]
     fn classifies_news_without_claiming_verification() {
         assert_eq!(
-            stance("NVIDIA plans new GPU", "according to a leak", None),
+            stance(
+                "NVIDIA plans new GPU",
+                "according to sources familiar",
+                None
+            ),
             Stance::Speculation
         );
         assert_eq!(
@@ -497,6 +497,11 @@ mod tests {
             Stance::Discussion
         );
         assert_eq!(stance("Opinion: the AI bubble", "", None), Stance::Opinion);
+        assert_eq!(
+            stance("App leaks user data", "", None),
+            Stance::Report,
+            "a data leak is news, not a rumor"
+        );
         assert_eq!(
             stance("Linux 7.0 released", "discussion: https://hn", None),
             Stance::Report

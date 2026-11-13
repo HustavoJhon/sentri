@@ -359,7 +359,12 @@ fn below(area: Rect, used: u16) -> Rect {
 
 fn draw_header(frame: &mut Frame, area: Rect, state: &State, theme: &Theme, r: &Ranked) -> u16 {
     let lines = header(theme, r);
-    let height = (u16::try_from(lines.len()).unwrap_or(4) + 1).min(area.height);
+    let text_width = usize::from(area.width.saturating_sub(8).max(10));
+    let wrapped: usize = lines
+        .iter()
+        .map(|l| l.width().div_ceil(text_width).max(1))
+        .sum();
+    let height = (u16::try_from(wrapped).unwrap_or(4) + 1).min(area.height);
     let head = Rect { height, ..area };
     let text_area = match state.image(r.item.opportunity.author.avatar_url.as_deref()) {
         Some(avatar) if head.width > 20 => {
