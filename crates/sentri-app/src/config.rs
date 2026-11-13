@@ -73,6 +73,9 @@ pub struct SourceConfig {
     /// Search query, for kinds that support one.
     #[serde(default)]
     pub query: Option<String>,
+    /// Connector-specific target (GitHub: `repositories` or `issues`).
+    #[serde(default)]
+    pub target: Option<String>,
     /// Category assigned when the item does not reveal one.
     #[serde(default)]
     pub category: Option<Category>,

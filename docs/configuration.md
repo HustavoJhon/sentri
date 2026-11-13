@@ -60,6 +60,7 @@ postulado/inscrito +3, descartado −3.
 | `enabled` | `true` por defecto. |
 | `url` | URL del feed/endpoint (http/https). |
 | `query` | Consulta, para fuentes con búsqueda. |
+| `target` | Específico del conector. GitHub: `repositories` (por defecto) o `issues`. |
 | `category` | Categoría por defecto de los ítems. |
 | `tags` | Etiquetas añadidas a cada ítem. |
 | `max_items` | 1–500 (50 por defecto). |

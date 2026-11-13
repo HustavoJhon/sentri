@@ -3,12 +3,14 @@
 //! Interfaces (TUI, CLI, daemon, future API) call into this crate instead of
 //! talking to storage or connectors directly.
 
+pub mod collect;
 pub mod config;
 pub mod links;
 pub mod paths;
 pub mod ranking;
 pub mod service;
 
+pub use collect::CollectReport;
 pub use config::{Config, ConfigError, HttpConfig, SourceConfig};
 pub use links::{AddLinkError, AddOutcome, LinkOverrides};
 pub use ranking::{Ranked, rank};

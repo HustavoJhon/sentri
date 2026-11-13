@@ -73,8 +73,19 @@ max_items = 30
 name = "github-good-first-issues"
 kind = "github"
 enabled = false
+target = "issues"
 query = "label:\"good first issue\" language:rust state:open"
 category = "open_source"
 max_items = 30
 # Optional; raises the search rate limit from 10 to 30 requests/minute.
+token_env = "SENTRI_GITHUB_TOKEN"
+
+[[sources]]
+name = "github-rust-tools"
+kind = "github"
+enabled = false
+target = "repositories"
+query = "topic:cli language:rust stars:>200 pushed:>2026-01-01"
+category = "open_source"
+max_items = 20
 token_env = "SENTRI_GITHUB_TOKEN"
