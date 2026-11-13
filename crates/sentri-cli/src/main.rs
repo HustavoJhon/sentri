@@ -91,6 +91,9 @@ async fn run(app: &Sentri, command: Command) -> Result<()> {
             )
             .await?;
         }
+        Command::Calendar { days } => calendar(app, days).await?,
+        Command::Schedule { id } => schedule(app, OpportunityId(id)).await?,
+        Command::Sync => sync(app),
         Command::Fields => {
             for field in Field::ALL {
                 let kind = match field.kind() {
@@ -234,6 +237,75 @@ async fn edit(
             Some(o.field.get(&state.detected))
                 .filter(|v| !v.is_empty())
                 .unwrap_or_else(|| "—".into())
+        );
+    }
+    Ok(())
+}
+
+async fn schedule(app: &Sentri, id: OpportunityId) -> Result<()> {
+    for e in app.schedule(id).await? {
+        println!(
+            "  {} {:<14} {}  {}",
+            e.kind.icon(),
+            e.kind.label(),
+            e.starts_at
+                .with_timezone(&chrono::Local)
+                .format("%Y-%m-%d %H:%M"),
+            e.title
+        );
+    }
+    println!("Added to SENTRI's calendar. This does not register you for it.");
+    Ok(())
+}
+
+fn sync(app: &Sentri) {
+    match app.google_sync() {
+        sentri_app::GoogleSync::NotConnected => println!(
+            "Google Calendar is not connected: OAuth credentials are not configured yet.\n\
+             Nothing was synchronized. See docs/calendar.md."
+        ),
+    }
+}
+
+async fn calendar(app: &Sentri, days: i64) -> Result<()> {
+    let now = chrono::Utc::now();
+    let data = app
+        .calendar(now, now + chrono::Duration::days(days))
+        .await?;
+    let mut rows: Vec<(chrono::DateTime<chrono::Utc>, String)> = data
+        .entries
+        .iter()
+        .map(|e| {
+            (
+                e.starts_at,
+                format!("{} {:<14} {}", e.kind.icon(), e.kind.label(), e.title),
+            )
+        })
+        .collect();
+    for item in &data.suggestions {
+        for (kind, date) in sentri_core::calendar::schedulable_dates(&item.opportunity) {
+            if date >= now {
+                rows.push((
+                    date,
+                    format!(
+                        "  {:<14} {}  (not added · sentri schedule {})",
+                        kind.label(),
+                        item.opportunity.title,
+                        item.id
+                    ),
+                ));
+            }
+        }
+    }
+    rows.sort_by_key(|(d, _)| *d);
+    if rows.is_empty() {
+        println!("Nothing in the next {days} days.");
+    }
+    for (date, text) in rows {
+        println!(
+            "{}  {text}",
+            date.with_timezone(&chrono::Local)
+                .format("%a %Y-%m-%d %H:%M")
         );
     }
     Ok(())

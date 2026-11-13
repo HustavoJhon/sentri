@@ -46,6 +46,15 @@ pub enum Command {
     },
     /// List editable fields.
     Fields,
+    /// Upcoming calendar entries and dated opportunities.
+    Calendar {
+        #[arg(long, default_value_t = 30)]
+        days: i64,
+    },
+    /// Add an opportunity's dates to SENTRI's calendar (does not enroll you).
+    Schedule { id: i64 },
+    /// Synchronize with Google Calendar.
+    Sync,
     /// Search opportunities by keywords.
     Search {
         #[arg(required = true)]
