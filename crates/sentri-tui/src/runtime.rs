@@ -169,6 +169,19 @@ fn execute(
                 let _ = tx.send(Msg::Collected(text));
             });
         }
+        detail @ (Effect::LoadDetail(_)
+        | Effect::LoadImage(_)
+        | Effect::OpenEditor(_)
+        | Effect::SaveEdit { .. }) => execute_detail(app, detail, tx),
+        Effect::OpenUrl(url) => {
+            let _ = tx.send(open_url(&url));
+        }
+    }
+}
+
+/// Effects behind Details and the editor.
+fn execute_detail(app: Sentri, effect: Effect, tx: UnboundedSender<Msg>) {
+    match effect {
         Effect::LoadDetail(id) => {
             tokio::spawn(async move {
                 let msg = match (app.edit_state(id).await, app.history_for(id, 20).await) {
@@ -193,9 +206,30 @@ fn execute(
                 let _ = tx.send(Msg::Image(url, thumb));
             });
         }
-        Effect::OpenUrl(url) => {
-            let _ = tx.send(open_url(&url));
+        Effect::OpenEditor(id) => {
+            tokio::spawn(async move {
+                let msg = match app.edit_state(id).await {
+                    Ok(edit) => Msg::EditorReady(id, Box::new(edit)),
+                    Err(e) => Msg::Failed(format!("Cannot edit #{id}: {e}")),
+                };
+                let _ = tx.send(msg);
+            });
         }
+        Effect::SaveEdit {
+            id,
+            values,
+            reset,
+            annotations,
+        } => {
+            tokio::spawn(async move {
+                let msg = match app.save_edit(id, &values, &reset, Some(&annotations)).await {
+                    Ok(()) => Msg::Saved(id),
+                    Err(e) => Msg::Failed(format!("Could not save #{id}: {e}")),
+                };
+                let _ = tx.send(msg);
+            });
+        }
+        _ => {}
     }
 }
 

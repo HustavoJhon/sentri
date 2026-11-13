@@ -7,6 +7,7 @@
 mod charts;
 mod dashboard;
 mod detail;
+mod editor;
 mod feed;
 pub mod image;
 mod pages;
@@ -42,6 +43,9 @@ pub fn draw(frame: &mut Frame, state: &mut State, theme: &Theme) {
     draw_body(frame, body, state, theme);
     draw_status(frame, status, state, theme);
     popups::render(frame, state, theme);
+    if let crate::state::Mode::Editor(editor) = &state.mode {
+        editor::render(frame, editor, theme);
+    }
 }
 
 fn draw_header(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {

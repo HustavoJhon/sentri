@@ -26,6 +26,7 @@ const HELP: &[(&str, &str)] = &[
     ("p e c", "applied / enrolled / completed"),
     ("a", "add to calendar (phase 7)"),
     ("o", "open original link"),
+    ("E", "edit every field, notes and custom fields"),
     ("n", "add a link"),
     ("/", "search"),
     (": Ctrl-p", "command palette"),
@@ -43,7 +44,7 @@ const HELP: &[(&str, &str)] = &[
 pub fn render(frame: &mut Frame, state: &State, theme: &Theme) {
     let area = frame.area();
     match &state.mode {
-        Mode::Normal => {}
+        Mode::Normal | Mode::Editor(_) => {}
         Mode::Help => help(frame, area, theme),
         Mode::Palette { input, selected } => palette(frame, area, state, theme, input, *selected),
         Mode::Search(input) => prompt(

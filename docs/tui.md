@@ -32,7 +32,9 @@ sentri            # abre la TUI
 | `/` | buscar |
 | `:` `Ctrl-p` | paleta de comandos |
 | `S` | cambiar orden (relevancia → recientes → deadline) |
-| `F` `T` `U` `E` `C` | filtros: gratis, viaje, próximos, elegible, certificado |
+| `F` `T` `U` `P` `C` | filtros: gratis, viaje, próximos, abierto a tu país, certificado |
+| `E` | editar todos los campos, notas y campos personalizados |
+| `v` | densidad de cards: compact / comfortable / detailed |
 | `r` | recargar |
 | `R` | recopilar ahora de las fuentes habilitadas |
 | `?` | ayuda |

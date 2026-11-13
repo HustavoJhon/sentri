@@ -17,7 +17,10 @@ use sentri_core::{
     Action, FeedQuery, FeedView, Flag, InteractionState, OpportunityId, Profile, SortOrder,
 };
 
+pub mod editor;
+
 use crate::input::LineInput;
+use editor::{EditorOutcome, EditorState};
 
 /// A navigable page.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -229,6 +232,7 @@ pub enum Mode {
     Palette { input: LineInput, selected: usize },
     AddLink(LineInput),
     Help,
+    Editor(Box<EditorState>),
 }
 
 /// Severity of a status-bar message.
@@ -250,6 +254,13 @@ pub enum Effect {
     Collect,
     LoadDetail(OpportunityId),
     LoadImage(String),
+    OpenEditor(OpportunityId),
+    SaveEdit {
+        id: OpportunityId,
+        values: Vec<(sentri_core::Field, String)>,
+        reset: Vec<sentri_core::Field>,
+        annotations: sentri_core::Annotations,
+    },
 }
 
 /// Read-only context shown by the dashboard, sources and settings pages.
@@ -336,6 +347,8 @@ pub enum Msg {
     Collected(String),
     Detail(Box<DetailData>),
     Image(String, Option<Thumbnail>),
+    EditorReady(OpportunityId, Box<EditState>),
+    Saved(OpportunityId),
     Failed(String),
 }
 
@@ -588,6 +601,31 @@ impl State {
             Mode::Search(input) => self.on_search_key(input, key),
             Mode::AddLink(input) => self.on_add_key(input, key),
             Mode::Palette { input, selected } => self.on_palette_key(input, selected, key),
+            Mode::Editor(mut editor) => match editor.on_key(key) {
+                EditorOutcome::Continue => {
+                    self.mode = Mode::Editor(editor);
+                    Vec::new()
+                }
+                EditorOutcome::Close => {
+                    self.mode = Mode::Normal;
+                    Vec::new()
+                }
+                EditorOutcome::Save {
+                    id,
+                    values,
+                    reset,
+                    annotations,
+                } => {
+                    self.mode = Mode::Normal;
+                    self.info("Saving…", Level::Info);
+                    vec![Effect::SaveEdit {
+                        id,
+                        values,
+                        reset,
+                        annotations,
+                    }]
+                }
+            },
         }
     }
 
@@ -749,6 +787,11 @@ impl State {
                 "Google Calendar sync is not available yet (phase 7). Dated items are listed under Calendar.",
                 Level::Info,
             ),
+            KeyCode::Char('E') => {
+                if let Some(r) = self.selected_item() {
+                    return vec![Effect::OpenEditor(r.item.id)];
+                }
+            }
             KeyCode::Char('o') => {
                 if let Some(r) = self.selected_item() {
                     return vec![Effect::OpenUrl(r.item.opportunity.original_url.clone())];
@@ -762,7 +805,7 @@ impl State {
             KeyCode::Char('F') => return self.toggle_filter(QuickFilter::Free),
             KeyCode::Char('T') => return self.toggle_filter(QuickFilter::Travel),
             KeyCode::Char('U') => return self.toggle_filter(QuickFilter::Upcoming),
-            KeyCode::Char('E') => return self.toggle_filter(QuickFilter::Eligible),
+            KeyCode::Char('P') => return self.toggle_filter(QuickFilter::Eligible),
             KeyCode::Char('C') => return self.toggle_filter(QuickFilter::Certificate),
             KeyCode::Char('r') => return self.reload(),
             KeyCode::Char('R') => return self.run_command(Command::Collect),
@@ -903,6 +946,14 @@ impl State {
             }
             Msg::Overview(overview) => self.overview = *overview,
             Msg::Detail(detail) => self.detail = Some(*detail),
+            Msg::EditorReady(id, edit) => {
+                self.mode = Mode::Editor(Box::new(EditorState::new(id, *edit)));
+            }
+            Msg::Saved(id) => {
+                self.info(format!("Saved #{id}"), Level::Success);
+                self.detail_requested = None;
+                return self.reload();
+            }
             Msg::Image(url, thumb) => {
                 let slot = thumb.map_or(ImageSlot::Failed, ImageSlot::Ready);
                 self.images.insert(url, slot);
