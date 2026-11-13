@@ -63,6 +63,16 @@ max_redirects = 5
 [daemon]
 interval_minutes = 120
 
+# Appearance (also editable from Settings in the TUI).
+[ui]
+density = "comfortable"   # compact | comfortable | detailed
+images = "halfblock"      # halfblock | ascii | off
+colors = "auto"           # auto | truecolor | indexed
+ascii_icons = false
+show_sidebar = true
+show_details = true
+feed_width = 55           # % of the main area used by the feed
+
 # Sources. Each one is independent: if it fails, the others keep working.
 [[sources]]
 name = "freecodecamp-news"

@@ -58,6 +58,62 @@ impl Default for HttpConfig {
     }
 }
 
+/// How images are drawn in the terminal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ImageMode {
+    /// Colored half blocks (`▀`): works in any truecolor or 256-color terminal.
+    #[default]
+    Halfblock,
+    /// Grayscale ASCII ramp, for monochrome or very limited terminals.
+    Ascii,
+    Off,
+}
+
+/// Terminal color depth.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ColorMode {
+    /// Truecolor when `COLORTERM` says so, otherwise 256 colors.
+    #[default]
+    Auto,
+    Truecolor,
+    Indexed,
+}
+
+/// Appearance and interface preferences.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct UiConfig {
+    /// `compact`, `comfortable` or `detailed`.
+    pub density: String,
+    pub images: ImageMode,
+    pub colors: ColorMode,
+    /// Use ASCII instead of Unicode icons.
+    pub ascii_icons: bool,
+    pub show_sidebar: bool,
+    pub show_details: bool,
+    /// Percentage of the main area used by the feed when details are shown.
+    pub feed_width: u16,
+    /// Where downloaded images and avatars are cached.
+    pub cache_dir: Option<PathBuf>,
+}
+
+impl Default for UiConfig {
+    fn default() -> Self {
+        Self {
+            density: "comfortable".into(),
+            images: ImageMode::default(),
+            colors: ColorMode::default(),
+            ascii_icons: false,
+            show_sidebar: true,
+            show_details: true,
+            feed_width: 55,
+            cache_dir: None,
+        }
+    }
+}
+
 /// Background collection settings.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -127,6 +183,7 @@ pub struct Config {
     pub scoring: Weights,
     pub http: HttpConfig,
     pub daemon: DaemonConfig,
+    pub ui: UiConfig,
     pub sources: Vec<SourceConfig>,
 }
 
@@ -214,6 +271,16 @@ impl Config {
                     "source {name:?}: max_items must be between 1 and 500"
                 )));
             }
+        }
+        if !["compact", "comfortable", "detailed"].contains(&self.ui.density.as_str()) {
+            return Err(ConfigError::Invalid(
+                "ui.density must be compact, comfortable or detailed".into(),
+            ));
+        }
+        if !(30..=80).contains(&self.ui.feed_width) {
+            return Err(ConfigError::Invalid(
+                "ui.feed_width must be between 30 and 80".into(),
+            ));
         }
         if self.daemon.interval_minutes < 15 {
             return Err(ConfigError::Invalid(
