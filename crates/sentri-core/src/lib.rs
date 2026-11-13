@@ -1,0 +1,1 @@
+//! SENTRI core crate.
