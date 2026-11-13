@@ -8,6 +8,7 @@ mod charts;
 mod dashboard;
 mod detail;
 mod feed;
+pub mod image;
 mod pages;
 mod popups;
 mod widgets;
