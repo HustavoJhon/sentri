@@ -149,17 +149,16 @@ impl Theme {
 
     /// Brand-like color for each platform badge.
     pub const fn source_color(&self, kind: SourceKind) -> Color {
+        use SourceKind as K;
         match kind {
-            SourceKind::Reddit
-            | SourceKind::Devpost
-            | SourceKind::HackerNews
-            | SourceKind::Eventbrite => self.p.orange,
-            SourceKind::LinkedIn | SourceKind::MicrosoftLearn | SourceKind::Meetup => self.p.blue,
-            SourceKind::GitHub | SourceKind::X | SourceKind::Web => self.p.fg4,
-            SourceKind::Luma | SourceKind::Kaggle => self.p.aqua,
-            SourceKind::Gdg => self.p.green,
-            SourceKind::Rss | SourceKind::ICal => self.p.yellow,
-            SourceKind::Manual => self.p.purple,
+            K::Reddit | K::Devpost | K::HackerNews | K::Eventbrite => self.p.orange,
+            K::LinkedIn | K::MicrosoftLearn | K::Meetup | K::Facebook | K::Bluesky => self.p.blue,
+            K::GitHub | K::X | K::Threads | K::TikTok | K::Web => self.p.fg4,
+            K::Luma | K::Kaggle => self.p.aqua,
+            K::Gdg | K::GoogleNews => self.p.green,
+            K::Rss | K::ICal => self.p.yellow,
+            K::Manual | K::Instagram | K::Mastodon => self.p.purple,
+            K::YouTube => self.p.red,
         }
     }
 

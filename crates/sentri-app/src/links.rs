@@ -56,7 +56,8 @@ pub(crate) async fn build(
     overrides: &LinkOverrides,
     now: DateTime<Utc>,
 ) -> (Opportunity, Vec<String>) {
-    let source = SourceKind::from_host(url.host()).unwrap_or(SourceKind::Manual);
+    let source =
+        SourceKind::from_url_parts(url.host(), url.url().path()).unwrap_or(SourceKind::Manual);
     let mut o = Opportunity::new(source, MANUAL_SOURCE, original, url, url.as_str(), now);
     let mut warnings = Vec::new();
 

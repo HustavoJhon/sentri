@@ -5,6 +5,17 @@ use serde::{Deserialize, Serialize};
 
 use crate::ParseError;
 
+/// Well-known Mastodon instances. Others are detected from the
+/// `/@user/<id>` path shape by [`SourceKind::from_url_parts`].
+const MASTODON_HOSTS: &[&str] = &[
+    "mastodon.social",
+    "fosstodon.org",
+    "hachyderm.io",
+    "mas.to",
+    "infosec.exchange",
+    "mstdn.social",
+];
+
 /// Platform or mechanism an opportunity was obtained from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -29,11 +40,22 @@ pub enum SourceKind {
     Kaggle,
     #[serde(rename = "mslearn")]
     MicrosoftLearn,
+    Instagram,
+    Threads,
+    Facebook,
+    #[serde(rename = "tiktok")]
+    TikTok,
+    #[serde(rename = "youtube")]
+    YouTube,
+    Bluesky,
+    Mastodon,
+    #[serde(rename = "googlenews")]
+    GoogleNews,
     Web,
 }
 
 impl SourceKind {
-    pub const ALL: [Self; 16] = [
+    pub const ALL: [Self; 24] = [
         Self::Manual,
         Self::Rss,
         Self::ICal,
@@ -49,6 +71,14 @@ impl SourceKind {
         Self::Eventbrite,
         Self::Kaggle,
         Self::MicrosoftLearn,
+        Self::Instagram,
+        Self::Threads,
+        Self::Facebook,
+        Self::TikTok,
+        Self::YouTube,
+        Self::Bluesky,
+        Self::Mastodon,
+        Self::GoogleNews,
         Self::Web,
     ];
 
@@ -69,6 +99,14 @@ impl SourceKind {
             Self::Eventbrite => "eventbrite",
             Self::Kaggle => "kaggle",
             Self::MicrosoftLearn => "mslearn",
+            Self::Instagram => "instagram",
+            Self::Threads => "threads",
+            Self::Facebook => "facebook",
+            Self::TikTok => "tiktok",
+            Self::YouTube => "youtube",
+            Self::Bluesky => "bluesky",
+            Self::Mastodon => "mastodon",
+            Self::GoogleNews => "googlenews",
             Self::Web => "web",
         }
     }
@@ -90,6 +128,14 @@ impl SourceKind {
             Self::Eventbrite => "Eventbrite",
             Self::Kaggle => "Kaggle",
             Self::MicrosoftLearn => "Microsoft Learn",
+            Self::Instagram => "Instagram",
+            Self::Threads => "Threads",
+            Self::Facebook => "Facebook",
+            Self::TikTok => "TikTok",
+            Self::YouTube => "YouTube",
+            Self::Bluesky => "Bluesky",
+            Self::Mastodon => "Mastodon",
+            Self::GoogleNews => "Google News",
             Self::Web => "Web",
         }
     }
@@ -112,6 +158,14 @@ impl SourceKind {
             Self::Eventbrite => "EB",
             Self::Kaggle => "KG",
             Self::MicrosoftLearn => "MS",
+            Self::Instagram => "IG",
+            Self::Threads => "TH",
+            Self::Facebook => "FB",
+            Self::TikTok => "TT",
+            Self::YouTube => "YT",
+            Self::Bluesky => "BS",
+            Self::Mastodon => "MA",
+            Self::GoogleNews => "GN",
             Self::Web => "WW",
         }
     }
@@ -144,10 +198,55 @@ impl SourceKind {
             Self::Kaggle
         } else if matches("learn.microsoft.com") {
             Self::MicrosoftLearn
+        } else if matches("instagram.com") || matches("instagr.am") {
+            Self::Instagram
+        } else if matches("threads.net") || matches("threads.com") {
+            Self::Threads
+        } else if matches("facebook.com") || matches("fb.com") || matches("fb.me") {
+            Self::Facebook
+        } else if matches("tiktok.com") {
+            Self::TikTok
+        } else if matches("youtube.com") || matches("youtu.be") {
+            Self::YouTube
+        } else if matches("bsky.app") || matches("bsky.social") {
+            Self::Bluesky
+        } else if MASTODON_HOSTS.iter().any(|h| matches(h)) {
+            Self::Mastodon
+        } else if matches("news.google.com") {
+            Self::GoogleNews
         } else {
             return None;
         };
         Some(kind)
+    }
+}
+
+impl SourceKind {
+    /// Detection from host and path; recognizes Mastodon posts on any
+    /// instance (`/@user/123…`).
+    pub fn from_url_parts(host: &str, path: &str) -> Option<Self> {
+        Self::from_host(host).or_else(|| {
+            let mut parts = path.trim_matches('/').split('/');
+            let user = parts.next()?;
+            let id = parts.next()?;
+            (user.starts_with('@') && !id.is_empty() && id.chars().all(|c| c.is_ascii_digit()))
+                .then_some(Self::Mastodon)
+        })
+    }
+
+    /// Social networks whose posts can only be added manually (no permitted
+    /// automatic access for personal use, see docs/sources.md).
+    pub const fn is_manual_only(self) -> bool {
+        matches!(
+            self,
+            Self::Reddit
+                | Self::LinkedIn
+                | Self::X
+                | Self::Instagram
+                | Self::Threads
+                | Self::Facebook
+                | Self::TikTok
+        )
     }
 }
 
@@ -188,6 +287,19 @@ mod tests {
             Some(SourceKind::LinkedIn)
         );
         assert_eq!(SourceKind::from_host("lu.ma"), Some(SourceKind::Luma));
+        assert_eq!(
+            SourceKind::from_host("www.instagram.com"),
+            Some(SourceKind::Instagram)
+        );
+        assert_eq!(SourceKind::from_host("youtu.be"), Some(SourceKind::YouTube));
+        assert_eq!(
+            SourceKind::from_url_parts("social.example", "/@ana/1129384"),
+            Some(SourceKind::Mastodon)
+        );
+        assert_eq!(
+            SourceKind::from_url_parts("blog.example", "/@ana/post"),
+            None
+        );
         assert_eq!(SourceKind::from_host("notgithub.com"), None);
     }
 
