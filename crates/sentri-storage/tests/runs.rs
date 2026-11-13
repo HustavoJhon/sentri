@@ -47,3 +47,14 @@ async fn computes_dashboard_stats() {
     assert_eq!(stats.saved, 1);
     assert_eq!(stats.upcoming_deadlines, 1);
 }
+
+#[tokio::test]
+async fn recovers_interrupted_runs() {
+    let store = Store::in_memory().await.unwrap();
+    store.start_run("rss", now()).await.unwrap();
+    assert_eq!(store.fail_interrupted_runs(now()).await.unwrap(), 1);
+    let run = &store.latest_runs().await.unwrap()[0];
+    assert_eq!(run.status, RunStatus::Failed);
+    assert_eq!(run.error.as_deref(), Some("interrupted"));
+    assert_eq!(store.fail_interrupted_runs(now()).await.unwrap(), 0);
+}

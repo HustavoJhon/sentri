@@ -103,6 +103,19 @@ impl Store {
         Ok(())
     }
 
+    /// Marks runs left as `running` by a crash or kill as failed. Returns how
+    /// many were recovered.
+    pub async fn fail_interrupted_runs(&self, at: DateTime<Utc>) -> Result<u64, StorageError> {
+        let result = sqlx::query(
+            "UPDATE collection_runs SET status = 'failed', finished_at = ?, error = 'interrupted'
+             WHERE status = 'running'",
+        )
+        .bind(to_db(at))
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected())
+    }
+
     /// Latest run of every source.
     pub async fn latest_runs(&self) -> Result<Vec<CollectionRun>, StorageError> {
         let rows = sqlx::query(
