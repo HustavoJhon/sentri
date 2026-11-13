@@ -4,6 +4,7 @@
 //! works over SSH and in Android terminals without Nerd Fonts or graphics
 //! protocols.
 
+pub mod input;
 pub mod theme;
 
 pub use theme::{Palette, Theme};
