@@ -88,6 +88,43 @@ impl Section {
     }
 }
 
+/// How much each card shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Density {
+    Compact,
+    #[default]
+    Comfortable,
+    Detailed,
+}
+
+impl Density {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Compact => "compact",
+            Self::Comfortable => "comfortable",
+            Self::Detailed => "detailed",
+        }
+    }
+
+    #[must_use]
+    pub const fn next(self) -> Self {
+        match self {
+            Self::Compact => Self::Comfortable,
+            Self::Comfortable => Self::Detailed,
+            Self::Detailed => Self::Compact,
+        }
+    }
+
+    pub fn from_name(s: &str) -> Option<Self> {
+        match s {
+            "compact" => Some(Self::Compact),
+            "comfortable" => Some(Self::Comfortable),
+            "detailed" => Some(Self::Detailed),
+            _ => None,
+        }
+    }
+}
+
 /// Which pane receives navigation keys.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Focus {
@@ -259,6 +296,7 @@ pub struct State {
     pub detail_open: bool,
     pub detail_scroll: u16,
     pub hit: HitAreas,
+    pub density: Density,
     pub overview: Overview,
     pub quit: bool,
 }
@@ -277,6 +315,7 @@ impl Default for State {
             detail_open: false,
             detail_scroll: 0,
             hit: HitAreas::default(),
+            density: Density::default(),
             overview: Overview::default(),
             quit: false,
         }
@@ -635,6 +674,10 @@ impl State {
                 }
             }
             KeyCode::Char('S') => return self.cycle_sort(),
+            KeyCode::Char('v') => {
+                self.density = self.density.next();
+                self.info(format!("Density: {}", self.density.label()), Level::Info);
+            }
             KeyCode::Char('F') => return self.toggle_filter(QuickFilter::Free),
             KeyCode::Char('T') => return self.toggle_filter(QuickFilter::Travel),
             KeyCode::Char('U') => return self.toggle_filter(QuickFilter::Upcoming),

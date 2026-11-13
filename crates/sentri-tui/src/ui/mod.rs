@@ -211,7 +211,7 @@ mod tests {
         Relevance, SourceKind,
     };
 
-    use crate::state::{Mode, Msg};
+    use crate::state::{Density, Mode, Msg};
 
     fn sample() -> Ranked {
         let url = CanonicalUrl::parse("https://devpost.com/hack").unwrap();
@@ -297,6 +297,19 @@ mod tests {
     }
 
     #[test]
+    fn densities_change_card_height_and_mark_new_items() {
+        let mut state = State::default();
+        state.on_msg(Msg::Loaded(vec![sample()]));
+        for density in [Density::Compact, Density::Comfortable, Density::Detailed] {
+            state.density = density;
+            let screen = render(140, 30, &mut state);
+            assert!(screen.contains("NEW"), "{density:?}");
+            assert!(screen.contains(density.label()));
+            assert_eq!(state.hit.item_height, feed::item_height(density));
+        }
+    }
+
+    #[test]
     fn dashboard_and_popups_render() {
         let mut state = State {
             section: 0,
@@ -327,6 +340,6 @@ mod tests {
         render(140, 40, &mut state);
         assert_eq!(state.hit.sidebar.width, SIDEBAR_WIDTH);
         assert!(state.hit.list.width > 0);
-        assert_eq!(state.hit.item_height, feed::ITEM_HEIGHT);
+        assert_eq!(state.hit.item_height, feed::item_height(state.density));
     }
 }

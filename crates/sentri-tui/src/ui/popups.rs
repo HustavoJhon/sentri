@@ -30,6 +30,7 @@ const HELP: &[(&str, &str)] = &[
     ("/", "search"),
     (": Ctrl-p", "command palette"),
     ("S", "cycle sort"),
+    ("v", "card density: compact / comfortable / detailed"),
     (
         "F T U E C",
         "free / travel / upcoming / eligible / certificate",
