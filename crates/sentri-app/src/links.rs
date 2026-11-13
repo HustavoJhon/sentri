@@ -104,6 +104,7 @@ async fn fetch_metadata(
 
 fn apply_metadata(o: &mut Opportunity, meta: PageMetadata) {
     let s = meta.structured;
+    o.author = meta.author;
     if let Some(title) = meta.title {
         o.title = title;
     }

@@ -4,7 +4,7 @@
 
 use chrono::{DateTime, NaiveDate, Utc};
 use scraper::{Html, Selector};
-use sentri_core::Modality;
+use sentri_core::{Author, Modality};
 use serde_json::Value;
 use url::Url;
 
@@ -46,6 +46,8 @@ pub struct PageMetadata {
     pub site_name: Option<String>,
     pub published_at: Option<DateTime<Utc>>,
     pub keywords: Vec<String>,
+    /// Author as declared by the page (meta tags or JSON-LD).
+    pub author: Author,
     pub structured: Structured,
 }
 
@@ -95,8 +97,56 @@ pub fn extract(html: &str, base: &Url) -> PageMetadata {
                     .collect()
             })
             .unwrap_or_default(),
+        author: author(
+            &doc,
+            meta(&["author", "article:author"]),
+            meta(&["twitter:creator"]),
+        ),
         structured,
     }
+}
+
+/// Builds the author from what the page declares. `article:author` is often a
+/// profile URL rather than a name, so URLs go to `profile_url`.
+fn author(doc: &Html, declared: Option<String>, twitter: Option<String>) -> Author {
+    let mut author = json_ld_author(doc).unwrap_or_default();
+    if let Some(value) = declared {
+        if value.starts_with("https://") || value.starts_with("http://") {
+            author.profile_url.get_or_insert(value);
+        } else {
+            author.name.get_or_insert(value);
+        }
+    }
+    if let Some(handle) = twitter.filter(|h| h.starts_with('@')) {
+        author.handle.get_or_insert(handle);
+    }
+    author
+}
+
+fn json_ld_author(doc: &Html) -> Option<Author> {
+    let selector = Selector::parse(r#"script[type="application/ld+json"]"#).ok()?;
+    doc.select(&selector)
+        .take(MAX_JSON_LD_BLOCKS)
+        .filter_map(|e| serde_json::from_str::<Value>(&e.text().collect::<String>()).ok())
+        .flat_map(flatten)
+        .find_map(|node| {
+            let author = first(node.get("author")?);
+            let name = author
+                .as_str()
+                .or_else(|| str_at(author, "name"))
+                .map(str::to_owned);
+            let url = str_at(author, "url").map(str::to_owned);
+            let image = author
+                .get("image")
+                .and_then(|i| i.as_str().or_else(|| str_at(i, "url")))
+                .map(str::to_owned);
+            (name.is_some() || url.is_some()).then(|| Author {
+                name,
+                handle: str_at(author, "alternateName").map(str::to_owned),
+                profile_url: url,
+                avatar_url: image,
+            })
+        })
 }
 
 /// Visible text of an HTML fragment (tags removed, entities decoded).
@@ -309,6 +359,23 @@ mod tests {
             "Hola mundo & más"
         );
         assert_eq!(html_to_text("plain"), "plain");
+    }
+
+    #[test]
+    fn reads_declared_authors_only() {
+        let html = r#"<meta name="author" content="Ana Quispe">
+            <meta name="twitter:creator" content="@anaq">
+            <script type="application/ld+json">{"@type":"Article","author":{"@type":"Person",
+              "name":"Ana Q.","url":"https://blog.example/ana","image":"https://blog.example/ana.png"}}</script>"#;
+        let a = extract(html, &base()).author;
+        assert_eq!(a.name.as_deref(), Some("Ana Q."), "JSON-LD wins");
+        assert_eq!(a.handle.as_deref(), Some("@anaq"));
+        assert_eq!(a.profile_url.as_deref(), Some("https://blog.example/ana"));
+        assert_eq!(
+            a.avatar_url.as_deref(),
+            Some("https://blog.example/ana.png")
+        );
+        assert!(extract("<title>x</title>", &base()).author.is_empty());
     }
 
     #[test]
