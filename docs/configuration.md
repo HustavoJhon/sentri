@@ -1,0 +1,66 @@
+# Configuración
+
+Fichero: `~/.config/sentri/config.toml` (o la ruta en `SENTRI_CONFIG`).
+Si no existe, SENTRI usa la plantilla por defecto
+([`crates/sentri-app/config/default.toml`](../crates/sentri-app/config/default.toml)).
+
+```sh
+sentri config init    # escribe la plantilla comentada (no sobrescribe)
+sentri config path    # muestra la ruta en uso
+sentri config check   # valida el fichero
+```
+
+Las claves desconocidas son un error (para detectar erratas).
+
+## `[profile]`
+
+| Clave | Descripción |
+|---|---|
+| `home_city` | Ciudad donde asistir en persona es fácil (Cusco). |
+| `country` | País de participación (elegibilidad). |
+| `location_aliases` | Otros nombres que cuentan como "tu país/región". |
+| `preferred_modalities` | `online`, `in_person`, `hybrid`. |
+| `avoid_keywords` | Términos que restan relevancia (nunca ocultan). |
+
+### `[[profile.interests]]`
+
+| Clave | Descripción |
+|---|---|
+| `name` | Nombre visible del interés. |
+| `keywords` | Palabras o frases completas buscadas en título, resumen, etiquetas y ubicación. |
+| `categories` | Categorías relevantes: `event`, `conference`, `workshop`, `meetup`, `course`, `training`, `hackathon`, `competition`, `scholarship`, `exchange`, `fellowship`, `volunteering`, `call`, `job`, `internship`, `open_source`, `other`. |
+| `priority` | `low` (×1), `medium` (×2), `high` (×3). |
+
+Añadir un interés nuevo no requiere tocar código: basta un bloque más.
+
+## `[scoring]`
+
+Pesos de cada regla (valores por defecto entre paréntesis):
+`interest_keyword` (6, por coincidencia, máx. 3, × prioridad),
+`interest_category` (4 × prioridad), `home_city` (15), `home_country` (8),
+`preferred_modality` (5), `eligible` (8), `not_eligible` (-30), `free` (4),
+`certificate` (4), `prizes` (5), `travel` (12), `deadline_soon` (10),
+`deadline_passed` (-40), `avoid_keyword` (-20), `affinity_unit` (3),
+`affinity_cap` (24), `deadline_soon_days` (14).
+
+La afinidad aprendida suma señales de tus interacciones por categoría,
+etiqueta y "ofrece viaje": like +2, guardado +3, interesante +1,
+postulado/inscrito +3, descartado −3.
+
+## `[http]`
+
+`timeout_secs`, `max_body_bytes`, `max_redirects`: límites de toda petición saliente.
+
+## `[[sources]]`
+
+| Clave | Descripción |
+|---|---|
+| `name` | Identificador único (`a-z0-9-_.`). |
+| `kind` | `rss`, `github`, … (ver `docs/sources.md`). |
+| `enabled` | `true` por defecto. |
+| `url` | URL del feed/endpoint (http/https). |
+| `query` | Consulta, para fuentes con búsqueda. |
+| `category` | Categoría por defecto de los ítems. |
+| `tags` | Etiquetas añadidas a cada ítem. |
+| `max_items` | 1–500 (50 por defecto). |
+| `token_env` | **Nombre** de la variable de entorno con el token. Nunca el token. |

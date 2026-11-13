@@ -1,0 +1,80 @@
+# SENTRI configuration.
+#
+# Everything here can be edited: the profile, interests, scoring weights and
+# sources. Secrets (API tokens, OAuth credentials) never go in this file; refer
+# to them through environment variables (`token_env`).
+
+[storage]
+# database = "/custom/path/sentri.db"   # default: ~/.local/share/sentri/sentri.db
+
+[profile]
+home_city = "Cusco"
+country = "Peru"
+location_aliases = ["Perú", "Cusco, Peru", "Lima", "Latin America", "LATAM", "Latinoamérica"]
+preferred_modalities = ["online", "hybrid"]
+avoid_keywords = ["senior", "10+ years", "unpaid"]
+
+[[profile.interests]]
+name = "Artificial intelligence"
+keywords = ["ai", "ia", "artificial intelligence", "inteligencia artificial", "machine learning", "llm", "deep learning"]
+categories = ["hackathon", "fellowship"]
+priority = "high"
+
+[[profile.interests]]
+name = "Software development"
+keywords = ["programming", "programación", "software", "developer", "backend", "rust", "go", "c#", "architecture"]
+categories = ["course", "job", "internship"]
+priority = "high"
+
+[[profile.interests]]
+name = "Linux and free software"
+keywords = ["linux", "open source", "software libre", "foss", "sysadmin", "devops", "automation", "automatización"]
+categories = ["open_source"]
+priority = "high"
+
+[[profile.interests]]
+name = "International opportunities"
+keywords = ["scholarship", "beca", "exchange", "intercambio", "travel", "fully funded", "flights", "accommodation"]
+categories = ["scholarship", "exchange", "fellowship"]
+priority = "medium"
+
+[[profile.interests]]
+name = "Entrepreneurship"
+keywords = ["startup", "emprendimiento", "founder", "incubator", "accelerator"]
+categories = ["competition", "call"]
+priority = "medium"
+
+[[profile.interests]]
+name = "Developer communities"
+keywords = ["gdg", "meetup", "community", "comunidad", "devfest", "conference"]
+categories = ["meetup", "conference", "workshop"]
+priority = "medium"
+
+# Rule weights (see docs/configuration.md). Omitted values use defaults.
+[scoring]
+# travel = 12
+# home_city = 15
+
+[http]
+timeout_secs = 20
+max_body_bytes = 3_000_000
+max_redirects = 5
+
+# Sources. Each one is independent: if it fails, the others keep working.
+[[sources]]
+name = "freecodecamp-news"
+kind = "rss"
+url = "https://www.freecodecamp.org/news/rss/"
+category = "course"
+tags = ["programming"]
+max_items = 30
+
+[[sources]]
+name = "github-good-first-issues"
+kind = "github"
+enabled = false
+query = "label:\"good first issue\" language:rust state:open"
+category = "open_source"
+max_items = 30
+# Optional; raises the search rate limit from 10 to 30 requests/minute.
+token_env = "SENTRI_GITHUB_TOKEN"
