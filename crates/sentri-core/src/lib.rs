@@ -5,10 +5,12 @@
 
 pub mod category;
 pub mod error;
+pub mod link;
 pub mod modality;
 pub mod source;
 
 pub use category::Category;
 pub use error::ParseError;
+pub use link::{CanonicalUrl, LinkError};
 pub use modality::Modality;
 pub use source::SourceKind;
