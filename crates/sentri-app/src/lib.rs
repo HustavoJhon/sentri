@@ -5,5 +5,7 @@
 
 pub mod config;
 pub mod paths;
+pub mod ranking;
 
 pub use config::{Config, ConfigError, HttpConfig, SourceConfig};
+pub use ranking::{Ranked, rank};
