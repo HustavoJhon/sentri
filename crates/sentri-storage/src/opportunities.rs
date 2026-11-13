@@ -39,15 +39,16 @@ impl Store {
         let mut tx = self.pool.begin().await?;
         let now = to_db(Utc::now());
         let existing = find_duplicate(&mut tx, o).await?;
-        let outcome = match existing {
-            Some(id) => {
-                merge(&mut tx, id, o, now).await?;
-                Upsert::Merged(OpportunityId(id))
-            }
-            None => Upsert::Inserted(OpportunityId(insert(&mut tx, o, now).await?)),
+        let outcome = if let Some(id) = existing {
+            crate::layers::merge_sighting(&mut tx, id, o).await?;
+            Upsert::Merged(OpportunityId(id))
+        } else {
+            let id = insert(&mut tx, o, now).await?;
+            add_tags(&mut tx, id, &o.tags).await?;
+            crate::layers::save_detected(&mut tx, id, o).await?;
+            Upsert::Inserted(OpportunityId(id))
         };
         let id = outcome.id().0;
-        add_tags(&mut tx, id, &o.tags).await?;
         sqlx::query(
             "INSERT INTO opportunity_sightings
                  (opportunity_id, source_name, external_id, original_url, first_seen_at, last_seen_at)
@@ -67,63 +68,22 @@ impl Store {
         Ok(outcome)
     }
 
-    /// Replaces the editable fields of an opportunity (manual corrections).
-    /// URL, fingerprint, source and discovery date are kept.
+    /// Replaces the detected data of an opportunity (e.g. after re-reading
+    /// its page). Manual overrides still apply on top. URL identity,
+    /// fingerprint and discovery date are kept.
     pub async fn update_opportunity(
         &self,
         id: OpportunityId,
         o: &Opportunity,
     ) -> Result<(), StorageError> {
         let mut tx = self.pool.begin().await?;
-        let (cost_kind, cost_detail) = cost_to_db(&o.cost);
-        let result = sqlx::query(
-            "UPDATE opportunities SET
-                title = ?, summary = ?, image_url = ?, category = ?, location = ?, country = ?,
-                modality = ?, published_at = ?, starts_at = ?, ends_at = ?, deadline = ?,
-                cost_kind = ?, cost_detail = ?, requirements = ?, eligibility = ?,
-                certificate = ?, prizes = ?, benefits = ?, travel_covered = ?,
-                accommodation_covered = ?, author_name = ?, author_handle = ?, author_url = ?,
-                author_avatar = ?, content_kind = ?, stance = ?, updated_at = ?
-             WHERE id = ?",
-        )
-        .bind(&o.title)
-        .bind(&o.summary)
-        .bind(&o.image_url)
-        .bind(o.category.as_str())
-        .bind(&o.location)
-        .bind(&o.country)
-        .bind(o.modality.as_str())
-        .bind(opt_to_db(o.dates.published_at))
-        .bind(opt_to_db(o.dates.starts_at))
-        .bind(opt_to_db(o.dates.ends_at))
-        .bind(opt_to_db(o.dates.deadline))
-        .bind(cost_kind)
-        .bind(cost_detail)
-        .bind(&o.requirements)
-        .bind(o.eligibility.as_str())
-        .bind(o.perks.certificate)
-        .bind(&o.perks.prizes)
-        .bind(&o.perks.benefits)
-        .bind(o.perks.travel_covered)
-        .bind(o.perks.accommodation_covered)
-        .bind(&o.author.name)
-        .bind(&o.author.handle)
-        .bind(&o.author.profile_url)
-        .bind(&o.author.avatar_url)
-        .bind(o.content.as_str())
-        .bind(o.stance.map(sentri_core::Stance::as_str))
-        .bind(to_db(Utc::now()))
-        .bind(id.0)
-        .execute(&mut *tx)
-        .await?;
-        if result.rows_affected() == 0 {
-            return Err(StorageError::NotFound(id.0));
-        }
-        sqlx::query("DELETE FROM opportunity_tags WHERE opportunity_id = ?")
-            .bind(id.0)
-            .execute(&mut *tx)
-            .await?;
-        add_tags(&mut tx, id.0, &o.tags).await?;
+        let current = crate::layers::load_detected(&mut tx, id.0).await?;
+        let mut detected = o.clone();
+        detected.fingerprint = current.fingerprint;
+        detected.canonical_url = current.canonical_url;
+        detected.discovered_at = current.discovered_at;
+        crate::layers::save_detected(&mut tx, id.0, &detected).await?;
+        crate::layers::recompute(&mut tx, id.0).await?;
         tx.commit().await?;
         Ok(())
     }
@@ -261,44 +221,25 @@ async fn insert(
     Ok(id)
 }
 
-/// Fills fields that are still unknown in the stored copy. Known values are
-/// never overwritten by a later sighting, so user corrections survive.
-async fn merge(
+/// Writes effective values (detected + overrides) into the row and tags.
+pub(crate) async fn write_effective(
     conn: &mut SqliteConnection,
     id: i64,
     o: &Opportunity,
-    now: i64,
 ) -> Result<(), StorageError> {
     let (cost_kind, cost_detail) = cost_to_db(&o.cost);
-    sqlx::query(
+    let result = sqlx::query(
         "UPDATE opportunities SET
-            summary = COALESCE(summary, ?),
-            image_url = COALESCE(image_url, ?),
-            category = CASE WHEN category = 'other' THEN ? ELSE category END,
-            location = COALESCE(location, ?),
-            country = COALESCE(country, ?),
-            modality = CASE WHEN modality = 'unknown' THEN ? ELSE modality END,
-            published_at = COALESCE(published_at, ?),
-            starts_at = COALESCE(starts_at, ?),
-            ends_at = COALESCE(ends_at, ?),
-            deadline = COALESCE(deadline, ?),
-            cost_detail = CASE WHEN cost_kind = 'unknown' THEN ? ELSE cost_detail END,
-            cost_kind = CASE WHEN cost_kind = 'unknown' THEN ? ELSE cost_kind END,
-            requirements = COALESCE(requirements, ?),
-            eligibility = CASE WHEN eligibility = 'unknown' THEN ? ELSE eligibility END,
-            certificate = COALESCE(certificate, ?),
-            prizes = COALESCE(prizes, ?),
-            benefits = COALESCE(benefits, ?),
-            travel_covered = COALESCE(travel_covered, ?),
-            accommodation_covered = COALESCE(accommodation_covered, ?),
-            author_name = COALESCE(author_name, ?),
-            author_handle = COALESCE(author_handle, ?),
-            author_url = COALESCE(author_url, ?),
-            author_avatar = COALESCE(author_avatar, ?),
-            stance = COALESCE(stance, ?),
+            title = ?, summary = ?, image_url = ?, category = ?, location = ?, country = ?,
+            modality = ?, published_at = ?, starts_at = ?, ends_at = ?, deadline = ?,
+            cost_kind = ?, cost_detail = ?, requirements = ?, eligibility = ?,
+            certificate = ?, prizes = ?, benefits = ?, travel_covered = ?,
+            accommodation_covered = ?, author_name = ?, author_handle = ?, author_url = ?,
+            author_avatar = ?, content_kind = ?, stance = ?, source_kind = ?, original_url = ?,
             updated_at = ?
          WHERE id = ?",
     )
+    .bind(&o.title)
     .bind(&o.summary)
     .bind(&o.image_url)
     .bind(o.category.as_str())
@@ -309,8 +250,8 @@ async fn merge(
     .bind(opt_to_db(o.dates.starts_at))
     .bind(opt_to_db(o.dates.ends_at))
     .bind(opt_to_db(o.dates.deadline))
-    .bind(cost_detail)
     .bind(cost_kind)
+    .bind(cost_detail)
     .bind(&o.requirements)
     .bind(o.eligibility.as_str())
     .bind(o.perks.certificate)
@@ -322,12 +263,22 @@ async fn merge(
     .bind(&o.author.handle)
     .bind(&o.author.profile_url)
     .bind(&o.author.avatar_url)
+    .bind(o.content.as_str())
     .bind(o.stance.map(sentri_core::Stance::as_str))
-    .bind(now)
+    .bind(o.source.as_str())
+    .bind(&o.original_url)
+    .bind(to_db(Utc::now()))
     .bind(id)
     .execute(&mut *conn)
     .await?;
-    Ok(())
+    if result.rows_affected() == 0 {
+        return Err(StorageError::NotFound(id));
+    }
+    sqlx::query("DELETE FROM opportunity_tags WHERE opportunity_id = ?")
+        .bind(id)
+        .execute(&mut *conn)
+        .await?;
+    add_tags(conn, id, &o.tags).await
 }
 
 async fn add_tags(

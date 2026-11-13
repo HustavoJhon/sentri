@@ -18,7 +18,7 @@ pub mod source;
 pub mod text;
 
 pub use category::Category;
-pub use edit::{EditError, Field, FieldKind};
+pub use edit::{Annotations, EditError, Field, FieldKind};
 pub use error::ParseError;
 pub use interaction::{Action, Flag, InteractionState};
 pub use link::{CanonicalUrl, LinkError};

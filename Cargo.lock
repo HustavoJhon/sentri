@@ -2773,6 +2773,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "sentri-core",
+ "serde_json",
  "sqlx",
  "tempfile",
  "thiserror 2.0.21",

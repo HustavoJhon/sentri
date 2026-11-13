@@ -12,6 +12,8 @@ pub enum StorageError {
     Io(#[from] std::io::Error),
     #[error("corrupt value in column {column}: {value:?}")]
     Corrupt { column: &'static str, value: String },
+    #[error("invalid value: {0}")]
+    Invalid(String),
     #[error("opportunity {0} not found")]
     NotFound(i64),
     #[error("backup target already exists: {}", .0.display())]

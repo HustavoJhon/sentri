@@ -15,6 +15,23 @@ pub enum Priority {
 }
 
 impl Priority {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Low => "low",
+            Self::Medium => "medium",
+            Self::High => "high",
+        }
+    }
+
+    pub fn from_db(s: &str) -> Option<Self> {
+        match s {
+            "low" => Some(Self::Low),
+            "medium" => Some(Self::Medium),
+            "high" => Some(Self::High),
+            _ => None,
+        }
+    }
+
     pub const fn multiplier(self) -> i32 {
         match self {
             Self::Low => 1,

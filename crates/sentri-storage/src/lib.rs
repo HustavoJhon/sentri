@@ -6,6 +6,7 @@
 
 mod error;
 mod interactions;
+mod layers;
 mod opportunities;
 mod private_fs;
 mod rows;
@@ -21,6 +22,7 @@ use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, S
 
 pub use error::StorageError;
 pub use interactions::HistoryEntry;
+pub use layers::{EditState, Override};
 pub use opportunities::Upsert;
 pub use runs::{CollectionRun, RunStatus, Stats};
 

@@ -383,6 +383,14 @@ impl Field {
     }
 }
 
+/// Personal data attached to an opportunity (never detected from sources).
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct Annotations {
+    pub notes: Option<String>,
+    pub priority: Option<crate::Priority>,
+    pub custom: Vec<(String, String)>,
+}
+
 /// Applies stored overrides on top of detected data. Invalid stored values
 /// are skipped (and reported) rather than failing the whole item.
 pub fn apply_overrides<'a>(
