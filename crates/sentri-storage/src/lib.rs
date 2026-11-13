@@ -5,6 +5,7 @@
 //! binary and applied by [`Store::open`].
 
 mod error;
+mod insights;
 mod interactions;
 mod layers;
 mod opportunities;
@@ -21,6 +22,7 @@ use sqlx::SqlitePool;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
 
 pub use error::StorageError;
+pub use insights::{Daily, DayActivity, DayEntry, Insights};
 pub use interactions::HistoryEntry;
 pub use layers::{EditState, Override};
 pub use opportunities::Upsert;
