@@ -99,6 +99,32 @@ pub fn extract(html: &str, base: &Url) -> PageMetadata {
     }
 }
 
+/// Visible text of an HTML fragment (tags removed, entities decoded).
+/// Scripts and styles are dropped; whitespace is normalized later by
+/// `sentri_core::text::clean`.
+pub fn html_to_text(html: &str) -> String {
+    if !html.contains('<') && !html.contains('&') {
+        return html.to_owned();
+    }
+    let fragment = Html::parse_fragment(html);
+    let mut out = String::with_capacity(html.len());
+    for node in fragment.root_element().descendants() {
+        let Some(text) = node.value().as_text() else {
+            continue;
+        };
+        let hidden = node.ancestors().any(|a| {
+            a.value()
+                .as_element()
+                .is_some_and(|e| matches!(e.name(), "script" | "style"))
+        });
+        if !hidden {
+            out.push_str(text);
+            out.push(' ');
+        }
+    }
+    out.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
 /// Accepts RFC 3339 timestamps and plain `YYYY-MM-DD` dates.
 pub fn parse_date(s: &str) -> Option<DateTime<Utc>> {
     let s = s.trim();
@@ -274,6 +300,15 @@ mod tests {
             m.published_at.unwrap().to_rfc3339(),
             "2026-10-01T15:00:00+00:00"
         );
+    }
+
+    #[test]
+    fn converts_html_to_text() {
+        assert_eq!(
+            html_to_text("<p>Hola <b>mundo</b> &amp; más</p><script>evil()</script>"),
+            "Hola mundo & más"
+        );
+        assert_eq!(html_to_text("plain"), "plain");
     }
 
     #[test]

@@ -7,6 +7,7 @@ rust-version.workspace = true
 
 [dependencies]
 chrono.workspace = true
+feed-rs.workspace = true
 reqwest.workspace = true
 scraper.workspace = true
 sentri-core.workspace = true

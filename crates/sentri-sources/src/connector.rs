@@ -1,0 +1,93 @@
+//! Connector abstraction.
+//!
+//! Connectors form a closed set (an enum): adding one means adding a variant,
+//! which keeps dispatch simple and avoids boxed async traits.
+
+use chrono::{DateTime, Utc};
+use sentri_core::{Category, Opportunity, SourceKind, classify};
+use thiserror::Error;
+
+use crate::SafeClient;
+use crate::http::FetchError;
+use crate::rss::Feed;
+
+/// Everything a connector needs, independent of the configuration format.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourceSpec {
+    pub name: String,
+    pub kind: SourceKind,
+    pub url: Option<String>,
+    pub query: Option<String>,
+    /// Connector-specific target (e.g. GitHub `issues` or `repositories`).
+    pub target: Option<String>,
+    /// Category used when the item does not reveal one.
+    pub category: Option<Category>,
+    pub tags: Vec<String>,
+    pub max_items: usize,
+    /// Secret token, already read from the environment. Never logged.
+    pub token: Option<String>,
+}
+
+#[derive(Debug, Error)]
+pub enum SourceError {
+    #[error("{0}")]
+    Fetch(#[from] FetchError),
+    #[error("cannot parse response: {0}")]
+    Parse(String),
+    #[error("source misconfigured: {0}")]
+    Config(String),
+    #[error("{0} is not supported as an automatic source (see docs/sources.md)")]
+    Unsupported(SourceKind),
+}
+
+/// A configured, ready-to-run connector.
+#[derive(Debug, Clone)]
+pub enum Connector {
+    Feed(Feed),
+}
+
+impl Connector {
+    /// Builds the connector for `spec`, validating its configuration.
+    pub fn from_spec(spec: SourceSpec) -> Result<Self, SourceError> {
+        match spec.kind {
+            SourceKind::Rss => Feed::new(spec).map(Self::Feed),
+            other => Err(SourceError::Unsupported(other)),
+        }
+    }
+
+    pub fn spec(&self) -> &SourceSpec {
+        match self {
+            Self::Feed(c) => &c.spec,
+        }
+    }
+
+    /// Downloads and normalizes items. Items are sanitized and capped at
+    /// `max_items`.
+    pub async fn fetch(
+        &self,
+        http: &SafeClient,
+        now: DateTime<Utc>,
+    ) -> Result<Vec<Opportunity>, SourceError> {
+        let items = match self {
+            Self::Feed(c) => c.fetch(http, now).await?,
+        };
+        let spec = self.spec();
+        Ok(items
+            .into_iter()
+            .take(spec.max_items)
+            .map(|o| finish(o, spec))
+            .collect())
+    }
+}
+
+/// Applies source defaults and classification, then sanitizes.
+fn finish(mut o: Opportunity, spec: &SourceSpec) -> Opportunity {
+    classify::enrich(&mut o);
+    if o.category == Category::Other {
+        if let Some(category) = spec.category {
+            o.category = category;
+        }
+    }
+    o.tags.extend(spec.tags.iter().cloned());
+    o.sanitized()
+}
