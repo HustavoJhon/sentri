@@ -1,0 +1,176 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 640" width="1120" height="640" role="img" aria-label="SENTRI terminal dashboard: sidebar, opportunity feed and details panel">
+  <defs>
+    <clipPath id="win">
+      <rect width="1120" height="640" rx="16"/>
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#win)">
+    <rect width="1120" height="640" fill="#1d2021"/>
+
+    <!-- Title bar -->
+    <path d="M0 16 A16 16 0 0 1 16 0 H1104 A16 16 0 0 1 1120 16 V42 H0 Z" fill="#32302f"/>
+    <circle cx="24" cy="21" r="6" fill="#fb4934"/>
+    <circle cx="44" cy="21" r="6" fill="#fabd2f"/>
+    <circle cx="64" cy="21" r="6" fill="#b8bb26"/>
+    <text x="88" y="26" fill="#a89984" font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="12.5">sentri — ~/Github/hustavojhon/sentri</text>
+    <text x="1096" y="26" fill="#665c54" text-anchor="end" font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="11">0.1.0</text>
+
+    <!-- Sidebar -->
+    <rect x="0" y="42" width="210" height="558" fill="#282828"/>
+    <line x1="210" y1="42" x2="210" y2="600" stroke="#3c3836" stroke-width="1"/>
+    <text x="20" y="80" fill="#fabd2f" font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="18" font-weight="700" letter-spacing="3">SENTRI</text>
+    <text x="20" y="98" fill="#7c6f64" font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="9" letter-spacing="1.4">OPPORTUNITY RADAR</text>
+
+    <!-- Nav -->
+    <rect x="12" y="143" width="186" height="26" rx="7" fill="#3c3836"/>
+    <rect x="12" y="146" width="3" height="20" rx="1.5" fill="#83a598"/>
+    <g font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="12">
+      <text x="26" y="160" fill="#a89984">Dashboard</text>
+      <text x="26" y="190" fill="#ebdbb2" font-weight="600">Discover</text>
+      <text x="186" y="190" fill="#7c6f64" text-anchor="end" font-size="11">12</text>
+      <text x="26" y="220" fill="#a89984">News</text>
+      <text x="186" y="220" fill="#7c6f64" text-anchor="end" font-size="11">8</text>
+      <text x="26" y="250" fill="#a89984">Jobs</text>
+      <text x="186" y="250" fill="#7c6f64" text-anchor="end" font-size="11">4</text>
+      <text x="26" y="280" fill="#a89984">Courses</text>
+      <text x="186" y="280" fill="#7c6f64" text-anchor="end" font-size="11">7</text>
+      <text x="26" y="310" fill="#a89984">Events</text>
+      <text x="186" y="310" fill="#7c6f64" text-anchor="end" font-size="11">3</text>
+      <text x="26" y="340" fill="#a89984">Hackathons</text>
+      <text x="186" y="340" fill="#7c6f64" text-anchor="end" font-size="11">2</text>
+      <text x="26" y="370" fill="#a89984">Scholarships</text>
+      <text x="186" y="370" fill="#7c6f64" text-anchor="end" font-size="11">5</text>
+      <text x="26" y="400" fill="#a89984">Open Source</text>
+      <text x="186" y="400" fill="#7c6f64" text-anchor="end" font-size="11">9</text>
+      <text x="26" y="430" fill="#a89984">Calendar</text>
+      <text x="26" y="460" fill="#a89984">Saved</text>
+      <text x="186" y="460" fill="#7c6f64" text-anchor="end" font-size="11">3</text>
+      <text x="26" y="490" fill="#a89984">Settings</text>
+    </g>
+
+    <line x1="16" y1="514" x2="194" y2="514" stroke="#3c3836" stroke-width="1"/>
+    <text x="20" y="534" fill="#7c6f64" font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="9" letter-spacing="1.4">SOURCES</text>
+    <g font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="10.5">
+      <circle cx="23" cy="549" r="3" fill="#b8bb26"/>
+      <text x="34" y="553" fill="#a89984">RSS · 12 feeds</text>
+      <circle cx="23" cy="567" r="3" fill="#83a598"/>
+      <text x="34" y="571" fill="#a89984">GitHub · ok</text>
+      <circle cx="23" cy="585" r="3" fill="#665c54"/>
+      <text x="34" y="589" fill="#7c6f64">Hacker News · idle</text>
+    </g>
+
+    <!-- Feed -->
+    <text x="234" y="78" fill="#ebdbb2" font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="20" font-weight="700">Discover</text>
+    <text x="234" y="98" fill="#7c6f64" font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="11">relevance · 12 opportunities</text>
+    <text x="746" y="78" fill="#7c6f64" text-anchor="end" font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="11">sort: relevance</text>
+
+    <g font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="10">
+      <rect x="234" y="108" width="40" height="20" rx="10" fill="#3c3836"/>
+      <text x="254" y="122" fill="#ebdbb2" text-anchor="middle">all</text>
+      <rect x="282" y="108" width="48" height="20" rx="10" fill="#282828" stroke="#3c3836"/>
+      <text x="306" y="122" fill="#a89984" text-anchor="middle">free</text>
+      <rect x="338" y="108" width="58" height="20" rx="10" fill="#282828" stroke="#3c3836"/>
+      <text x="367" y="122" fill="#a89984" text-anchor="middle">travel</text>
+      <rect x="404" y="108" width="78" height="20" rx="10" fill="#282828" stroke="#3c3836"/>
+      <text x="443" y="122" fill="#a89984" text-anchor="middle">upcoming</text>
+      <rect x="490" y="108" width="74" height="20" rx="10" fill="#282828" stroke="#3c3836"/>
+      <text x="527" y="122" fill="#a89984" text-anchor="middle">eligible</text>
+    </g>
+    <line x1="234" y1="140" x2="746" y2="140" stroke="#3c3836" stroke-width="1"/>
+
+    <!-- Item 1 -->
+    <rect x="234" y="156" width="34" height="18" rx="4" fill="#3c3836"/>
+    <text x="251" y="169" fill="#d3869b" text-anchor="middle" font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="9" font-weight="700">++</text>
+    <text x="280" y="169" fill="#ebdbb2" font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="14">Becas PRONABEC 2027: convocatoria abierta</text>
+    <text x="280" y="189" fill="#928374" font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="11">Scholarship · online · deadline 15 dic</text>
+    <text x="280" y="207" fill="#7c6f64" font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="10">coincide: beca · internacional · tu país</text>
+    <text x="746" y="171" fill="#b8bb26" text-anchor="end" font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="18" font-weight="700">98</text>
+    <line x1="234" y1="228" x2="746" y2="228" stroke="#32302f" stroke-width="1"/>
+
+    <!-- Item 2 -->
+    <rect x="234" y="244" width="34" height="18" rx="4" fill="#3c3836"/>
+    <text x="251" y="257" fill="#83a598" text-anchor="middle" font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="9" font-weight="700">GH</text>
+    <text x="280" y="257" fill="#ebdbb2" font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="14">good first issue: tokio-rs/tokio</text>
+    <text x="280" y="277" fill="#928374" font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="11">Open source · remote · Rust</text>
+    <text x="280" y="295" fill="#7c6f64" font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="10">coincide: open source · rust</text>
+    <text x="746" y="259" fill="#b8bb26" text-anchor="end" font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="18" font-weight="700">91</text>
+    <line x1="234" y1="316" x2="746" y2="316" stroke="#32302f" stroke-width="1"/>
+
+    <!-- Item 3 -->
+    <rect x="234" y="332" width="34" height="18" rx="4" fill="#3c3836"/>
+    <text x="251" y="345" fill="#fe8019" text-anchor="middle" font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="9" font-weight="700">RS</text>
+    <text x="280" y="345" fill="#ebdbb2" font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="14">Rust 2027 roadmap: what's next</text>
+    <text x="280" y="365" fill="#928374" font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="11">News · official · blog.rust-lang.org</text>
+    <text x="280" y="383" fill="#7c6f64" font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="10">fuente oficial · rust</text>
+    <text x="746" y="347" fill="#fabd2f" text-anchor="end" font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="18" font-weight="700">84</text>
+    <line x1="234" y1="404" x2="746" y2="404" stroke="#32302f" stroke-width="1"/>
+
+    <!-- Item 4 -->
+    <rect x="234" y="420" width="34" height="18" rx="4" fill="#3c3836"/>
+    <text x="251" y="433" fill="#fe8019" text-anchor="middle" font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="9" font-weight="700">HN</text>
+    <text x="280" y="433" fill="#ebdbb2" font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="14">Who is hiring? (December 2026)</text>
+    <text x="280" y="453" fill="#928374" font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="11">Job · remote · Hacker News</text>
+    <text x="280" y="471" fill="#7c6f64" font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="10">coincide: empleo · remoto</text>
+    <text x="746" y="435" fill="#fabd2f" text-anchor="end" font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="18" font-weight="700">79</text>
+    <line x1="234" y1="492" x2="746" y2="492" stroke="#32302f" stroke-width="1"/>
+
+    <!-- Item 5 -->
+    <rect x="234" y="508" width="34" height="18" rx="4" fill="#3c3836"/>
+    <text x="251" y="521" fill="#d3869b" text-anchor="middle" font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="9" font-weight="700">IC</text>
+    <text x="280" y="521" fill="#ebdbb2" font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="14">GDG Cusco · DevFest 2026</text>
+    <text x="280" y="541" fill="#928374" font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="11">Event · Cusco, Perú · 5 dic</text>
+    <text x="280" y="559" fill="#7c6f64" font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="10">coincide: comunidad · tu ciudad</text>
+    <text x="746" y="523" fill="#fabd2f" text-anchor="end" font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="18" font-weight="700">76</text>
+
+    <!-- Details -->
+    <line x1="770" y1="42" x2="770" y2="600" stroke="#3c3836" stroke-width="1"/>
+    <text x="790" y="72" fill="#7c6f64" font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="9" letter-spacing="1.4">SELECTED</text>
+    <text x="790" y="98" fill="#ebdbb2" font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="15" font-weight="700">Becas PRONABEC 2027</text>
+    <text x="790" y="118" fill="#ebdbb2" font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="15" font-weight="700">convocatoria abierta</text>
+    <text x="790" y="144" fill="#928374" font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="11">scholarship · online</text>
+    <text x="790" y="162" fill="#928374" font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="11">deadline 15 dic 2026 · gratis</text>
+
+    <rect x="790" y="180" width="310" height="76" rx="8" fill="#32302f" stroke="#504945" stroke-width="1"/>
+    <text x="804" y="200" fill="#928374" font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="9" letter-spacing="1.2">RELEVANCE</text>
+    <text x="804" y="238" fill="#b8bb26" font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="30" font-weight="700">98</text>
+    <text x="836" y="238" fill="#7c6f64" font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="10">/100</text>
+    <rect x="878" y="222" width="200" height="8" rx="4" fill="#504945"/>
+    <rect x="878" y="222" width="190" height="8" rx="4" fill="#b8bb26"/>
+
+    <text x="790" y="284" fill="#ebdbb2" font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="11" font-weight="700">Why this is for you</text>
+    <g font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="10.5">
+      <circle cx="795" cy="300" r="2.5" fill="#b8bb26"/>
+      <text x="808" y="304" fill="#a89984">beca + tu país (Perú)</text>
+      <circle cx="795" cy="320" r="2.5" fill="#b8bb26"/>
+      <text x="808" y="324" fill="#a89984">modalidad online</text>
+      <circle cx="795" cy="340" r="2.5" fill="#fabd2f"/>
+      <text x="808" y="344" fill="#a89984">deadline en 31 días</text>
+      <circle cx="795" cy="360" r="2.5" fill="#83a598"/>
+      <text x="808" y="364" fill="#a89984">afinidad: guardaste 3 becas</text>
+    </g>
+
+    <text x="790" y="396" fill="#7c6f64" font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="9" letter-spacing="1.2">TAGS</text>
+    <g font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="10">
+      <rect x="790" y="406" width="46" height="20" rx="10" fill="#3c3836"/>
+      <text x="813" y="420" fill="#a89984" text-anchor="middle">beca</text>
+      <rect x="842" y="406" width="96" height="20" rx="10" fill="#3c3836"/>
+      <text x="890" y="420" fill="#a89984" text-anchor="middle">internacional</text>
+      <rect x="944" y="406" width="56" height="20" rx="10" fill="#3c3836"/>
+      <text x="972" y="420" fill="#a89984" text-anchor="middle">gratis</text>
+    </g>
+
+    <text x="790" y="452" fill="#7c6f64" font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="9" letter-spacing="1.2">NOTES</text>
+    <text x="790" y="472" fill="#928374" font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="10.5">pedir carta de recomendación</text>
+    <text x="790" y="488" fill="#928374" font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="10.5">revisar requisitos de idioma</text>
+
+    <!-- Footer -->
+    <path d="M0 600 H1120 V624 A16 16 0 0 1 1104 640 H16 A16 16 0 0 1 0 624 Z" fill="#32302f"/>
+    <g font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="10.5">
+      <text x="24" y="625" fill="#928374"><tspan fill="#fabd2f">j/k</tspan> move   <tspan fill="#fabd2f">Enter</tspan> details   <tspan fill="#fabd2f">l</tspan> like   <tspan fill="#fabd2f">s</tspan> save   <tspan fill="#fabd2f">d</tspan> dismiss   <tspan fill="#fabd2f">/</tspan> search   <tspan fill="#fabd2f">?</tspan> help   <tspan fill="#fabd2f">q</tspan> quit</text>
+      <text x="1096" y="625" fill="#665c54" text-anchor="end">rust + ratatui</text>
+    </g>
+  </g>
+
+  <rect x="0.5" y="0.5" width="1119" height="639" rx="15.5" fill="none" stroke="#504945" stroke-width="1"/>
+</svg>
