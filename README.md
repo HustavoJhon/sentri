@@ -1,6 +1,6 @@
 <div align="center">
 
-# 📡 SENTRI
+# SENTRI
 
 ### Tu radar personal de oportunidades — en la terminal
 
@@ -15,9 +15,9 @@ según tus intereses y te deja decidir qué hacer con cada uno.
 [![Ratatui](https://img.shields.io/badge/TUI-Ratatui-4E9A06)](https://ratatui.rs/)
 [![Status](https://img.shields.io/badge/status-active%20development-fe8019)](docs/roadmap.md)
 
-[Qué es](#-qué-es-sentri) · [Características](#-características) ·
-[Instalación](#-instalación) · [Uso](#-uso) · [Arquitectura](#-arquitectura) ·
-[Documentación](#-documentación)
+[Qué es](#qué-es-sentri) · [Características](#características) ·
+[Instalación](#instalación) · [Uso](#uso) · [Arquitectura](#arquitectura) ·
+[Documentación](#documentación)
 
 </div>
 
@@ -29,7 +29,7 @@ según tus intereses y te deja decidir qué hacer con cada uno.
 
 ---
 
-## 🎯 ¿Qué es SENTRI?
+## Qué es SENTRI?
 
 Las oportunidades interesantes están repartidas entre decenas de fuentes:
 portales de becas, blogs, GitHub, Hacker News, calendarios de comunidades,
@@ -44,37 +44,37 @@ personal para decidir **qué oportunidad merece tu tiempo**.
 
 ### Lo que lo hace diferente
 
-- 🎯 **Relevancia explicable.** Cada recomendación muestra *por qué* sube o
-  baja: coincidencia de intereses, ciudad, país, modalidad, viaje, deadline,
+- **Relevancia explicable.** Cada recomendación muestra *por qué* sube o baja:
+  coincidencia de intereses, ciudad, país, modalidad, viaje, deadline y
   afinidad aprendida de tus interacciones.
-- 🧩 **Fuentes independientes.** Un conector que falla no detiene a los demás;
-  el error queda registrado y el resto sigue recopilando.
-- 🖥️ **Terminal first.** TUI en Rust + Ratatui, pensada para funcionar por SSH
+- **Fuentes independientes.** Un conector que falla no detiene a los demás; el
+  error queda registrado y el resto sigue recopilando.
+- **Terminal first.** TUI en Rust + Ratatui, pensada para funcionar por SSH
   incluso desde el móvil, sin Nerd Fonts ni protocolos gráficos.
-- 🗄️ **Datos tuyos.** SQLite embebido, sin cuentas, sin nube obligatoria y con
+- **Datos tuyos.** SQLite embebido, sin cuentas, sin nube obligatoria y con
   permisos restrictivos desde el primer arranque.
-- 🔒 **Contenido externo no confiable.** Cliente HTTP con protección anti-SSRF,
+- **Contenido externo no confiable.** Cliente HTTP con protección anti-SSRF,
   límites de tamaño, saneamiento de texto y secretos solo por variables de
   entorno.
 
-## ✨ Características
+## Características
 
 | | |
 |---|---|
-| 🎯 **Feed unificado** | Oportunidades y noticias en un solo lugar, con filtros, búsqueda y orden por relevancia, fecha o deadline. |
-| 🧠 **Scoring por reglas** | Intereses, categorías, ciudad, país, modalidad, elegibilidad, gratuidad, certificado, premios, viaje y deadlines. Sin cajas negras. |
-| 📈 **Afinidad aprendida** | Likes, guardados, descartes y postulaciones ajustan la recomendación por categoría, etiqueta y tipo de oportunidad. |
-| 🗂️ **Interacciones claras** | Like, guardado, descarte, interesante, postulado, inscrito y completado, con historial append-only. |
-| ➕ **Añadir cualquier enlace** | `sentri add URL` detecta la plataforma, extrae metadatos públicos (Open Graph / JSON-LD) y guarda la URL aunque la página bloquee la lectura. |
-| 🔌 **Conectores** | RSS/Atom, GitHub (repos y *good first issues*), Hacker News, Google News, Mastodon, Bluesky y YouTube. |
-| 🖼️ **Detalles ricos** | Imagen, autor, editor, notas personales, historial de cambios y campos personalizados. |
-| 🗓️ **Calendario** | Vista mensual, semanal, diaria y agenda; programa fechas de una oportunidad sin inscribirte en nada. |
-| ⚙️ **Configuración declarativa** | Perfil, intereses, pesos del scoring y fuentes en un `config.toml` comentado. Añadir un interés no requiere código. |
-| 🤖 **Daemon desacoplado** | Recopilación periódica en segundo plano, con bloqueo de instancia única, recuperación tras caídas y unidad de systemd. |
-| 🛡️ **Seguridad por defecto** | Bloqueo de IPs privadas/loopback/metadatos cloud, límites de redirecciones, tipos y tamaños, y saneamiento de texto para la terminal. |
-| 📦 **Un solo binario** | SQLite va embebido; no hay servidor, servicio externo ni base de datos que instalar. |
+| **Feed unificado** | Oportunidades y noticias en un solo lugar, con filtros, búsqueda y orden por relevancia, fecha o deadline. |
+| **Scoring por reglas** | Intereses, categorías, ciudad, país, modalidad, elegibilidad, gratuidad, certificado, premios, viaje y deadlines. Sin cajas negras. |
+| **Afinidad aprendida** | Likes, guardados, descartes y postulaciones ajustan la recomendación por categoría, etiqueta y tipo de oportunidad. |
+| **Interacciones claras** | Like, guardado, descarte, interesante, postulado, inscrito y completado, con historial append-only. |
+| **Añadir cualquier enlace** | `sentri add URL` detecta la plataforma, extrae metadatos públicos (Open Graph / JSON-LD) y guarda la URL aunque la página bloquee la lectura. |
+| **Conectores** | RSS/Atom, GitHub (repos y *good first issues*), Hacker News, Google News, Mastodon, Bluesky y YouTube. |
+| **Detalles ricos** | Imagen, autor, editor, notas personales, historial de cambios y campos personalizados. |
+| **Calendario** | Vista mensual, semanal, diaria y agenda; programa fechas de una oportunidad sin inscribirte en nada. |
+| **Configuración declarativa** | Perfil, intereses, pesos del scoring y fuentes en un `config.toml` comentado. Añadir un interés no requiere código. |
+| **Daemon desacoplado** | Recopilación periódica en segundo plano, con bloqueo de instancia única, recuperación tras caídas y unidad de systemd. |
+| **Seguridad por defecto** | Bloqueo de IPs privadas/loopback/metadatos cloud, límites de redirecciones, tipos y tamaños, y saneamiento de texto para la terminal. |
+| **Un solo binario** | SQLite va embebido; no hay servidor, servicio externo ni base de datos que instalar. |
 
-## 🚀 Instalación
+## Instalación
 
 ### Requisitos
 
@@ -105,7 +105,7 @@ sentri collect       # recopila de las fuentes habilitadas
 sentri               # abre la TUI
 ```
 
-## 🎮 Uso
+## Uso
 
 ### Línea de comandos
 
@@ -176,7 +176,7 @@ La TUI se adapta al ancho: tres paneles con ≥110 columnas, dos con ≥80 y sol
 el feed en pantallas estrechas. Ratón: rueda para desplazar, clic para
 seleccionar y segundo clic para abrir detalles. Ver [docs/tui.md](docs/tui.md).
 
-## 🔧 Configuración
+## Configuración
 
 | Qué | Ruta por defecto (Linux) |
 |---|---|
@@ -199,7 +199,7 @@ Los pesos del scoring (`home_city`, `travel`, `deadline_soon`,
 puede explicar desde la TUI o con `sentri show`. Ver
 [docs/configuration.md](docs/configuration.md).
 
-## 🧱 Arquitectura
+## Arquitectura
 
 SENTRI es un **monolito modular** en un workspace Cargo. No hay microservicios:
 la TUI, la CLI, el daemon y la futura API son adaptadores que llaman a los
@@ -245,7 +245,7 @@ directamente; todo contenido externo se valida, se trunca y nunca se ejecuta.
 Ver [docs/architecture.md](docs/architecture.md) y las
 [decisiones de arquitectura](docs/adr/).
 
-## 🔒 Seguridad y privacidad
+## Seguridad y privacidad
 
 - **Anti-SSRF** en cada petición: solo `http`/`https`, solo IPs públicas, DNS
   rebinding filtrado, redirecciones revalidadas y proxies del sistema ignorados.
@@ -259,21 +259,21 @@ Ver [docs/architecture.md](docs/architecture.md) y las
 - **Sin scraping** de plataformas restringidas ni cookies de cuentas
   personales. Ver [docs/security.md](docs/security.md).
 
-## 🧭 Roadmap
+## Roadmap
 
 | Fase | Contenido | Estado |
 |---|---|---|
-| 0–4 | Workspace, modelos, SQLite, búsqueda, interacciones, TUI y edición | ✅ |
-| 5 | Conectores: RSS/Atom, GitHub, Hacker News, Google News, Mastodon, Bluesky, YouTube | 🚧 |
-| 6 | Intereses, scoring, explicaciones y personalización | 🚧 |
-| 7 | Eventos y Google Calendar (OAuth2) | ⏳ |
-| 8–10 | Cursos, empleos, perfil profesional y asistencia a inscripciones | ⏳ |
-| 11 | Daemon, systemd, reintentos y supervisión | ✅ base |
-| 12–13 | Acceso remoto, VPS, API Axum y PWA | ⏳ |
+| 0–4 | Workspace, modelos, SQLite, búsqueda, interacciones, TUI y edición | Completado |
+| 5 | Conectores: RSS/Atom, GitHub, Hacker News, Google News, Mastodon, Bluesky, YouTube | En curso |
+| 6 | Intereses, scoring, explicaciones y personalización | En curso |
+| 7 | Eventos y Google Calendar (OAuth2) | Pendiente |
+| 8–10 | Cursos, empleos, perfil profesional y asistencia a inscripciones | Pendiente |
+| 11 | Daemon, systemd, reintentos y supervisión | Base |
+| 12–13 | Acceso remoto, VPS, API Axum y PWA | Pendiente |
 
 Consulta el detalle y los próximos pasos en [docs/roadmap.md](docs/roadmap.md).
 
-## 🧪 Desarrollo
+## Desarrollo
 
 ```sh
 ./scripts/check.sh   # fmt + clippy (-D warnings) + tests
@@ -294,7 +294,7 @@ técnica vive en [`docs/`](docs/):
 | [Roadmap](docs/roadmap.md) | Fases y próximos pasos |
 | [ADR](docs/adr/) | Decisiones de arquitectura |
 
-## 🤝 Contribuir
+## Contribuir
 
 SENTRI está en desarrollo activo y el alcance cambia rápido. Si quieres
 proponer una fuente, un atajo o una mejora:
@@ -308,5 +308,5 @@ Este repositorio todavía no tiene una licencia publicada.
 ---
 
 <div align="center">
-  <sub>Hecho con 🦀 Rust y ☕ desde Cusco, Perú</sub>
+  <sub>Hecho con Rust desde Cusco, Perú</sub>
 </div>
