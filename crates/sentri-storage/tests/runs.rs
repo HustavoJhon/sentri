@@ -58,3 +58,51 @@ async fn recovers_interrupted_runs() {
     assert_eq!(run.error.as_deref(), Some("interrupted"));
     assert_eq!(store.fail_interrupted_runs(now()).await.unwrap(), 0);
 }
+
+#[tokio::test]
+async fn tracks_source_health_with_backoff() {
+    let store = Store::in_memory().await.unwrap();
+    let fresh = store.source_state("rss").await.unwrap();
+    assert_eq!(fresh.consecutive_failures, 0);
+    assert!(!fresh.backing_off(now()));
+
+    store
+        .record_source_success("rss", Some("\"v1\""), None, now())
+        .await
+        .unwrap();
+    let failed = store
+        .record_source_failure("rss", "timeout", now())
+        .await
+        .unwrap();
+    assert_eq!(failed.consecutive_failures, 1);
+    assert!(failed.backing_off(now()));
+    assert!(!failed.backing_off(now() + Duration::minutes(16)));
+    assert_eq!(
+        failed.etag.as_deref(),
+        Some("\"v1\""),
+        "validators survive failures"
+    );
+    let again = store
+        .record_source_failure("rss", "timeout", now())
+        .await
+        .unwrap();
+    assert_eq!(again.next_attempt_at, Some(now() + Duration::minutes(30)));
+
+    store
+        .record_source_success("rss", None, None, now())
+        .await
+        .unwrap();
+    let ok = store.source_state("rss").await.unwrap();
+    assert_eq!(ok.consecutive_failures, 0);
+    assert_eq!(
+        ok.etag.as_deref(),
+        Some("\"v1\""),
+        "kept when the server sends none"
+    );
+    assert_eq!(
+        ok.last_error.as_deref(),
+        Some("timeout"),
+        "last error remains visible"
+    );
+    assert_eq!(store.source_states().await.unwrap().len(), 1);
+}

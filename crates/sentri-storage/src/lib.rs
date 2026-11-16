@@ -14,6 +14,7 @@ mod private_fs;
 mod reclassify;
 mod rows;
 mod runs;
+mod source_state;
 mod time;
 
 use std::path::Path;
@@ -31,6 +32,7 @@ pub use layers::{EditState, Override};
 pub use opportunities::Upsert;
 pub use reclassify::StanceChange;
 pub use runs::{CollectionRun, RunStatus, Stats};
+pub use source_state::{SourceState, backoff};
 
 static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
 
