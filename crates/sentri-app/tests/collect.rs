@@ -101,3 +101,50 @@ async fn collects_each_source_independently() {
     let broken = runs.iter().find(|r| r.source_name == "broken").unwrap();
     assert_eq!(broken.status, RunStatus::Failed);
 }
+
+#[tokio::test]
+async fn failing_sources_back_off_and_unchanged_feeds_are_skipped() {
+    use wiremock::matchers::header;
+    let server = MockServer::start().await;
+    Mock::given(path("/feed.xml"))
+        .and(header("if-none-match", "\"v1\""))
+        .respond_with(ResponseTemplate::new(304))
+        .mount(&server)
+        .await;
+    Mock::given(path("/feed.xml"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("etag", "\"v1\"")
+                .set_body_raw(FEED.as_bytes().to_vec(), "application/rss+xml"),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(path("/missing.xml"))
+        .respond_with(ResponseTemplate::new(500))
+        .mount(&server)
+        .await;
+    let store = Store::in_memory().await.unwrap();
+    let app = Sentri::with_store(config(&server), store, true).unwrap();
+
+    let first = app.collect(None).await;
+    assert_eq!(first[0].result, Ok((2, 2)));
+    assert!(first[1].result.is_err());
+
+    let second = app.collect(None).await;
+    assert_eq!(second[0].note.as_deref(), Some("not modified"));
+    assert!(
+        second[1]
+            .note
+            .as_deref()
+            .unwrap()
+            .starts_with("skipped after 1 failures")
+    );
+    assert!(second[1].result.is_ok(), "skipping is not a new failure");
+
+    // Asking for the source explicitly ignores the back-off.
+    let forced = app.collect(Some("broken")).await;
+    assert!(forced[0].result.is_err());
+    let state = app.store().source_state("broken").await.unwrap();
+    assert_eq!(state.consecutive_failures, 2);
+    assert!(state.last_error.unwrap().contains("500"));
+}

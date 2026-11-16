@@ -425,6 +425,11 @@ async fn collect(app: &Sentri, only: Option<&str>) -> Result<()> {
     }
     for report in reports {
         match report.result {
+            Ok(_) if report.note.is_some() => println!(
+                "  · {:<28} {}",
+                report.source,
+                report.note.as_deref().unwrap_or_default()
+            ),
             Ok((seen, new)) => println!("  ✓ {:<28} {seen} seen, {new} new", report.source),
             Err(error) => println!("  ✗ {:<28} {error}", report.source),
         }
