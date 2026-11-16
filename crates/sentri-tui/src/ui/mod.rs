@@ -10,6 +10,7 @@ mod dashboard;
 mod detail;
 mod editor;
 mod feed;
+mod history;
 pub mod image;
 mod pages;
 mod popups;
@@ -122,6 +123,9 @@ fn draw_body(frame: &mut Frame, area: Rect, state: &mut State, theme: &Theme) {
         Section::Settings => pages::settings(frame, main, state, theme),
         Section::Calendar if state.detail_open => detail::render(frame, main, state, theme),
         Section::Calendar => calendar::render(frame, main, &state.calendar, theme),
+        Section::Feed(sentri_core::FeedView::History) if !state.detail_open => {
+            history::render(frame, main, state, theme);
+        }
         Section::Feed(view) => draw_feed(frame, main, state, theme, view.label()),
     }
 }

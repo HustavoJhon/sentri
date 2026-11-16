@@ -19,10 +19,12 @@ use sentri_core::{
 
 pub mod calendar;
 pub mod editor;
+pub mod history;
 
 use crate::input::LineInput;
 use calendar::{CalEffect, CalendarState};
 use editor::{EditorOutcome, EditorState};
+use history::{HistoryEffect, HistoryState};
 
 /// A navigable page.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -216,6 +218,13 @@ impl Command {
     }
 }
 
+const fn history_effect(effect: HistoryEffect) -> Effect {
+    match effect {
+        HistoryEffect::LoadActivity => Effect::LoadActivity,
+        HistoryEffect::LoadDay(day) => Effect::LoadDay(day),
+    }
+}
+
 /// Case-insensitive subsequence match ("gtsv" matches "Go to Saved").
 pub fn fuzzy_match(needle: &str, haystack: &str) -> bool {
     let mut hay = haystack.chars().flat_map(char::to_lowercase);
@@ -262,6 +271,8 @@ pub enum Effect {
     CreateEntry(sentri_app::NewEntry),
     UpdateEntry(i64, sentri_app::NewEntry),
     DeleteEntry(i64),
+    LoadActivity,
+    LoadDay(chrono::NaiveDate),
     SaveEdit {
         id: OpportunityId,
         values: Vec<(sentri_core::Field, String)>,
@@ -358,6 +369,8 @@ pub enum Msg {
     Calendar(Box<sentri_app::CalendarData>),
     /// Calendar changed; the text describes what happened.
     CalendarChanged(String),
+    Activity(std::collections::BTreeMap<chrono::NaiveDate, sentri_app::DayActivity>),
+    DayEntries(chrono::NaiveDate, Vec<sentri_app::DayEntry>),
     Saved(OpportunityId),
     Failed(String),
 }
@@ -395,6 +408,7 @@ pub struct State {
     pub images: HashMap<String, ImageSlot>,
     pub overview: Overview,
     pub calendar: CalendarState,
+    pub history: HistoryState,
     pub quit: bool,
 }
 
@@ -419,6 +433,7 @@ impl Default for State {
             images: HashMap::new(),
             overview: Overview::default(),
             calendar: CalendarState::default(),
+            history: HistoryState::default(),
             quit: false,
         }
     }
@@ -771,6 +786,11 @@ impl State {
                 .flat_map(|e| self.cal_effect(e))
                 .collect();
         }
+        if self.current() == Section::Feed(FeedView::History)
+            && let Some(effects) = self.history.on_key(key)
+        {
+            return effects.into_iter().map(history_effect).collect();
+        }
         if let Some(effects) = self.on_item_key(key) {
             return effects;
         }
@@ -1016,6 +1036,8 @@ impl State {
             Msg::Overview(overview) => self.overview = *overview,
             Msg::Detail(detail) => self.detail = Some(*detail),
             Msg::Calendar(data) => self.calendar.set_data(*data),
+            Msg::Activity(days) => self.history.set_activity(days),
+            Msg::DayEntries(date, entries) => self.history.entries = Some((date, entries)),
             Msg::CalendarChanged(text) => {
                 self.info(text, Level::Success);
                 self.detail_requested = None;

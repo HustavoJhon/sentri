@@ -169,6 +169,24 @@ fn execute(
                 let _ = tx.send(Msg::Collected(text));
             });
         }
+        Effect::LoadActivity => {
+            tokio::spawn(async move {
+                let msg = match app.activity(crate::state::history::DAYS).await {
+                    Ok(days) => Msg::Activity(days),
+                    Err(e) => Msg::Failed(format!("Could not load activity: {e}")),
+                };
+                let _ = tx.send(msg);
+            });
+        }
+        Effect::LoadDay(day) => {
+            tokio::spawn(async move {
+                let msg = match app.day_entries(day).await {
+                    Ok(entries) => Msg::DayEntries(day, entries),
+                    Err(e) => Msg::Failed(format!("Could not load {day}: {e}")),
+                };
+                let _ = tx.send(msg);
+            });
+        }
         calendar @ (Effect::Schedule(_)
         | Effect::LoadCalendar(..)
         | Effect::CreateEntry(_)
