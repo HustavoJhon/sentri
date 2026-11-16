@@ -171,6 +171,9 @@ fn execute(
             });
         }
         Effect::LoadProfile => load_profile(app, tx),
+        settings @ (Effect::SaveSettings(_) | Effect::RestoreDefaults) => {
+            let _ = tx.send(execute_settings(config_path, settings));
+        }
         Effect::LoadActivity => {
             tokio::spawn(async move {
                 let msg = match app.activity(crate::state::history::DAYS).await {
@@ -201,6 +204,19 @@ fn execute(
         Effect::OpenUrl(url) => {
             let _ = tx.send(open_url(&url));
         }
+    }
+}
+
+/// Writes settings to the configuration file (with a backup).
+fn execute_settings(config_path: &str, effect: Effect) -> Msg {
+    let path = std::path::PathBuf::from(config_path);
+    let result = match effect {
+        Effect::SaveSettings(changes) => sentri_app::settings::save(&path, &changes),
+        _ => sentri_app::settings::restore_defaults(&path),
+    };
+    match result {
+        Ok(saved) => Msg::SettingsSaved(Box::new(saved)),
+        Err(e) => Msg::Failed(format!("Settings not saved: {e}")),
     }
 }
 
@@ -325,6 +341,7 @@ async fn overview(app: &Sentri, config_path: String) -> Msg {
     let news = app.feed(&news_query).await.unwrap_or_default();
     let runs = app.store().latest_runs().await.unwrap_or_default();
     Msg::Overview(Box::new(Overview {
+        config: app.config().clone(),
         stats,
         insights,
         news,

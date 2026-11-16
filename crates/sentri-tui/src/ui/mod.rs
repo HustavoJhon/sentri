@@ -14,6 +14,7 @@ mod history;
 pub mod image;
 mod pages;
 mod popups;
+mod settings;
 mod widgets;
 
 use ratatui::Frame;
@@ -120,7 +121,7 @@ fn draw_body(frame: &mut Frame, area: Rect, state: &mut State, theme: &Theme) {
     match state.current() {
         Section::Dashboard => dashboard::render(frame, main, state, theme),
         Section::Sources => pages::sources(frame, main, state, theme),
-        Section::Settings => pages::settings(frame, main, state, theme),
+        Section::Settings => settings::render(frame, main, state, theme),
         Section::Calendar if state.detail_open => detail::render(frame, main, state, theme),
         Section::Calendar => calendar::render(frame, main, &state.calendar, theme),
         Section::Feed(sentri_core::FeedView::History) if !state.detail_open => {

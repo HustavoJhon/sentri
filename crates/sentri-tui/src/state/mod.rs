@@ -8,6 +8,7 @@
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind};
 use ratatui::layout::{Position, Rect};
 use std::collections::HashMap;
+use std::fmt::Write as _;
 
 use sentri_app::{
     AddOutcome, CollectionRun, EditState, HistoryEntry, ImageMode, Insights, Ranked, SourceConfig,
@@ -20,11 +21,13 @@ use sentri_core::{
 pub mod calendar;
 pub mod editor;
 pub mod history;
+pub mod settings;
 
 use crate::input::LineInput;
 use calendar::{CalEffect, CalendarState};
 use editor::{EditorOutcome, EditorState};
 use history::{HistoryEffect, HistoryState};
+use settings::{SettingsEffect, SettingsState};
 
 /// A navigable page.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -274,6 +277,8 @@ pub enum Effect {
     LoadActivity,
     LoadDay(chrono::NaiveDate),
     LoadProfile,
+    SaveSettings(Vec<(String, String)>),
+    RestoreDefaults,
     SaveEdit {
         id: OpportunityId,
         values: Vec<(sentri_core::Field, String)>,
@@ -285,6 +290,7 @@ pub enum Effect {
 /// Read-only context shown by the dashboard, sources and settings pages.
 #[derive(Debug, Clone, Default)]
 pub struct Overview {
+    pub config: sentri_app::Config,
     pub stats: Stats,
     pub insights: Insights,
     /// Latest news for the dashboard.
@@ -385,6 +391,7 @@ pub enum Msg {
     Activity(std::collections::BTreeMap<chrono::NaiveDate, sentri_app::DayActivity>),
     DayEntries(chrono::NaiveDate, Vec<sentri_app::DayEntry>),
     Profile(ProfileState),
+    SettingsSaved(Box<sentri_app::settings::Saved>),
     Saved(OpportunityId),
     Failed(String),
 }
@@ -424,6 +431,7 @@ pub struct State {
     pub calendar: CalendarState,
     pub history: HistoryState,
     pub profile: ProfileState,
+    pub settings: SettingsState,
     pub quit: bool,
 }
 
@@ -450,6 +458,7 @@ impl Default for State {
             calendar: CalendarState::default(),
             history: HistoryState::default(),
             profile: ProfileState::default(),
+            settings: SettingsState::default(),
             quit: false,
         }
     }
@@ -796,19 +805,8 @@ impl State {
     }
 
     fn on_normal_key(&mut self, key: KeyEvent) -> Vec<Effect> {
-        if self.current() == Section::Calendar
-            && !self.detail_open
-            && let Some(effects) = self.calendar.on_key(key)
-        {
-            return effects
-                .into_iter()
-                .flat_map(|e| self.cal_effect(e))
-                .collect();
-        }
-        if self.current() == Section::Feed(FeedView::History)
-            && let Some(effects) = self.history.on_key(key)
-        {
-            return effects.into_iter().map(history_effect).collect();
+        if let Some(effects) = self.on_section_key(key) {
+            return effects;
         }
         if let Some(effects) = self.on_item_key(key) {
             return effects;
@@ -890,6 +888,44 @@ impl State {
             _ => {}
         }
         Vec::new()
+    }
+
+    /// Keys owned by the current section (calendar, settings, history).
+    fn on_section_key(&mut self, key: KeyEvent) -> Option<Vec<Effect>> {
+        if self.current() == Section::Calendar
+            && !self.detail_open
+            && let Some(effects) = self.calendar.on_key(key)
+        {
+            return Some(
+                effects
+                    .into_iter()
+                    .flat_map(|e| self.cal_effect(e))
+                    .collect(),
+            );
+        }
+        if self.current() == Section::Settings
+            && let Some(effects) = self.settings.on_key(key)
+        {
+            return Some(
+                effects
+                    .into_iter()
+                    .filter_map(|e| match e {
+                        SettingsEffect::Save(changes) => Some(Effect::SaveSettings(changes)),
+                        SettingsEffect::RestoreDefaults => Some(Effect::RestoreDefaults),
+                        SettingsEffect::Message(text) => {
+                            self.info(text, Level::Info);
+                            None
+                        }
+                    })
+                    .collect(),
+            );
+        }
+        if self.current() == Section::Feed(FeedView::History)
+            && let Some(effects) = self.history.on_key(key)
+        {
+            return Some(effects.into_iter().map(history_effect).collect());
+        }
+        None
     }
 
     /// Keys that act on the selected item.
@@ -1045,6 +1081,31 @@ impl State {
         }
     }
 
+    fn on_settings_saved(&mut self, saved: sentri_app::settings::Saved) {
+        let needs_restart: Vec<String> = self
+            .settings
+            .rows
+            .iter()
+            .filter(|r| r.changed() && !r.live)
+            .map(|r| r.label.clone())
+            .collect();
+        let ui = &saved.config.ui;
+        self.ui = UiPrefs::from_config(ui, self.ui.indexed_colors);
+        if let Some(density) = Density::from_name(&ui.density) {
+            self.density = density;
+        }
+        self.settings = SettingsState::from_config(&saved.config);
+        self.overview.config = saved.config;
+        let mut text = String::from("Settings saved");
+        if let Some(backup) = saved.backup {
+            let _ = write!(text, " · backup {}", backup.display());
+        }
+        if !needs_restart.is_empty() {
+            let _ = write!(text, " · restart to apply: {}", needs_restart.join(", "));
+        }
+        self.info(text, Level::Success);
+    }
+
     pub fn on_msg(&mut self, msg: Msg) -> Vec<Effect> {
         match msg {
             Msg::Loaded(items) => {
@@ -1052,7 +1113,13 @@ impl State {
                 self.items = items;
                 self.selected = self.selected.min(self.items.len().saturating_sub(1));
             }
-            Msg::Overview(overview) => self.overview = *overview,
+            Msg::Overview(overview) => {
+                if !self.settings.is_dirty() {
+                    self.settings = SettingsState::from_config(&overview.config);
+                }
+                self.overview = *overview;
+            }
+            Msg::SettingsSaved(saved) => self.on_settings_saved(*saved),
             Msg::Detail(detail) => self.detail = Some(*detail),
             Msg::Calendar(data) => self.calendar.set_data(*data),
             Msg::Activity(days) => self.history.set_activity(days),
