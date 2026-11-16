@@ -273,6 +273,7 @@ pub enum Effect {
     DeleteEntry(i64),
     LoadActivity,
     LoadDay(chrono::NaiveDate),
+    LoadProfile,
     SaveEdit {
         id: OpportunityId,
         values: Vec<(sentri_core::Field, String)>,
@@ -350,6 +351,18 @@ impl UiPrefs {
     }
 }
 
+/// The user's GitHub identity in the sidebar.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub enum ProfileState {
+    #[default]
+    Loading,
+    /// No `[github] username` configured.
+    NotConfigured,
+    Ready(Box<sentri_app::GitHubProfile>, Option<Thumbnail>),
+    /// GitHub unreachable or invalid; the message explains why.
+    Unavailable(String),
+}
+
 /// Thumbnail size requested for detail images and avatars, in pixels.
 pub const IMAGE_PX: (u32, u32) = (80, 48);
 
@@ -371,6 +384,7 @@ pub enum Msg {
     CalendarChanged(String),
     Activity(std::collections::BTreeMap<chrono::NaiveDate, sentri_app::DayActivity>),
     DayEntries(chrono::NaiveDate, Vec<sentri_app::DayEntry>),
+    Profile(ProfileState),
     Saved(OpportunityId),
     Failed(String),
 }
@@ -409,6 +423,7 @@ pub struct State {
     pub overview: Overview,
     pub calendar: CalendarState,
     pub history: HistoryState,
+    pub profile: ProfileState,
     pub quit: bool,
 }
 
@@ -434,6 +449,7 @@ impl Default for State {
             overview: Overview::default(),
             calendar: CalendarState::default(),
             history: HistoryState::default(),
+            profile: ProfileState::default(),
             quit: false,
         }
     }
@@ -1040,6 +1056,7 @@ impl State {
             Msg::Detail(detail) => self.detail = Some(*detail),
             Msg::Calendar(data) => self.calendar.set_data(*data),
             Msg::Activity(days) => self.history.set_activity(days),
+            Msg::Profile(profile) => self.profile = profile,
             Msg::DayEntries(date, entries) => self.history.entries = Some((date, entries)),
             Msg::CalendarChanged(text) => {
                 self.info(text, Level::Success);

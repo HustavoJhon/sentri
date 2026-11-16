@@ -14,7 +14,7 @@ use sentri_app::Sentri;
 use sentri_core::{Action, FeedQuery};
 use tokio::sync::mpsc::{self, UnboundedSender};
 
-use crate::state::{Effect, Msg, Overview, State};
+use crate::state::{Effect, Msg, Overview, ProfileState, State};
 use crate::theme::{Palette, Theme};
 use crate::ui;
 
@@ -61,6 +61,7 @@ async fn event_loop(
         ..State::default()
     };
     execute(&app, &state, Effect::Load, &config_path, &msg_tx);
+    execute(&app, &state, Effect::LoadProfile, &config_path, &msg_tx);
 
     while !state.quit {
         terminal.draw(|frame| ui::draw(frame, &mut state, &theme))?;
@@ -169,6 +170,7 @@ fn execute(
                 let _ = tx.send(Msg::Collected(text));
             });
         }
+        Effect::LoadProfile => load_profile(app, tx),
         Effect::LoadActivity => {
             tokio::spawn(async move {
                 let msg = match app.activity(crate::state::history::DAYS).await {
@@ -200,6 +202,21 @@ fn execute(
             let _ = tx.send(open_url(&url));
         }
     }
+}
+
+/// Loads the GitHub identity shown in the sidebar.
+fn load_profile(app: Sentri, tx: UnboundedSender<Msg>) {
+    tokio::spawn(async move {
+        let profile = match app.github_profile().await {
+            Ok(None) => ProfileState::NotConfigured,
+            Ok(Some(profile)) => {
+                let avatar = app.github_avatar(&profile).await.ok();
+                ProfileState::Ready(Box::new(profile), avatar)
+            }
+            Err(e) => ProfileState::Unavailable(e.to_string()),
+        };
+        let _ = tx.send(Msg::Profile(profile));
+    });
 }
 
 /// Calendar effects. Nothing here talks to Google Calendar.
