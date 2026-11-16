@@ -123,6 +123,7 @@ fn apply_metadata(o: &mut Opportunity, meta: PageMetadata) {
         (None, _) => Cost::Unknown,
     };
     o.category = match s.kind {
+        Some(StructuredKind::Event) if s.hackathon => Category::Hackathon,
         Some(StructuredKind::Event) => classify::category(&o.title).unwrap_or(Category::Event),
         Some(StructuredKind::JobPosting) => classify::category(&o.title)
             .filter(|c| c.is_job())

@@ -35,6 +35,8 @@ pub struct Structured {
     pub free: Option<bool>,
     pub price: Option<String>,
     pub organization: Option<String>,
+    /// The page declares itself a hackathon (`@type: ["Event", "Hackathon"]`).
+    pub hackathon: bool,
 }
 
 /// Everything extracted from a page.
@@ -229,6 +231,7 @@ fn str_at<'a>(node: &'a Value, key: &str) -> Option<&'a str> {
 }
 
 fn from_node(node: &Value) -> Option<Structured> {
+    let hackathon = types(node).contains(&"Hackathon");
     let kind = types(node).into_iter().find_map(|t| match t {
         t if t.ends_with("Event") => Some(StructuredKind::Event),
         "JobPosting" => Some(StructuredKind::JobPosting),
@@ -252,6 +255,7 @@ fn from_node(node: &Value) -> Option<Structured> {
             .map(str::to_owned),
         ..Structured::default()
     };
+    s.hackathon = hackathon;
     s.modality = modality(node);
     let place = node.get("location").or_else(|| node.get("jobLocation"));
     if let Some(place) = place.map(first) {
@@ -402,6 +406,15 @@ mod tests {
         assert_eq!(s.free, Some(true));
         assert_eq!(s.price, None);
         assert!(s.starts_at.is_some() && s.ends_at.is_some());
+    }
+
+    #[test]
+    fn recognizes_declared_hackathons() {
+        let html = r#"<script type="application/ld+json">{"@type":["Event","Hackathon"],"name":"Kiroween",
+          "startDate":"2026-10-30T12:00:00-04:00"}</script>"#;
+        let s = extract(html, &base()).structured;
+        assert_eq!(s.kind, Some(StructuredKind::Event));
+        assert!(s.hackathon);
     }
 
     #[test]
