@@ -4,6 +4,7 @@
 //! - ≥ 80 columns: sidebar · feed (details replace the feed when opened)
 //! - narrower: feed only (Tab switches sections)
 
+mod ascii;
 mod calendar;
 mod charts;
 mod dashboard;
@@ -48,6 +49,9 @@ pub fn draw(frame: &mut Frame, state: &mut State, theme: &Theme) {
     popups::render(frame, state, theme);
     if let crate::state::Mode::Editor(editor) = &state.mode {
         editor::render(frame, editor, theme);
+    }
+    if state.ui.ascii_icons {
+        ascii::asciify(frame.buffer_mut());
     }
 }
 
@@ -466,6 +470,26 @@ mod tests {
         );
         state.calendar.view = crate::state::calendar::CalView::Agenda;
         assert!(render(160, 44, &mut state).contains("Agenda from"));
+    }
+
+    #[test]
+    fn ascii_mode_renders_only_ascii_for_ascii_content() {
+        let mut item = sample();
+        item.item.opportunity.location = Some("Cusco".into());
+        for section in 0..Section::ALL.len() {
+            let mut state = State {
+                section,
+                ..State::default()
+            };
+            state.ui.ascii_icons = true;
+            state.on_msg(Msg::Loaded(vec![item.clone()]));
+            let screen = render(150, 44, &mut state);
+            let bad: String = screen.chars().filter(|c| !c.is_ascii()).collect();
+            assert!(
+                bad.is_empty(),
+                "section {section}: non-ASCII glyphs {bad:?}"
+            );
+        }
     }
 
     #[test]

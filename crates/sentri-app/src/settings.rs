@@ -102,7 +102,7 @@ pub const SETTINGS: &[Setting] = &[
         "ASCII icons",
         SettingKind::Bool,
         "Avoid Unicode symbols",
-        false,
+        true,
     ),
     s(
         "ui.show_sidebar",
