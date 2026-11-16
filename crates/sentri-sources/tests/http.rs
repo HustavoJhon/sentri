@@ -147,3 +147,41 @@ async fn images_have_their_own_type_and_size_limits() {
         "documents and images are fetched separately"
     );
 }
+
+#[tokio::test]
+async fn kaggle_sends_credentials_only_to_the_api() {
+    use sentri_core::{ContentKind, SourceKind};
+    use sentri_sources::{Connector, SourceSpec};
+    use wiremock::matchers::header;
+
+    let server = MockServer::start().await;
+    Mock::given(path("/api/v1/competitions/list"))
+        .and(header("authorization", "Basic dXNlcjprZXk="))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            br#"[{"id":1,"ref":"titanic","title":"Titanic"}]"#.to_vec(),
+            "application/json",
+        ))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let spec = SourceSpec {
+        name: "kaggle".into(),
+        kind: SourceKind::Kaggle,
+        url: Some(format!("{}/api/v1/competitions/list", server.uri())),
+        query: None,
+        target: None,
+        category: None,
+        tags: vec![],
+        max_items: 10,
+        token: Some("user:key".into()),
+        content: ContentKind::Opportunity,
+        stance: None,
+    };
+    let items = Connector::from_spec(spec)
+        .unwrap()
+        .fetch(&local_client(10_000), chrono::Utc::now())
+        .await
+        .unwrap();
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0].category, sentri_core::Category::Competition);
+}

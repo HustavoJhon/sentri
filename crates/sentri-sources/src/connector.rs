@@ -14,6 +14,7 @@ use crate::github::GitHub;
 use crate::hackernews::HackerNews;
 use crate::http::FetchError;
 use crate::ical::Calendar;
+use crate::kaggle::Kaggle;
 use crate::rss::Feed;
 
 /// Everything a connector needs, independent of the configuration format.
@@ -58,6 +59,7 @@ pub enum Connector {
     Calendar(Calendar),
     Gdg(Gdg),
     Devpost(Devpost),
+    Kaggle(Kaggle),
 }
 
 impl Connector {
@@ -74,6 +76,7 @@ impl Connector {
             SourceKind::HackerNews => HackerNews::new(spec).map(Self::HackerNews),
             SourceKind::Gdg => Gdg::new(spec).map(Self::Gdg),
             SourceKind::Devpost => Devpost::new(spec).map(Self::Devpost),
+            SourceKind::Kaggle => Kaggle::new(spec).map(Self::Kaggle),
             // Calendar feeds (`.ics`, `webcal://`).
             SourceKind::ICal | SourceKind::Luma | SourceKind::Meetup => {
                 Calendar::new(spec).map(Self::Calendar)
@@ -90,6 +93,7 @@ impl Connector {
             Self::Calendar(c) => &c.spec,
             Self::Gdg(c) => &c.spec,
             Self::Devpost(c) => &c.spec,
+            Self::Kaggle(c) => &c.spec,
         }
     }
 
@@ -107,6 +111,7 @@ impl Connector {
             Self::Calendar(c) => c.fetch(http, now).await?,
             Self::Gdg(c) => c.fetch(http, now).await?,
             Self::Devpost(c) => c.fetch(http, now).await?,
+            Self::Kaggle(c) => c.fetch(http, now).await?,
         };
         let spec = self.spec();
         Ok(items

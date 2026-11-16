@@ -10,6 +10,7 @@ pub mod github;
 pub mod hackernews;
 pub mod http;
 pub mod ical;
+pub mod kaggle;
 pub mod metadata;
 pub mod net;
 pub mod rss;
