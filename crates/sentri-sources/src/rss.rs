@@ -47,7 +47,17 @@ pub fn parse(
     source_name: &str,
     now: DateTime<Utc>,
 ) -> Result<Vec<Opportunity>, SourceError> {
-    let feed = feed_rs::parser::parse(body).map_err(|e| SourceError::Parse(e.to_string()))?;
+    let feed = match feed_rs::parser::parse(body) {
+        Ok(feed) => feed,
+        // Some WordPress feeds (e.g. blogs.nvidia.com) emit empty
+        // `<media:description></media:description>`, which feed-rs rejects.
+        // Retry once without empty media elements; nothing else changes.
+        Err(first) => {
+            let cleaned = strip_empty_media(&String::from_utf8_lossy(body));
+            feed_rs::parser::parse(cleaned.as_bytes())
+                .map_err(|_| SourceError::Parse(first.to_string()))?
+        }
+    };
     Ok(feed
         .entries
         .into_iter()
@@ -100,6 +110,39 @@ pub fn parse(
         .collect())
 }
 
+/// Removes empty `<media:title>`, `<media:description>` and `<media:text>`
+/// elements (`<media:x ...></media:x>` or `<media:x ... />`).
+fn strip_empty_media(xml: &str) -> String {
+    let mut out = xml.to_owned();
+    for name in ["media:description", "media:title", "media:text"] {
+        let open = format!("<{name}");
+        let close = format!("</{name}>");
+        let mut result = String::with_capacity(out.len());
+        let mut rest = out.as_str();
+        while let Some(start) = rest.find(&open) {
+            let Some(tag_end) = rest[start..].find('>').map(|i| start + i) else {
+                break;
+            };
+            let self_closing = rest[..tag_end].ends_with('/');
+            let after = &rest[tag_end + 1..];
+            let empty_pair = after.trim_start().starts_with(&close);
+            result.push_str(&rest[..start]);
+            if self_closing {
+                rest = after;
+            } else if empty_pair {
+                let close_at = after.find(&close).unwrap_or(0);
+                rest = &after[close_at + close.len()..];
+            } else {
+                result.push_str(&rest[start..=tag_end]);
+                rest = after;
+            }
+        }
+        result.push_str(rest);
+        out = result;
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -144,6 +187,22 @@ mod tests {
         assert_eq!(
             items[0].author.profile_url.as_deref(),
             Some("https://dev.example/ferris")
+        );
+    }
+
+    #[test]
+    fn tolerates_empty_media_elements() {
+        let rss = r#"<?xml version="1.0"?><rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/">
+<channel><title>NVIDIA</title><item><title>AI Day Seoul</title><link>https://blogs.nvidia.com/blog/a/</link>
+<media:content url="https://blogs.nvidia.com/a.jpg" type="image/jpeg"><media:description type="html"></media:description>
+<media:title>Kept</media:title></media:content></item></channel></rss>"#;
+        let items = parse(rss.as_bytes(), "nvidia", Utc::now()).unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].title, "AI Day Seoul");
+        assert!(strip_empty_media("<media:title>Kept</media:title>").contains("Kept"));
+        assert_eq!(
+            strip_empty_media("<a/><media:text type=\"x\"/><b/>"),
+            "<a/><b/>"
         );
     }
 
