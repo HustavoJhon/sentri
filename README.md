@@ -291,6 +291,8 @@ técnica vive en [`docs/`](docs/):
 | [TUI](docs/tui.md) | Distribución, atajos y secciones |
 | [Daemon](docs/daemon.md) | systemd, garantías y despliegue en VPS |
 | [Base de datos](docs/database.md) | Modelo, migraciones, backups y permisos |
+| [Edición](docs/editing.md) | Datos detectados vs. correcciones manuales |
+| [Calendario](docs/calendar.md) | Vistas, entradas y Google Calendar |
 | [Roadmap](docs/roadmap.md) | Fases y próximos pasos |
 | [ADR](docs/adr/) | Decisiones de arquitectura |
 

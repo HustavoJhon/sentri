@@ -11,7 +11,7 @@ Las fases son incrementales; cada una termina con funcionalidad probada.
 | 4 | TUI: Gruvbox, dashboard, feed, detalles, atajos, command palette | ✅ |
 | 5 | Conectores: RSS/Atom ✅, GitHub ✅, Hacker News, iCalendar (Reddit descartado, ver sources.md) | 🚧 |
 | 6 | Intereses, scoring, explicaciones, personalización | 🚧 (base hecha en fase 1) |
-| 7 | Eventos y Google Calendar (OAuth2) | ⏳ |
+| 7 | Eventos y Google Calendar (OAuth2) | 🚧 calendario local completo; Google sin conectar |
 | 8 | Cursos, certificados, proyectos open source, aprendizaje | ⏳ |
 | 9 | Empleos, perfil profesional, compatibilidad | ⏳ |
 | 10 | Asistencia a inscripciones con confirmación explícita | ⏳ |
@@ -31,3 +31,20 @@ un orden desde el primer día; la fase 6 lo amplía con personalización.
 4. Fase 7: Google Calendar con OAuth2 (requiere crear credenciales en Google Cloud;
    se dejará documentado sin inventar credenciales).
 5. Afinidad: excluir la propia oportunidad al explicar "similar a lo que guardaste".
+
+## Fase de evolución visual (2026-11-15)
+
+Hecho: dashboard con gráficos, Tech News (HN, Google News RSS, medios y blogs
+oficiales), cards con densidades, Details enriquecido con imágenes, editor
+completo con capas detectado/manual, registro de redes sociales, calendario
+mes/semana/día/agenda, heatmap de actividad, perfil y avatar de GitHub,
+Settings editables.
+
+Pendiente de esta fase:
+
+- Personalizar atajos de teclado (hoy solo consultables).
+- Preferencias de calendario (inicio de semana, colores) y Google Calendar.
+- Iconos ASCII completos cuando `ascii_icons = true` (la opción ya existe y se
+  guarda; falta sustituir todos los glifos).
+- Reclasificar noticias antiguas tras mejorar la heurística (las ya guardadas
+  conservan su naturaleza detectada).

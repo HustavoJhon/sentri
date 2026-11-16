@@ -44,9 +44,35 @@ Ratón: rueda para desplazarse, clic para seleccionar, segundo clic abre detalle
 
 ## Secciones
 
-Dashboard, Discover, Jobs, Courses, Events, Hackathons, Scholarships,
-Volunteering, Open Source, Travel, Saved, Likes, Applications, Calendar
-(fechas próximas por deadline), History, Sources, Settings.
+| Sección | Contenido |
+|---|---|
+| Dashboard | Contadores, descubiertas por día (barras), likes/guardados (sparklines), distribución por categoría/fuente/modalidad, recomendaciones, próximas fechas, últimas noticias |
+| Discover | Oportunidades (no noticias). Buscar desde aquí busca en todo |
+| Tech News | Noticias con naturaleza (Reported, Official, Unconfirmed, Opinion, Discussion), tema, medio y autor |
+| Jobs … Travel | Vistas por categoría |
+| Saved, Likes, Applications | Listas personales (oportunidades y noticias) |
+| Calendar | Mes, semana, día y agenda ([calendar.md](calendar.md)) |
+| History | Mapa de actividad anual, rachas y resumen por día (`h`/`l` día, `H`/`L` semana, `t` hoy) |
+| Sources | Estado de cada fuente |
+| Settings | Formulario editable ([configuration.md](configuration.md)) |
+
+## Cards
+
+`v` alterna **compact** (1 línea), **comfortable** (2) y **detailed**
+(con descripción). `◆` marca hackathons, becas, empleos, premios, viajes y
+cursos gratuitos; `NEW` marca lo descubierto en 24 h y aún no abierto.
+
+## Details y editor
+
+Cabecera con plataforma, autor/usuario y avatar si la fuente lo declara;
+imagen (half-blocks) si existe; fechas separadas (evento, deadline, inicio,
+fin); notas; recomendación de SENTRI con barras; campos editados frente a
+detectados; historial. `E` abre el editor ([editing.md](editing.md)).
+
+## Perfil
+
+Con `[github] username`, la parte inferior de la barra lateral muestra tu
+avatar, nombre, usuario y repositorios públicos.
 
 ## Badges de fuentes
 

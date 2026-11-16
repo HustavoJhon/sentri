@@ -65,3 +65,36 @@ postulado/inscrito +3, descartado −3.
 | `tags` | Etiquetas añadidas a cada ítem. |
 | `max_items` | 1–500 (50 por defecto). |
 | `token_env` | **Nombre** de la variable de entorno con el token. Nunca el token. |
+
+## `[ui]`
+
+| Clave | Valores |
+|---|---|
+| `density` | `compact`, `comfortable`, `detailed` |
+| `images` | `halfblock` (por defecto), `ascii`, `off` |
+| `colors` | `auto`, `truecolor`, `indexed` |
+| `ascii_icons` | `true`/`false` |
+| `show_sidebar`, `show_details` | `true`/`false` |
+| `feed_width` | 30–80 (% del área principal) |
+| `cache_dir` | Caché de imágenes y avatar (`~/.cache/sentri/images`) |
+
+## `[github]`
+
+`username`: tu usuario público. Solo se lee `GET /users/<usuario>` (sin token,
+60 peticiones/hora); se guarda en caché 24 h. El avatar aparece abajo a la
+izquierda; si falla, se muestran tus iniciales.
+
+## `[daemon]`
+
+`interval_minutes` (≥ 15).
+
+## Fuentes de noticias
+
+En `[[sources]]`, `content = "news"` envía los ítems a **Tech News** y
+`stance` fija la naturaleza por defecto (`official` para blogs de empresa,
+`discussion` para redes). Tipos de feed: `rss`, `googlenews`, `mastodon`,
+`bluesky`, `youtube`; `hackernews` usa la API de Algolia (`query` opcional,
+`target = "jobs"`).
+
+Todo lo anterior también se edita desde **Settings** en la TUI
+(`Ctrl-s` guarda con backup; `D` restaura los valores por defecto).
