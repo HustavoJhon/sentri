@@ -7,6 +7,7 @@ pub mod connector;
 pub mod github;
 pub mod hackernews;
 pub mod http;
+pub mod ical;
 pub mod metadata;
 pub mod net;
 pub mod rss;

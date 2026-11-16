@@ -11,6 +11,7 @@ use crate::SafeClient;
 use crate::github::GitHub;
 use crate::hackernews::HackerNews;
 use crate::http::FetchError;
+use crate::ical::Calendar;
 use crate::rss::Feed;
 
 /// Everything a connector needs, independent of the configuration format.
@@ -52,6 +53,7 @@ pub enum Connector {
     Feed(Feed),
     GitHub(GitHub),
     HackerNews(HackerNews),
+    Calendar(Calendar),
 }
 
 impl Connector {
@@ -66,6 +68,10 @@ impl Connector {
             | SourceKind::YouTube => Feed::new(spec).map(Self::Feed),
             SourceKind::GitHub => GitHub::new(spec).map(Self::GitHub),
             SourceKind::HackerNews => HackerNews::new(spec).map(Self::HackerNews),
+            // Calendar feeds (`.ics`, `webcal://`).
+            SourceKind::ICal | SourceKind::Luma | SourceKind::Meetup => {
+                Calendar::new(spec).map(Self::Calendar)
+            }
             other => Err(SourceError::Unsupported(other)),
         }
     }
@@ -75,6 +81,7 @@ impl Connector {
             Self::Feed(c) => &c.spec,
             Self::GitHub(c) => &c.spec,
             Self::HackerNews(c) => &c.spec,
+            Self::Calendar(c) => &c.spec,
         }
     }
 
@@ -89,6 +96,7 @@ impl Connector {
             Self::Feed(c) => c.fetch(http, now).await?,
             Self::GitHub(c) => c.fetch(http, now).await?,
             Self::HackerNews(c) => c.fetch(http, now).await?,
+            Self::Calendar(c) => c.fetch(http, now).await?,
         };
         let spec = self.spec();
         Ok(items
