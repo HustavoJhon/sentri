@@ -68,6 +68,13 @@ interval_minutes = 120
 [github]
 # username = "your-github-user"
 
+# Calendar preferences. Google Calendar sync is not implemented yet;
+# `sentri calendar-doctor` checks the OAuth setup you can prepare today.
+[calendar]
+week_start = "monday"     # monday | sunday
+default_view = "month"    # month | week | day | agenda
+# google_credentials = "~/.config/sentri/google-oauth.json"
+
 # Appearance (also editable from Settings in the TUI).
 [ui]
 density = "comfortable"   # compact | comfortable | detailed

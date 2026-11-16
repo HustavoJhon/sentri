@@ -114,6 +114,36 @@ impl Default for UiConfig {
     }
 }
 
+/// Local calendar preferences and Google Calendar setup.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct CalendarConfig {
+    /// `monday` or `sunday`.
+    pub week_start: String,
+    /// `month`, `week`, `day` or `agenda`.
+    pub default_view: String,
+    /// OAuth client file for the future Google Calendar sync.
+    pub google_credentials: Option<PathBuf>,
+}
+
+impl Default for CalendarConfig {
+    fn default() -> Self {
+        Self {
+            week_start: "monday".into(),
+            default_view: "month".into(),
+            google_credentials: None,
+        }
+    }
+}
+
+impl CalendarConfig {
+    pub fn credentials_path(&self) -> PathBuf {
+        self.google_credentials
+            .clone()
+            .unwrap_or_else(crate::google::default_credentials_path)
+    }
+}
+
 /// GitHub identity (public profile only; no token needed).
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -193,6 +223,7 @@ pub struct Config {
     pub daemon: DaemonConfig,
     pub ui: UiConfig,
     pub github: GitHubConfig,
+    pub calendar: CalendarConfig,
     pub sources: Vec<SourceConfig>,
 }
 
@@ -301,6 +332,16 @@ impl Config {
             return Err(ConfigError::Invalid(format!(
                 "github.username {user:?} is not a valid GitHub username"
             )));
+        }
+        if !["monday", "sunday"].contains(&self.calendar.week_start.as_str()) {
+            return Err(ConfigError::Invalid(
+                "calendar.week_start must be monday or sunday".into(),
+            ));
+        }
+        if !["month", "week", "day", "agenda"].contains(&self.calendar.default_view.as_str()) {
+            return Err(ConfigError::Invalid(
+                "calendar.default_view must be month, week, day or agenda".into(),
+            ));
         }
         if self.daemon.interval_minutes < 15 {
             return Err(ConfigError::Invalid(

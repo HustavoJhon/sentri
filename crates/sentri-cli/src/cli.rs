@@ -55,6 +55,8 @@ pub enum Command {
     Schedule { id: i64 },
     /// Synchronize with Google Calendar.
     Sync,
+    /// Check the Google Calendar setup (never sends anything to Google).
+    CalendarDoctor,
     /// Re-apply the current news stance rules to stored news (dry run by
     /// default). Manual edits, likes, saves and notes are never changed.
     ReclassifyNews {

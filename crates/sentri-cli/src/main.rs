@@ -94,6 +94,7 @@ async fn run(app: &Sentri, command: Command) -> Result<()> {
         Command::Calendar { days } => calendar(app, days).await?,
         Command::Schedule { id } => schedule(app, OpportunityId(id)).await?,
         Command::Sync => sync(app),
+        Command::CalendarDoctor => calendar_doctor(app),
         Command::ReclassifyNews { apply, undo } => reclassify(app, apply, undo).await?,
         Command::Fields => {
             for field in Field::ALL {
@@ -287,11 +288,31 @@ async fn reclassify(app: &Sentri, apply: bool, undo: Option<String>) -> Result<(
     Ok(())
 }
 
+fn calendar_doctor(app: &Sentri) {
+    let d = sentri_app::google::diagnose(&app.config().calendar.credentials_path());
+    println!("Google Calendar setup");
+    for c in &d.checks {
+        println!(
+            "  {} {:<24} {}",
+            if c.ok { "✓" } else { "✗" },
+            c.label,
+            c.detail
+        );
+    }
+    println!("Connected: no");
+    if !d.next_steps.is_empty() {
+        println!("Next steps:");
+        for step in &d.next_steps {
+            println!("  • {step}");
+        }
+    }
+}
+
 fn sync(app: &Sentri) {
     match app.google_sync() {
         sentri_app::GoogleSync::NotConnected => println!(
-            "Google Calendar is not connected: OAuth credentials are not configured yet.\n\
-             Nothing was synchronized. See docs/calendar.md."
+            "Google Calendar is not connected: sync is not implemented yet.\n\
+             Nothing was synchronized. Run `sentri calendar-doctor` to check your setup."
         ),
     }
 }

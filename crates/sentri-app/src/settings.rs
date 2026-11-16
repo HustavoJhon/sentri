@@ -260,6 +260,8 @@ pub fn current(config: &Config, key: &str) -> Option<String> {
         "profile.country" => text(&config.profile.country),
         "github.username" => text(&config.github.username),
         "daemon.interval_minutes" => config.daemon.interval_minutes.to_string(),
+        "calendar.week_start" => config.calendar.week_start.clone(),
+        "calendar.default_view" => config.calendar.default_view.clone(),
         "http.timeout_secs" => config.http.timeout_secs.to_string(),
         "scoring.home_city" => config.scoring.home_city.to_string(),
         "scoring.travel" => config.scoring.travel.to_string(),

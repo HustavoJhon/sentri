@@ -7,6 +7,7 @@ pub mod calendar;
 pub mod collect;
 pub mod config;
 pub mod daemon;
+pub mod google;
 pub mod images;
 pub mod links;
 pub mod paths;
