@@ -357,7 +357,7 @@ impl Opportunity {
         [self.dates.deadline, self.dates.starts_at]
             .into_iter()
             .flatten()
-            .filter(|d| *d >= now)
+            .filter(|d| crate::dates::effective_end(*d) >= now)
             .min()
     }
 }

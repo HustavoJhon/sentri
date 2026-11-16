@@ -25,6 +25,16 @@ pub fn calendar_date(
     }
 }
 
+/// The instant a date stops being upcoming: all-day values last until the
+/// end of their day.
+pub fn effective_end(d: DateTime<Utc>) -> DateTime<Utc> {
+    if is_all_day(d) {
+        d + chrono::Duration::days(1)
+    } else {
+        d
+    }
+}
+
 /// Midnight UTC of a date: the stored form of an all-day value.
 pub fn all_day(date: NaiveDate) -> DateTime<Utc> {
     date.and_time(NaiveTime::MIN).and_utc()

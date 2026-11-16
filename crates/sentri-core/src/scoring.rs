@@ -261,6 +261,7 @@ impl Scorer<'_> {
         let Some(deadline) = o.dates.deadline else {
             return;
         };
+        let deadline = crate::dates::effective_end(deadline);
         if deadline < self.now {
             r.add(w.deadline_passed, "Deadline has passed");
         } else if deadline - self.now <= Duration::days(w.deadline_soon_days) {
@@ -419,6 +420,17 @@ mod tests {
 
         let job = opp("PHP job", Category::Job);
         assert!(score(&job, &affinity).score < 0);
+    }
+
+    #[test]
+    fn all_day_deadlines_last_the_whole_day() {
+        let mut today = opp("Call", Category::Call);
+        today.dates.deadline = Some(crate::dates::all_day(now().date_naive()));
+        assert_eq!(
+            score(&today, &Affinity::default()).score,
+            10,
+            "still open today"
+        );
     }
 
     #[test]
