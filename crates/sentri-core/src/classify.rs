@@ -359,9 +359,15 @@ pub fn category(text: &str) -> Option<Category> {
 /// source's configured stance) and finally to a plain report.
 pub fn stance(headline: &str, body: &str, fallback: Option<Stance>) -> Stance {
     let headline = headline.to_lowercase();
-    let all = format!("{headline} {}", body.to_lowercase());
-    // Unconfirmed wording anywhere wins: rumors must never look like facts.
-    if any(&all, SPECULATION) {
+    let body = body.to_lowercase();
+    // Unconfirmed wording wins, so rumors never look like facts. A single
+    // word in a long body is weak evidence (it may quote or deny a rumor),
+    // so the body needs two distinct signals; the headline needs one.
+    let body_signals = SPECULATION
+        .iter()
+        .filter(|t| contains_term(&body, t))
+        .count();
+    if any(&headline, SPECULATION) || body_signals >= 2 {
         Stance::Speculation
     } else if any(&headline, DISCUSSION) {
         Stance::Discussion
@@ -485,12 +491,26 @@ mod tests {
     #[test]
     fn classifies_news_without_claiming_verification() {
         assert_eq!(
+            stance("NVIDIA reportedly plans new GPU", "", None),
+            Stance::Speculation
+        );
+        assert_eq!(
             stance(
                 "NVIDIA plans new GPU",
-                "according to sources familiar",
+                "people familiar with the plan say it is reportedly late",
                 None
             ),
-            Stance::Speculation
+            Stance::Speculation,
+            "two signals in the body"
+        );
+        assert_eq!(
+            stance(
+                "Company denies layoffs",
+                "The CEO dismissed the rumor on Monday.",
+                None
+            ),
+            Stance::Report,
+            "one isolated keyword in the body is not enough"
         );
         assert_eq!(
             stance("Ask HN: Is Rust worth it?", "", None),
