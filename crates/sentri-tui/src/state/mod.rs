@@ -1094,7 +1094,9 @@ impl State {
         if let Some(density) = Density::from_name(&ui.density) {
             self.density = density;
         }
+        let selected = self.settings.selected;
         self.settings = SettingsState::from_config(&saved.config);
+        self.settings.selected = selected.min(self.settings.rows.len().saturating_sub(1));
         self.overview.config = saved.config;
         let mut text = String::from("Settings saved");
         if let Some(backup) = saved.backup {
