@@ -13,6 +13,7 @@ pub mod paths;
 pub mod profile;
 pub mod ranking;
 pub mod service;
+pub mod settings;
 
 pub use calendar::{CalendarData, GoogleSync};
 pub use collect::CollectReport;
