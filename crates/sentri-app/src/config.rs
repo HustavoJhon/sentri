@@ -271,7 +271,11 @@ impl Config {
                 )));
             }
             if let Some(url) = &source.url {
-                CanonicalUrl::parse(url).map_err(|e| {
+                // `webcal://` is how calendars offer subscriptions; it is https.
+                let url = url
+                    .strip_prefix("webcal://")
+                    .map_or_else(|| url.clone(), |rest| format!("https://{rest}"));
+                CanonicalUrl::parse(&url).map_err(|e| {
                     ConfigError::Invalid(format!("source {name:?} has an invalid url: {e}"))
                 })?;
             }
@@ -355,6 +359,7 @@ mod tests {
             "[[sources]]\nname = \"a\"\nkind = \"rss\"\n[[sources]]\nname = \"a\"\nkind = \"rss\"",
             "[[sources]]\nname = \"a b\"\nkind = \"rss\"",
             "[[sources]]\nname = \"a\"\nkind = \"rss\"\nurl = \"file:///etc/passwd\"",
+            "[[sources]]\nname = \"a\"\nkind = \"ical\"\nurl = \"webcal:/nohost\"",
             "[[sources]]\nname = \"a\"\nkind = \"nope\"",
             "[[sources]]\nname = \"a\"\nkind = \"rss\"\nmax_items = 0",
             "[daemon]\ninterval_minutes = 1",
@@ -365,6 +370,13 @@ mod tests {
                 "accepted: {text}"
             );
         }
+    }
+
+    #[test]
+    fn accepts_webcal_subscriptions() {
+        let text =
+            "[[sources]]\nname = \"l\"\nkind = \"luma\"\nurl = \"webcal://api.lu.ma/ics/get?id=1\"";
+        assert!(Config::parse(text, Path::new("x")).is_ok());
     }
 
     #[test]
