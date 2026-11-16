@@ -15,5 +15,5 @@ pub mod metadata;
 pub mod net;
 pub mod rss;
 
-pub use connector::{Connector, SourceError, SourceSpec};
-pub use http::{FetchError, Fetched, HttpLimits, SafeClient};
+pub use connector::{Connector, Incremental, SourceError, SourceSpec};
+pub use http::{FetchError, Fetched, HttpLimits, SafeClient, Validators};

@@ -185,3 +185,34 @@ async fn kaggle_sends_credentials_only_to_the_api() {
     assert_eq!(items.len(), 1);
     assert_eq!(items[0].category, sentri_core::Category::Competition);
 }
+
+#[tokio::test]
+async fn conditional_requests_report_not_modified() {
+    use sentri_sources::Validators;
+    use wiremock::matchers::header;
+    let server = MockServer::start().await;
+    Mock::given(path("/feed"))
+        .and(header("if-none-match", "\"v1\""))
+        .respond_with(ResponseTemplate::new(304))
+        .mount(&server)
+        .await;
+    Mock::given(path("/feed"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("etag", "\"v1\"")
+                .set_body_raw(b"<rss/>".to_vec(), "application/rss+xml"),
+        )
+        .mount(&server)
+        .await;
+    let client = local_client(1_000);
+    let url = Url::parse(&format!("{}/feed", server.uri())).unwrap();
+    let first = client
+        .get_conditional(&url, &Validators::default())
+        .await
+        .unwrap();
+    assert_eq!(first.validators.etag.as_deref(), Some("\"v1\""));
+    assert!(matches!(
+        client.get_conditional(&url, &first.validators).await,
+        Err(FetchError::NotModified)
+    ));
+}

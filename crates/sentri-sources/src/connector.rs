@@ -13,6 +13,7 @@ use crate::gdg::Gdg;
 use crate::github::GitHub;
 use crate::hackernews::HackerNews;
 use crate::http::FetchError;
+use crate::http::Validators;
 use crate::ical::Calendar;
 use crate::kaggle::Kaggle;
 use crate::rss::Feed;
@@ -48,6 +49,15 @@ pub enum SourceError {
     Config(String),
     #[error("{0} is not supported as an automatic source (see docs/sources.md)")]
     Unsupported(SourceKind),
+}
+
+/// Result of an incremental fetch.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Incremental {
+    /// `None` when the source confirmed nothing changed (HTTP 304).
+    pub items: Option<Vec<Opportunity>>,
+    /// Validators to send next time.
+    pub validators: Validators,
 }
 
 /// A configured, ready-to-run connector.
@@ -97,6 +107,46 @@ impl Connector {
         }
     }
 
+    /// Like [`fetch`](Self::fetch), but sends cache validators where the
+    /// source supports them (RSS/Atom and iCal feeds).
+    pub async fn fetch_incremental(
+        &self,
+        http: &SafeClient,
+        now: DateTime<Utc>,
+        validators: &Validators,
+    ) -> Result<Incremental, SourceError> {
+        let fetched = match self {
+            Self::Feed(c) => c.fetch_conditional(http, now, validators).await,
+            Self::Calendar(c) => c.fetch_conditional(http, now, validators).await,
+            _ => {
+                return Ok(Incremental {
+                    items: Some(self.fetch(http, now).await?),
+                    validators: Validators::default(),
+                });
+            }
+        };
+        match fetched {
+            Ok((items, validators)) => Ok(Incremental {
+                items: Some(self.finish_all(items)),
+                validators,
+            }),
+            Err(SourceError::Fetch(FetchError::NotModified)) => Ok(Incremental {
+                items: None,
+                validators: validators.clone(),
+            }),
+            Err(e) => Err(e),
+        }
+    }
+
+    fn finish_all(&self, items: Vec<Opportunity>) -> Vec<Opportunity> {
+        let spec = self.spec();
+        items
+            .into_iter()
+            .take(spec.max_items)
+            .map(|o| finish(o, spec))
+            .collect()
+    }
+
     /// Downloads and normalizes items. Items are sanitized and capped at
     /// `max_items`.
     pub async fn fetch(
@@ -113,12 +163,7 @@ impl Connector {
             Self::Devpost(c) => c.fetch(http, now).await?,
             Self::Kaggle(c) => c.fetch(http, now).await?,
         };
-        let spec = self.spec();
-        Ok(items
-            .into_iter()
-            .take(spec.max_items)
-            .map(|o| finish(o, spec))
-            .collect())
+        Ok(self.finish_all(items))
     }
 }
 

@@ -36,6 +36,9 @@ pub enum FetchError {
     TooLarge(u64),
     #[error("unsupported content type {0:?}")]
     ContentType(String),
+    /// The server confirmed the cached copy is current (HTTP 304).
+    #[error("not modified")]
+    NotModified,
 }
 
 /// Limits applied to every request.
@@ -66,6 +69,39 @@ pub struct Fetched {
     pub url: Url,
     pub content_type: String,
     pub body: Vec<u8>,
+    /// Cache validators for the next conditional request.
+    pub validators: Validators,
+}
+
+/// HTTP cache validators (`ETag`, `Last-Modified`).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Validators {
+    pub etag: Option<String>,
+    pub last_modified: Option<String>,
+}
+
+impl Validators {
+    fn headers(&self) -> Vec<(&'static str, String)> {
+        let mut out = Vec::new();
+        if let Some(etag) = &self.etag {
+            out.push(("if-none-match", etag.clone()));
+        }
+        if let Some(date) = &self.last_modified {
+            out.push(("if-modified-since", date.clone()));
+        }
+        out
+    }
+}
+
+/// One request's parameters.
+struct Request<'a> {
+    url: &'a Url,
+    headers: &'a [(&'a str, String)],
+    /// Headers carry credentials: never follow redirects.
+    credentials: bool,
+    accepted: &'a [&'a str],
+    accept: &'a str,
+    max: u64,
 }
 
 impl Fetched {
@@ -163,49 +199,75 @@ impl SafeClient {
         url: &Url,
         headers: &[(&str, String)],
     ) -> Result<Fetched, FetchError> {
-        self.fetch(
+        self.fetch(Request {
             url,
             headers,
-            ACCEPTED_TYPES,
-            DOCUMENT_ACCEPT,
-            self.limits.max_body_bytes,
-        )
+            credentials: !headers.is_empty(),
+            accepted: ACCEPTED_TYPES,
+            accept: DOCUMENT_ACCEPT,
+            max: self.limits.max_body_bytes,
+        })
+        .await
+    }
+
+    /// Conditional GET: returns `Err(FetchError::NotModified)` when the
+    /// server confirms the previous copy is current. Redirects are followed
+    /// (validators are not credentials).
+    pub async fn get_conditional(
+        &self,
+        url: &Url,
+        validators: &Validators,
+    ) -> Result<Fetched, FetchError> {
+        let headers = validators.headers();
+        self.fetch(Request {
+            url,
+            headers: &headers,
+            credentials: false,
+            accepted: ACCEPTED_TYPES,
+            accept: DOCUMENT_ACCEPT,
+            max: self.limits.max_body_bytes,
+        })
         .await
     }
 
     /// Downloads an image (PNG, JPEG, WebP or GIF) of at most `max_bytes`.
     /// The bytes are untrusted: decode them with dimension limits.
     pub async fn get_image(&self, url: &Url, max_bytes: u64) -> Result<Fetched, FetchError> {
-        self.fetch(
+        self.fetch(Request {
             url,
-            &[],
-            IMAGE_TYPES,
-            "image/png,image/jpeg,image/webp,image/gif",
-            max_bytes,
-        )
+            headers: &[],
+            credentials: false,
+            accepted: IMAGE_TYPES,
+            accept: "image/png,image/jpeg,image/webp,image/gif",
+            max: max_bytes,
+        })
         .await
     }
 
-    async fn fetch(
-        &self,
-        url: &Url,
-        headers: &[(&str, String)],
-        accepted: &[&str],
-        accept_header: &str,
-        max: u64,
-    ) -> Result<Fetched, FetchError> {
+    async fn fetch(&self, req: Request<'_>) -> Result<Fetched, FetchError> {
+        let Request {
+            url,
+            headers,
+            credentials,
+            accepted,
+            accept,
+            max,
+        } = req;
         check_url(url, self.limits.allow_private_networks).map_err(FetchError::Forbidden)?;
-        let client = if headers.is_empty() {
-            &self.client
-        } else {
+        let client = if credentials {
             &self.authenticated
+        } else {
+            &self.client
         };
-        let mut request = client.get(url.clone()).header(ACCEPT, accept_header);
+        let mut request = client.get(url.clone()).header(ACCEPT, accept);
         for (name, value) in headers {
             request = request.header(*name, value);
         }
         let mut response = request.send().await?;
         let status = response.status();
+        if status == reqwest::StatusCode::NOT_MODIFIED {
+            return Err(FetchError::NotModified);
+        }
         if !status.is_success() {
             return Err(FetchError::Status(status.as_u16()));
         }
@@ -222,6 +284,18 @@ impl SafeClient {
         if response.content_length().is_some_and(|len| len > max) {
             return Err(FetchError::TooLarge(max));
         }
+        let header = |name| {
+            response
+                .headers()
+                .get(name)
+                .and_then(|v: &reqwest::header::HeaderValue| v.to_str().ok())
+                .filter(|v| v.len() < 512)
+                .map(str::to_owned)
+        };
+        let validators = Validators {
+            etag: header(reqwest::header::ETAG),
+            last_modified: header(reqwest::header::LAST_MODIFIED),
+        };
         let mut body = Vec::new();
         while let Some(chunk) = response.chunk().await? {
             if body.len() as u64 + chunk.len() as u64 > max {
@@ -233,6 +307,7 @@ impl SafeClient {
             url: response.url().clone(),
             content_type,
             body,
+            validators,
         })
     }
 }

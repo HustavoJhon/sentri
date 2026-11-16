@@ -11,6 +11,7 @@ use url::Url;
 
 use crate::SafeClient;
 use crate::connector::{SourceError, SourceSpec};
+use crate::http::Validators;
 
 /// Cap on parsed events, so a huge feed cannot exhaust memory.
 const MAX_EVENTS: usize = 5_000;
@@ -41,12 +42,24 @@ impl Calendar {
         http: &SafeClient,
         now: DateTime<Utc>,
     ) -> Result<Vec<Opportunity>, SourceError> {
-        let page = http.get(&self.url).await?;
+        Ok(self
+            .fetch_conditional(http, now, &Validators::default())
+            .await?
+            .0)
+    }
+
+    pub async fn fetch_conditional(
+        &self,
+        http: &SafeClient,
+        now: DateTime<Utc>,
+        validators: &Validators,
+    ) -> Result<(Vec<Opportunity>, Validators), SourceError> {
+        let page = http.get_conditional(&self.url, validators).await?;
         let text = String::from_utf8_lossy(&page.body);
         let mut items = parse(&text, &self.spec.name, self.spec.kind, now)?;
         // Soonest first, so `max_items` keeps the nearest events.
         items.sort_by_key(|o| o.dates.starts_at);
-        Ok(items)
+        Ok((items, page.validators))
     }
 }
 

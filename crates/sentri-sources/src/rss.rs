@@ -6,6 +6,7 @@ use url::Url;
 
 use crate::SafeClient;
 use crate::connector::{SourceError, SourceSpec};
+use crate::http::Validators;
 use crate::metadata::html_to_text;
 
 /// A configured feed.
@@ -30,13 +31,25 @@ impl Feed {
         http: &SafeClient,
         now: DateTime<Utc>,
     ) -> Result<Vec<Opportunity>, SourceError> {
-        let page = http.get(&self.url).await?;
+        Ok(self
+            .fetch_conditional(http, now, &Validators::default())
+            .await?
+            .0)
+    }
+
+    pub async fn fetch_conditional(
+        &self,
+        http: &SafeClient,
+        now: DateTime<Utc>,
+        validators: &Validators,
+    ) -> Result<(Vec<Opportunity>, Validators), SourceError> {
+        let page = http.get_conditional(&self.url, validators).await?;
         let mut items = parse(&page.body, &self.spec.name, now)?;
         // Keep the platform badge (Mastodon, YouTube…) for feed-based sources.
         for item in &mut items {
             item.source = self.spec.kind;
         }
-        Ok(items)
+        Ok((items, page.validators))
     }
 }
 
