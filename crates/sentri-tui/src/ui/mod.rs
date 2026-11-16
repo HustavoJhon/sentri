@@ -452,6 +452,16 @@ mod tests {
         assert!(screen.contains("Mon"));
         assert!(screen.contains("Rust meetup"));
         assert!(screen.contains("Google Calendar: not connected"));
+        state.calendar.sunday_first = true;
+        let sunday = render(160, 44, &mut state);
+        let header = sunday
+            .lines()
+            .find(|l| l.contains("Mon") && l.contains("Sun"))
+            .unwrap();
+        assert!(
+            header.find("Sun") < header.find("Mon"),
+            "weeks start on Sunday"
+        );
         state.calendar.view = crate::state::calendar::CalView::Agenda;
         assert!(render(160, 44, &mut state).contains("Agenda from"));
     }

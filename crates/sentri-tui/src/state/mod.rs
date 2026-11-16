@@ -279,6 +279,7 @@ pub enum Effect {
     LoadActivity,
     LoadDay(chrono::NaiveDate),
     LoadProfile,
+    CalendarDoctor,
     SaveSettings(Vec<(String, String)>),
     SaveSource {
         original: Option<String>,
@@ -552,6 +553,7 @@ impl State {
                 self.info(text, Level::Info);
                 Vec::new()
             }
+            CalEffect::Doctor => vec![Effect::CalendarDoctor],
             CalEffect::Open(item) => {
                 let id = item.id;
                 self.items = vec![Ranked {
@@ -1135,6 +1137,7 @@ impl State {
         if let Some(density) = Density::from_name(&ui.density) {
             self.density = density;
         }
+        self.calendar.sunday_first = saved.config.calendar.week_start == "sunday";
         let selected = self.settings.selected;
         self.settings = SettingsState::from_config(&saved.config);
         self.settings.selected = selected.min(self.settings.rows.len().saturating_sub(1));

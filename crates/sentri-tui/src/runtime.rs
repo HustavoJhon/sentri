@@ -58,6 +58,11 @@ async fn event_loop(
         loading: true,
         density: crate::state::Density::from_name(&ui.density).unwrap_or_default(),
         ui: crate::state::UiPrefs::from_config(ui, palette == Palette::INDEXED),
+        calendar: crate::state::calendar::CalendarState {
+            view: crate::state::calendar::CalView::from_name(&app.config().calendar.default_view),
+            sunday_first: app.config().calendar.week_start == "sunday",
+            ..crate::state::calendar::CalendarState::default()
+        },
         ..State::default()
     };
     execute(&app, &state, Effect::Load, &config_path, &msg_tx);
@@ -171,6 +176,19 @@ fn execute(
             });
         }
         Effect::LoadProfile => load_profile(app, tx),
+        Effect::CalendarDoctor => {
+            let d = sentri_app::google::diagnose(&app.config().calendar.credentials_path());
+            let failed: Vec<String> = d
+                .checks
+                .iter()
+                .filter(|c| !c.ok)
+                .map(|c| format!("{}: {}", c.label, c.detail))
+                .collect();
+            let _ = tx.send(Msg::Info(format!(
+                "Google Calendar not connected · {} · run `sentri calendar-doctor` for steps",
+                failed.join(" · ")
+            )));
+        }
         source @ (Effect::SaveSource { .. }
         | Effect::DeleteSource(_)
         | Effect::ToggleSource(..)

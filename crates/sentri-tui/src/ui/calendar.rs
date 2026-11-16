@@ -12,11 +12,20 @@ use sentri_core::EntryKind;
 
 use super::widgets::panel;
 use crate::state::calendar::{
-    CalInput, CalItem, CalView, CalendarState, first_of_month, week_start,
+    CalInput, CalItem, CalView, CalendarState, first_of_month, week_start_on,
 };
 use crate::theme::Theme;
 
 const WEEKDAYS: [&str; 7] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const WEEKDAYS_SUNDAY: [&str; 7] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+const fn weekdays(c: &CalendarState) -> [&'static str; 7] {
+    if c.sunday_first {
+        WEEKDAYS_SUNDAY
+    } else {
+        WEEKDAYS
+    }
+}
 
 fn item_color(theme: &Theme, item: &CalItem) -> Color {
     match (item.kind, item.category) {
@@ -57,7 +66,7 @@ pub fn render(frame: &mut Frame, area: Rect, c: &CalendarState, theme: &Theme) {
     let title = match c.view {
         CalView::Month => c.cursor.format("%B %Y").to_string(),
         CalView::Week => {
-            let start = week_start(c.cursor);
+            let start = week_start_on(c.cursor, c.sunday_first);
             format!("Week of {}", start.format("%d %b %Y"))
         }
         CalView::Day => c.cursor.format("%A %d %B %Y").to_string(),
@@ -96,13 +105,13 @@ pub fn render(frame: &mut Frame, area: Rect, c: &CalendarState, theme: &Theme) {
 fn month(frame: &mut Frame, area: Rect, c: &CalendarState, theme: &Theme) {
     let [head, grid] = Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(area);
     let cols = Layout::horizontal(vec![Constraint::Fill(1); 7]).split(head);
-    for (i, name) in WEEKDAYS.iter().enumerate() {
+    for (i, name) in weekdays(c).iter().enumerate() {
         frame.render_widget(
             Paragraph::new(Span::styled(*name, theme.muted())).centered(),
             cols[i],
         );
     }
-    let start = week_start(first_of_month(c.cursor));
+    let start = week_start_on(first_of_month(c.cursor), c.sunday_first);
     let rows = Layout::vertical(vec![Constraint::Fill(1); 6]).split(grid);
     for (w, row) in rows.iter().enumerate() {
         let cells = Layout::horizontal(vec![Constraint::Fill(1); 7]).split(*row);
@@ -163,7 +172,7 @@ fn day_cell(frame: &mut Frame, area: Rect, c: &CalendarState, theme: &Theme, dat
 }
 
 fn week(frame: &mut Frame, area: Rect, c: &CalendarState, theme: &Theme) {
-    let start = week_start(c.cursor);
+    let start = week_start_on(c.cursor, c.sunday_first);
     let cols = Layout::horizontal(vec![Constraint::Fill(1); 7]).split(area);
     for (i, col) in cols.iter().enumerate() {
         let date = start + Duration::days(i64::try_from(i).unwrap_or(0));
@@ -177,7 +186,7 @@ fn week(frame: &mut Frame, area: Rect, c: &CalendarState, theme: &Theme) {
         };
         let mut lines = vec![
             Line::from(Span::styled(
-                format!("{} {}", WEEKDAYS[i], date.day()),
+                format!("{} {}", weekdays(c)[i], date.day()),
                 style,
             )),
             Line::default(),

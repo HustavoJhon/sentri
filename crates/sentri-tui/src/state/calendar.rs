@@ -19,6 +19,15 @@ pub enum CalView {
 }
 
 impl CalView {
+    pub fn from_name(s: &str) -> Self {
+        match s {
+            "week" => Self::Week,
+            "day" => Self::Day,
+            "agenda" => Self::Agenda,
+            _ => Self::Month,
+        }
+    }
+
     pub const fn label(self) -> &'static str {
         match self {
             Self::Month => "Month",
@@ -76,6 +85,8 @@ pub enum CalEffect {
     Schedule(OpportunityId),
     Open(Box<FeedItem>),
     Message(String),
+    /// Run the Google Calendar setup diagnosis.
+    Doctor,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -90,6 +101,8 @@ pub struct CalendarState {
     pub input: Option<CalInput>,
     pub confirm_delete: Option<i64>,
     pub loaded: Option<(NaiveDate, NaiveDate)>,
+    /// Weeks start on Sunday instead of Monday.
+    pub sunday_first: bool,
 }
 
 impl Default for CalendarState {
@@ -105,6 +118,7 @@ impl Default for CalendarState {
             input: None,
             confirm_delete: None,
             loaded: None,
+            sunday_first: false,
         }
     }
 }
@@ -132,6 +146,15 @@ pub fn add_months(d: NaiveDate, months: i32) -> NaiveDate {
 /// Monday of the week containing `d`.
 pub fn week_start(d: NaiveDate) -> NaiveDate {
     d - Duration::days(i64::from(d.weekday().num_days_from_monday()))
+}
+
+/// First day of the week containing `d`, Sunday-first when `sunday`.
+pub fn week_start_on(d: NaiveDate, sunday: bool) -> NaiveDate {
+    if sunday {
+        d - Duration::days(i64::from(d.weekday().num_days_from_sunday()))
+    } else {
+        week_start(d)
+    }
 }
 
 /// Parses `[HH:MM[-HH:MM]] title` (or `remind title`) on `date`.
@@ -405,11 +428,7 @@ impl CalendarState {
                 let item = self.opportunities.get(&id.0)?.clone();
                 return Some(vec![CalEffect::Open(Box::new(item))]);
             }
-            KeyCode::Char('g') => {
-                return Some(vec![CalEffect::Message(
-                    "Google Calendar is not connected yet (needs OAuth credentials, see docs/calendar.md).".into(),
-                )]);
-            }
+            KeyCode::Char('g') => return Some(vec![CalEffect::Doctor]),
             _ => return None,
         }
         Some(self.ensure_loaded().into_iter().collect())
@@ -435,6 +454,8 @@ mod tests {
         assert_eq!(add_months(date(2026, 12, 15), 1), date(2027, 1, 15));
         assert_eq!(add_months(date(2026, 1, 15), -1), date(2025, 12, 15));
         assert_eq!(week_start(date(2026, 11, 13)), date(2026, 11, 9));
+        assert_eq!(week_start_on(date(2026, 11, 13), true), date(2026, 11, 8));
+        assert_eq!(CalView::from_name("agenda"), CalView::Agenda);
     }
 
     #[test]
