@@ -99,7 +99,7 @@ fn stats_lines<'a>(h: &HistoryState, theme: &Theme) -> Vec<Line<'a>> {
         |v: String| Span::styled(v, Style::new().fg(theme.p.fg).add_modifier(Modifier::BOLD));
     let row = |label: &'static str, v: String| {
         Line::from(vec![
-            Span::styled(format!("{label:<18}"), theme.muted()),
+            Span::styled(format!("{label:<20}"), theme.muted()),
             value(v),
         ])
     };
