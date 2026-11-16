@@ -108,6 +108,50 @@ category = "open_source"
 max_items = 20
 token_env = "SENTRI_GITHUB_TOKEN"
 
+# ── Events, hackathons and competitions ─────────────────────────────────
+
+# GDG Cusco: public chapter page + schema.org data of each event page
+# (Bevy has no public API or feed; /api/ is disallowed by robots.txt).
+[[sources]]
+name = "gdg-cusco"
+kind = "gdg"
+url = "https://gdg.community.dev/gdg-cusco/"
+category = "event"
+max_items = 10
+
+# Luma: copy "Add iCal Subscription" from any public Luma calendar page.
+[[sources]]
+name = "luma-example"
+kind = "luma"
+enabled = false
+url = "webcal://api.lu.ma/ics/get?entity=calendar&id=cal-REPLACE-ME"
+max_items = 20
+
+# Meetup: every group exposes https://www.meetup.com/<group>/events/ical/
+[[sources]]
+name = "meetup-example"
+kind = "meetup"
+enabled = false
+url = "https://www.meetup.com/REPLACE-ME/events/ical/"
+max_items = 20
+
+# Devpost: undocumented JSON endpoint used by devpost.com (allowed by
+# robots.txt; may change without notice). Opt-in.
+[[sources]]
+name = "devpost"
+kind = "devpost"
+enabled = false
+max_items = 30
+
+# Kaggle: official API, needs credentials. Put "username:key" (kaggle.json)
+# or an API token in the variable below (e.g. in ~/.config/sentri/env).
+[[sources]]
+name = "kaggle"
+kind = "kaggle"
+enabled = false
+token_env = "SENTRI_KAGGLE_CREDENTIALS"
+max_items = 30
+
 # ── Tech News ────────────────────────────────────────────────────────────
 # `content = "news"` sends items to the Tech News section. `stance` sets the
 # default nature of a source; company blogs are "official". Items are never
