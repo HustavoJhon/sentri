@@ -24,6 +24,10 @@ pub enum AppError {
     Http(#[from] FetchError),
     #[error(transparent)]
     AddLink(#[from] AddLinkError),
+    #[error(transparent)]
+    Image(#[from] crate::ImageError),
+    #[error("GitHub profile: {0}")]
+    Profile(String),
 }
 
 /// Application context: configuration, storage and network access.

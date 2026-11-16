@@ -114,6 +114,14 @@ impl Default for UiConfig {
     }
 }
 
+/// GitHub identity (public profile only; no token needed).
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct GitHubConfig {
+    /// Your GitHub username, used for the avatar and profile link.
+    pub username: Option<String>,
+}
+
 /// Background collection settings.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -184,6 +192,7 @@ pub struct Config {
     pub http: HttpConfig,
     pub daemon: DaemonConfig,
     pub ui: UiConfig,
+    pub github: GitHubConfig,
     pub sources: Vec<SourceConfig>,
 }
 
@@ -281,6 +290,13 @@ impl Config {
             return Err(ConfigError::Invalid(
                 "ui.feed_width must be between 30 and 80".into(),
             ));
+        }
+        if let Some(user) = self.github.username.as_deref().filter(|u| !u.is_empty())
+            && !crate::profile::valid_username(user)
+        {
+            return Err(ConfigError::Invalid(format!(
+                "github.username {user:?} is not a valid GitHub username"
+            )));
         }
         if self.daemon.interval_minutes < 15 {
             return Err(ConfigError::Invalid(

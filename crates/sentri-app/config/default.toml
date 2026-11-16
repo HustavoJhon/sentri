@@ -63,6 +63,11 @@ max_redirects = 5
 [daemon]
 interval_minutes = 120
 
+# Your public GitHub profile: avatar and name shown in the TUI.
+# Only public data is read (no token).
+[github]
+# username = "your-github-user"
+
 # Appearance (also editable from Settings in the TUI).
 [ui]
 density = "comfortable"   # compact | comfortable | detailed
