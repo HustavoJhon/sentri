@@ -157,3 +157,23 @@ SENTRI **no verifica hechos** y por eso no existe la etiqueta "verificada":
 | Unconfirmed | El titular o el resumen usa "reportedly", "rumor", "leak", "allegedly", "sources say", "según fuentes"… Tiene prioridad sobre las demás. |
 | Opinion | El titular indica opinión, editorial o columna. |
 | Discussion | Hilos comunitarios (Ask/Show HN, fuentes sociales configuradas así). |
+
+## Eventos, hackathons y competiciones (probado el 2026-11-16)
+
+| Fuente | Método | Autenticación | Estado en SENTRI |
+|---|---|---|---|
+| **Luma** | iCal por calendario (`webcal://api.lu.ma/ics/get?entity=calendar&id=cal-…`, botón *Add iCal Subscription*). Endpoint no documentado oficialmente pero ofrecido por Luma para suscribirse. La API pública (`public-api.luma.com`) es solo para calendarios propios con Luma Plus. | No | ✅ `kind = "luma"` (probado: 190 eventos, 2 futuros). Páginas de evento con JSON-LD → `sentri add` funciona. |
+| **Meetup** | iCal por grupo `https://www.meetup.com/<grupo>/events/ical/`. La API GraphQL requiere OAuth y Meetup Pro. | No (iCal) | ✅ `kind = "meetup"` (probado con Rust NYC; zonas horarias con horario de verano resueltas). |
+| **GDG / Bevy** (`gdg.community.dev`) | Sin API pública ni feed; `robots.txt` prohíbe `/api/`. La página del capítulo enlaza eventos y cada página de evento publica JSON-LD `Event`. | No | ✅ `kind = "gdg"`: 1 página de capítulo + máx. 10 páginas de evento por ejecución. GDG Cusco probado (hoy solo tiene eventos pasados; se descartan). |
+| **Devpost** | `devpost.com/api/hackathons` (JSON usado por la propia web, **no documentado**). `robots.txt` lo permite y los Términos no prohíben el acceso automatizado (solo la automatización de votos). Los feeds `.atom`/`.rss` devuelven 406. | No | 🟡 `kind = "devpost"`, **desactivado por defecto**; probado (20 hackathons con plazo, premios, temas y organizador). Páginas de hackathon con JSON-LD `Hackathon` → `sentri add`. |
+| **HackerRank** | `robots.txt` prohíbe `/rest/` y `/contests/` a bots. Sin API pública de concursos. | — | ❌ Solo `sentri add` (se guarda la URL; completar con `E`). |
+| **Kaggle** | API oficial `GET /api/v1/competitions/list` (401 sin credenciales). | Sí: `username:key` de `kaggle.json` o token de API | 🟡 `kind = "kaggle"` con `token_env`; probado con servidor simulado, **no contra la API real** (sin credenciales). |
+| **Eventbrite** | La búsqueda pública de la API se retiró (`/v3/events/search/` → 404, comprobado). `robots.txt` bloquea `/rss/` y `/atom/`. La API solo lista eventos de organizadores con token privado. | Sí | ❌ Sin conector; `sentri add` con la URL del evento. |
+
+### iCal genérico
+
+`kind = "ical"` acepta cualquier `.ics` o `webcal://` (universidades, comunidades,
+calendarios públicos de Google). Soporta líneas plegadas, escapes, fechas UTC,
+`TZID` con `VTIMEZONE` (reglas anuales de horario de verano), zonas sin DST
+conocidas (America/Lima, Bogotá…) y fechas de día completo. Descarta eventos
+cancelados, pasados y sin URL pública (nunca inventa enlaces).
