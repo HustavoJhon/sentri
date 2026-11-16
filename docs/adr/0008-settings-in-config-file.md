@@ -15,6 +15,7 @@ comentada, también con backup.
 ## Consecuencias
 
 - Una sola fuente de verdad, editable a mano o desde la TUI.
-- Apariencia se aplica en caliente; perfil, scoring y recopilación tras
-  reiniciar (la TUI lo indica con `restart`).
+- Apariencia, perfil, scoring, GitHub y fuentes se aplican en caliente
+  (`Sentri::reload_config`); colores, timeout HTTP y el intervalo del daemon
+  (otro proceso) requieren reiniciar (la TUI lo indica con `restart`).
 - Atajos de teclado: consultables (`?`); personalizarlos queda pendiente.

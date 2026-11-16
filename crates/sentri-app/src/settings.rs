@@ -134,7 +134,7 @@ pub const SETTINGS: &[Setting] = &[
         "Home city",
         SettingKind::Text,
         "In-person events here rank higher",
-        false,
+        true,
     ),
     s(
         "profile.country",
@@ -142,7 +142,7 @@ pub const SETTINGS: &[Setting] = &[
         "Country",
         SettingKind::Text,
         "Used for eligibility",
-        false,
+        true,
     ),
     s(
         "github.username",
@@ -150,7 +150,7 @@ pub const SETTINGS: &[Setting] = &[
         "GitHub username",
         SettingKind::Text,
         "Public profile and avatar; no token",
-        false,
+        true,
     ),
     s(
         "daemon.interval_minutes",
@@ -177,7 +177,7 @@ pub const SETTINGS: &[Setting] = &[
             max: 100,
         },
         "Points for events in your city",
-        false,
+        true,
     ),
     s(
         "scoring.travel",
@@ -188,7 +188,7 @@ pub const SETTINGS: &[Setting] = &[
             max: 100,
         },
         "Points when travel or lodging is covered",
-        false,
+        true,
     ),
     s(
         "scoring.interest_keyword",
@@ -199,7 +199,7 @@ pub const SETTINGS: &[Setting] = &[
             max: 100,
         },
         "Per matching keyword, times priority",
-        false,
+        true,
     ),
     s(
         "scoring.deadline_soon_days",
@@ -207,7 +207,7 @@ pub const SETTINGS: &[Setting] = &[
         "Deadline soon (days)",
         SettingKind::Int { min: 1, max: 90 },
         "Window for the 'deadline soon' bonus",
-        false,
+        true,
     ),
     s(
         "scoring.news_fresh",
@@ -218,7 +218,7 @@ pub const SETTINGS: &[Setting] = &[
             max: 100,
         },
         "News from the last 24 hours",
-        false,
+        true,
     ),
 ];
 

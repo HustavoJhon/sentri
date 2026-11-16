@@ -33,7 +33,9 @@ pub enum AppError {
 /// Application context: configuration, storage and network access.
 #[derive(Debug, Clone)]
 pub struct Sentri {
-    config: Config,
+    /// Shared and replaceable, so saved settings and new sources apply
+    /// without restarting.
+    config: std::sync::Arc<std::sync::RwLock<std::sync::Arc<Config>>>,
     store: Store,
     http: SafeClient,
 }
@@ -60,13 +62,26 @@ impl Sentri {
         };
         Ok(Self {
             http: SafeClient::new(limits)?,
-            config,
+            config: std::sync::Arc::new(std::sync::RwLock::new(std::sync::Arc::new(config))),
             store,
         })
     }
 
-    pub const fn config(&self) -> &Config {
-        &self.config
+    /// Snapshot of the current configuration.
+    pub fn config(&self) -> std::sync::Arc<Config> {
+        self.config
+            .read()
+            .map_or_else(|poisoned| poisoned.into_inner().clone(), |c| c.clone())
+    }
+
+    /// Replaces the configuration (e.g. after saving settings or sources).
+    /// Every clone of this `Sentri` sees the new values.
+    pub fn reload_config(&self, config: Config) {
+        let mut slot = self
+            .config
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        *slot = std::sync::Arc::new(config);
     }
 
     pub const fn store(&self) -> &Store {
@@ -111,11 +126,12 @@ impl Sentri {
             storage_query.limit = None;
         }
         let items = self.store.list(&storage_query, now).await?;
+        let config = self.config();
         Ok(rank(
             items,
             query,
-            &self.config.profile,
-            &self.config.scoring,
+            &config.profile,
+            &config.scoring,
             &affinity,
             now,
         ))
@@ -125,11 +141,12 @@ impl Sentri {
     pub async fn explain(&self, id: OpportunityId) -> Result<Ranked, AppError> {
         let item = self.store.get(id).await?;
         let affinity = self.affinity().await?;
+        let config = self.config();
         let mut ranked = rank(
             vec![item],
             &FeedQuery::default(),
-            &self.config.profile,
-            &self.config.scoring,
+            &config.profile,
+            &config.scoring,
             &affinity,
             Utc::now(),
         );
@@ -238,7 +255,8 @@ impl Sentri {
         apply: bool,
     ) -> Result<(String, Vec<sentri_storage::StanceChange>), AppError> {
         let batch = Utc::now().format("%Y%m%d-%H%M%S").to_string();
-        let sources = &self.config().sources;
+        let config = self.config();
+        let sources = &config.sources;
         let fallback = |name: &str| {
             sources
                 .iter()

@@ -172,7 +172,13 @@ fn execute(
         }
         Effect::LoadProfile => load_profile(app, tx),
         settings @ (Effect::SaveSettings(_) | Effect::RestoreDefaults) => {
-            let _ = tx.send(execute_settings(config_path, settings));
+            let msg = execute_settings(config_path, settings);
+            if let Msg::SettingsSaved(saved) = &msg {
+                // Profile, scoring and sources apply immediately.
+                app.reload_config(saved.config.clone());
+                load_profile(app.clone(), tx.clone());
+            }
+            let _ = tx.send(msg);
         }
         Effect::LoadActivity => {
             tokio::spawn(async move {
@@ -341,7 +347,7 @@ async fn overview(app: &Sentri, config_path: String) -> Msg {
     let news = app.feed(&news_query).await.unwrap_or_default();
     let runs = app.store().latest_runs().await.unwrap_or_default();
     Msg::Overview(Box::new(Overview {
-        config: app.config().clone(),
+        config: (*app.config()).clone(),
         stats,
         insights,
         news,

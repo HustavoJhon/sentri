@@ -47,8 +47,8 @@ impl Sentri {
     /// that failed repeatedly are skipped until their back-off expires,
     /// unless requested explicitly with `only`.
     pub async fn collect(&self, only: Option<&str>) -> Vec<CollectReport> {
-        let selected: Vec<&SourceConfig> = self
-            .config()
+        let config = self.config();
+        let selected: Vec<&SourceConfig> = config
             .sources
             .iter()
             .filter(|s| only.map_or(s.enabled, |name| s.name == name))

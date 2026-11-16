@@ -66,7 +66,7 @@ impl SettingsState {
                 label,
                 kind,
                 help: "Each source is independent".into(),
-                live: false,
+                live: true,
                 original: value.clone(),
                 value,
             });

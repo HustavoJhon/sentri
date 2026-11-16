@@ -74,13 +74,8 @@ impl Sentri {
     /// The configured GitHub profile, from a 24-hour cache or the API.
     /// Returns `Ok(None)` when no username is configured.
     pub async fn github_profile(&self) -> Result<Option<GitHubProfile>, AppError> {
-        let Some(username) = self
-            .config()
-            .github
-            .username
-            .as_deref()
-            .filter(|u| !u.is_empty())
-        else {
+        let config = self.config();
+        let Some(username) = config.github.username.as_deref().filter(|u| !u.is_empty()) else {
             return Ok(None);
         };
         if !valid_username(username) {
