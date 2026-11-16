@@ -224,6 +224,8 @@ pub struct Config {
     pub ui: UiConfig,
     pub github: GitHubConfig,
     pub calendar: CalendarConfig,
+    /// Keyboard shortcuts: action name → key (see `sentri_app::keys`).
+    pub keys: std::collections::BTreeMap<String, String>,
     pub sources: Vec<SourceConfig>,
 }
 
@@ -333,6 +335,9 @@ impl Config {
                 "github.username {user:?} is not a valid GitHub username"
             )));
         }
+        if let Err(errors) = crate::keys::effective(&self.keys) {
+            return Err(ConfigError::Invalid(format!("keys: {}", errors.join("; "))));
+        }
         if !["monday", "sunday"].contains(&self.calendar.week_start.as_str()) {
             return Err(ConfigError::Invalid(
                 "calendar.week_start must be monday or sunday".into(),
@@ -404,6 +409,8 @@ mod tests {
             "[[sources]]\nname = \"a\"\nkind = \"nope\"",
             "[[sources]]\nname = \"a\"\nkind = \"rss\"\nmax_items = 0",
             "[daemon]\ninterval_minutes = 1",
+            "[keys]\nlike = \"s\"",
+            "[keys]\nsave = \"j\"",
         ];
         for text in bad {
             assert!(

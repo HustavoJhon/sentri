@@ -222,6 +222,20 @@ pub const SETTINGS: &[Setting] = &[
     ),
 ];
 
+/// One setting per remappable shortcut (`keys.<action>`).
+pub fn key_settings() -> Vec<(String, String, SettingKind)> {
+    crate::keys::KeyAction::ALL
+        .iter()
+        .map(|a| {
+            (
+                format!("keys.{}", a.name()),
+                a.label().to_owned(),
+                SettingKind::Text,
+            )
+        })
+        .collect()
+}
+
 /// A setting for one configured source (`sources.<name>.enabled|max_items`).
 pub fn source_settings(config: &Config) -> Vec<(String, String, SettingKind)> {
     config
@@ -268,6 +282,14 @@ pub fn current(config: &Config, key: &str) -> Option<String> {
         "scoring.interest_keyword" => config.scoring.interest_keyword.to_string(),
         "scoring.deadline_soon_days" => config.scoring.deadline_soon_days.to_string(),
         "scoring.news_fresh" => config.scoring.news_fresh.to_string(),
+        other if other.starts_with("keys.") => {
+            let action = crate::keys::KeyAction::from_name(&other[5..])?;
+            config
+                .keys
+                .get(action.name())
+                .cloned()
+                .unwrap_or_else(|| action.default_key().to_owned())
+        }
         other => {
             let rest = other.strip_prefix("sources.")?;
             let (name, field) = rest.rsplit_once('.')?;
@@ -289,6 +311,7 @@ fn kind_of(config: &Config, key: &str) -> Option<SettingKind> {
         .or_else(|| {
             source_settings(config)
                 .into_iter()
+                .chain(key_settings())
                 .find(|(k, _, _)| k == key)
                 .map(|(_, _, kind)| kind)
         })
@@ -627,6 +650,30 @@ mod tests {
         assert_eq!(restored.config.profile.home_city.as_deref(), Some("Cusco"));
         assert!(restored.backup.is_some());
         assert_eq!(default_value("ui.density").as_deref(), Some("comfortable"));
+    }
+
+    #[test]
+    fn edits_shortcuts_and_rejects_conflicts() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, USER).unwrap();
+        let saved = save(&path, &[("keys.like".into(), "f".into())]).unwrap();
+        assert_eq!(saved.config.keys.get("like").map(String::as_str), Some("f"));
+        assert_eq!(current(&saved.config, "keys.like").as_deref(), Some("f"));
+        assert_eq!(
+            current(&saved.config, "keys.save").as_deref(),
+            Some("s"),
+            "default"
+        );
+        let conflict = save(&path, &[("keys.save".into(), "f".into())]);
+        assert!(conflict.unwrap_err().to_string().contains("both"));
+        let reset = save(&path, &[("keys.like".into(), String::new())]).unwrap();
+        assert_eq!(
+            reset.config.keys.get("like"),
+            None,
+            "empty restores the default"
+        );
+        assert_eq!(default_value("keys.like").as_deref(), Some("l"));
     }
 
     #[test]

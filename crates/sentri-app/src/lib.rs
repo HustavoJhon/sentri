@@ -9,6 +9,7 @@ pub mod config;
 pub mod daemon;
 pub mod google;
 pub mod images;
+pub mod keys;
 pub mod links;
 pub mod paths;
 pub mod profile;
