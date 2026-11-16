@@ -94,6 +94,7 @@ async fn run(app: &Sentri, command: Command) -> Result<()> {
         Command::Calendar { days } => calendar(app, days).await?,
         Command::Schedule { id } => schedule(app, OpportunityId(id)).await?,
         Command::Sync => sync(app),
+        Command::ReclassifyNews { apply, undo } => reclassify(app, apply, undo).await?,
         Command::Fields => {
             for field in Field::ALL {
                 let kind = match field.kind() {
@@ -253,6 +254,36 @@ async fn schedule(app: &Sentri, id: OpportunityId) -> Result<()> {
         );
     }
     println!("Added to SENTRI's calendar. This does not register you for it.");
+    Ok(())
+}
+
+async fn reclassify(app: &Sentri, apply: bool, undo: Option<String>) -> Result<()> {
+    if let Some(batch) = undo {
+        let restored = app.undo_reclassification(&batch).await?;
+        println!("Restored {restored} stance(s) from batch {batch}.");
+        return Ok(());
+    }
+    let (batch, changes) = app.reclassify_news(apply).await?;
+    for c in &changes {
+        println!(
+            "  #{:<5} {:<12} → {:<12} {}",
+            c.id,
+            c.old.map_or("—", sentri_core::Stance::label),
+            c.new.label(),
+            c.title
+        );
+    }
+    match (apply, changes.is_empty()) {
+        (_, true) => println!("Nothing to change."),
+        (false, false) => println!(
+            "{} change(s). Dry run: run with --apply to write them.",
+            changes.len()
+        ),
+        (true, false) => println!(
+            "Applied {} change(s). Undo with: sentri reclassify-news --undo {batch}",
+            changes.len()
+        ),
+    }
     Ok(())
 }
 

@@ -231,6 +231,32 @@ impl Sentri {
         Ok(self.store.history_for(id, limit).await?)
     }
 
+    /// Re-applies the current news stance rules to stored news. Dry run
+    /// unless `apply`. Returns the batch id (for undo) and the changes.
+    pub async fn reclassify_news(
+        &self,
+        apply: bool,
+    ) -> Result<(String, Vec<sentri_storage::StanceChange>), AppError> {
+        let batch = Utc::now().format("%Y%m%d-%H%M%S").to_string();
+        let sources = &self.config().sources;
+        let fallback = |name: &str| {
+            sources
+                .iter()
+                .find(|s| s.name == name)
+                .and_then(|s| s.stance)
+        };
+        let changes = self
+            .store
+            .reclassify_news(&batch, fallback, apply, Utc::now())
+            .await?;
+        Ok((batch, changes))
+    }
+
+    /// Undoes a reclassification batch.
+    pub async fn undo_reclassification(&self, batch: &str) -> Result<u64, AppError> {
+        Ok(self.store.undo_reclassification(batch).await?)
+    }
+
     pub async fn history(&self, limit: u32) -> Result<Vec<HistoryEntry>, AppError> {
         Ok(self.store.history(limit).await?)
     }

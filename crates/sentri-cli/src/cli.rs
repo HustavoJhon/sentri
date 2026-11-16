@@ -55,6 +55,16 @@ pub enum Command {
     Schedule { id: i64 },
     /// Synchronize with Google Calendar.
     Sync,
+    /// Re-apply the current news stance rules to stored news (dry run by
+    /// default). Manual edits, likes, saves and notes are never changed.
+    ReclassifyNews {
+        /// Write the changes (a batch id is printed for undo).
+        #[arg(long, conflicts_with = "undo")]
+        apply: bool,
+        /// Undo a previous batch.
+        #[arg(long, value_name = "BATCH")]
+        undo: Option<String>,
+    },
     /// Search opportunities by keywords.
     Search {
         #[arg(required = true)]
