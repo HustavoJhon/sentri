@@ -41,7 +41,57 @@ fn spec(config: &SourceConfig) -> SourceSpec {
     }
 }
 
+/// Converts a form draft into a source configuration.
+pub fn draft_config(d: &crate::settings::SourceDraft) -> Result<SourceConfig, String> {
+    Ok(SourceConfig {
+        name: d.name.trim().to_owned(),
+        kind: d
+            .kind
+            .parse()
+            .map_err(|e: sentri_core::ParseError| e.to_string())?,
+        enabled: d.enabled,
+        url: Some(d.url.trim().to_owned()),
+        query: None,
+        target: None,
+        category: if d.category.trim().is_empty() {
+            None
+        } else {
+            Some(
+                d.category
+                    .parse()
+                    .map_err(|e: sentri_core::ParseError| e.to_string())?,
+            )
+        },
+        tags: Vec::new(),
+        max_items: 50,
+        token_env: None,
+        content: if d.content == "news" {
+            sentri_core::ContentKind::News
+        } else {
+            sentri_core::ContentKind::Opportunity
+        },
+        stance: None,
+    })
+}
+
 impl Sentri {
+    /// Fetches and parses a source without storing anything, to validate a
+    /// URL and its format before saving it. Returns how many items it has.
+    pub async fn test_source(&self, source: &SourceConfig) -> Result<usize, String> {
+        let url = source.url.as_deref().unwrap_or_default();
+        let normalized = url
+            .strip_prefix("webcal://")
+            .map_or_else(|| url.to_owned(), |r| format!("https://{r}"));
+        sentri_core::CanonicalUrl::parse(&normalized).map_err(|e| e.to_string())?;
+        let connector = Connector::from_spec(spec(source)).map_err(|e| e.to_string())?;
+        let budget = Duration::from_secs(self.config().http.timeout_secs.saturating_mul(2));
+        let items = tokio::time::timeout(budget, connector.fetch(self.http(), Utc::now()))
+            .await
+            .map_err(|_| format!("timed out after {}s", budget.as_secs()))?
+            .map_err(|e| e.to_string())?;
+        Ok(items.len())
+    }
+
     /// Runs enabled sources (or only `only`), one after another to stay polite
     /// with rate limits. A failing source is recorded and skipped; sources
     /// that failed repeatedly are skipped until their back-off expires,

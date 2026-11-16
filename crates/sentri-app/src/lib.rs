@@ -16,7 +16,7 @@ pub mod service;
 pub mod settings;
 
 pub use calendar::{CalendarData, GoogleSync};
-pub use collect::CollectReport;
+pub use collect::{CollectReport, draft_config};
 pub use config::{
     ColorMode, Config, ConfigError, DaemonConfig, GitHubConfig, HttpConfig, ImageMode,
     SourceConfig, UiConfig,

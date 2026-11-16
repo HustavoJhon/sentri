@@ -148,3 +148,38 @@ async fn failing_sources_back_off_and_unchanged_feeds_are_skipped() {
     assert_eq!(state.consecutive_failures, 2);
     assert!(state.last_error.unwrap().contains("500"));
 }
+
+#[tokio::test]
+async fn tests_a_source_without_storing_anything() {
+    let server = MockServer::start().await;
+    Mock::given(path("/feed.xml"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_raw(FEED.as_bytes().to_vec(), "application/rss+xml"),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(path("/page.html"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_raw(b"<html></html>".to_vec(), "text/html"),
+        )
+        .mount(&server)
+        .await;
+    let store = Store::in_memory().await.unwrap();
+    let app = Sentri::with_store(config(&server), store, true).unwrap();
+    let draft = |url: String| sentri_app::settings::SourceDraft {
+        name: "blog".into(),
+        kind: "rss".into(),
+        url,
+        content: "news".into(),
+        category: String::new(),
+        enabled: true,
+    };
+    let ok = sentri_app::draft_config(&draft(format!("{}/feed.xml", server.uri()))).unwrap();
+    assert_eq!(app.test_source(&ok).await, Ok(2));
+    let html = sentri_app::draft_config(&draft(format!("{}/page.html", server.uri()))).unwrap();
+    assert!(app.test_source(&html).await.unwrap_err().contains("parse"));
+    let bad = sentri_app::draft_config(&draft("file:///etc/passwd".into())).unwrap();
+    assert!(app.test_source(&bad).await.is_err());
+    assert_eq!(app.store().count().await.unwrap(), 0, "nothing stored");
+}
