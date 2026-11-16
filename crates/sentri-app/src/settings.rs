@@ -422,6 +422,138 @@ pub fn restore_defaults(path: &Path) -> Result<Saved, SettingsError> {
     })
 }
 
+/// Source kinds that can be added from the TUI (feed and calendar URLs).
+pub const CUSTOM_KINDS: &[&str] = &[
+    "rss",
+    "ical",
+    "luma",
+    "meetup",
+    "mastodon",
+    "bluesky",
+    "youtube",
+    "googlenews",
+];
+
+/// A source as entered in the TUI form.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SourceDraft {
+    pub name: String,
+    pub kind: String,
+    pub url: String,
+    /// `opportunity` or `news`.
+    pub content: String,
+    /// Optional default category (e.g. `event`).
+    pub category: String,
+    pub enabled: bool,
+}
+
+fn source_table(draft: &SourceDraft) -> Result<Table, SettingsError> {
+    let invalid = |message: &str| SettingsError::Invalid {
+        key: "source".into(),
+        message: message.into(),
+    };
+    if !CUSTOM_KINDS.contains(&draft.kind.as_str()) {
+        return Err(invalid(&format!(
+            "kind must be one of: {}",
+            CUSTOM_KINDS.join(", ")
+        )));
+    }
+    if draft.url.trim().is_empty() {
+        return Err(invalid("a feed or calendar URL is required"));
+    }
+    let mut t = Table::new();
+    t.insert("name", value(draft.name.trim()));
+    t.insert("kind", value(draft.kind.as_str()));
+    t.insert("url", value(draft.url.trim()));
+    if draft.content == "news" {
+        t.insert("content", value("news"));
+    }
+    if !draft.category.trim().is_empty() {
+        t.insert("category", value(draft.category.trim()));
+    }
+    if !draft.enabled {
+        t.insert("enabled", value(false));
+    }
+    Ok(t)
+}
+
+/// Loads, edits and writes the `[[sources]]` list; the whole document is
+/// validated before anything is written.
+fn edit_sources(
+    path: &Path,
+    edit: impl FnOnce(&mut toml_edit::ArrayOfTables) -> Result<(), SettingsError>,
+) -> Result<Saved, SettingsError> {
+    let original = match std::fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => DEFAULT_CONFIG.to_owned(),
+        Err(e) => return Err(e.into()),
+    };
+    let mut doc: DocumentMut = original
+        .parse()
+        .map_err(|e: toml_edit::TomlError| SettingsError::Parse(e.to_string()))?;
+    let sources = doc
+        .entry("sources")
+        .or_insert_with(|| Item::ArrayOfTables(toml_edit::ArrayOfTables::new()))
+        .as_array_of_tables_mut()
+        .ok_or_else(|| SettingsError::Parse("`sources` is not a list of tables".into()))?;
+    edit(sources)?;
+    let updated = doc.to_string();
+    let config = Config::parse(&updated, path)?;
+    let backup = backup(path)?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(path, updated)?;
+    Ok(Saved { config, backup })
+}
+
+fn position(sources: &toml_edit::ArrayOfTables, name: &str) -> Option<usize> {
+    sources
+        .iter()
+        .position(|t| t.get("name").and_then(Item::as_str) == Some(name))
+}
+
+/// Adds a new source at the end of the list.
+pub fn add_source(path: &Path, draft: &SourceDraft) -> Result<Saved, SettingsError> {
+    let table = source_table(draft)?;
+    edit_sources(path, |sources| {
+        sources.push(table);
+        Ok(())
+    })
+}
+
+/// Replaces the editable keys of source `name`, keeping any other keys
+/// (`tags`, `token_env`, comments…).
+pub fn update_source(path: &Path, name: &str, draft: &SourceDraft) -> Result<Saved, SettingsError> {
+    let table = source_table(draft)?;
+    edit_sources(path, |sources| {
+        let i = position(sources, name).ok_or_else(|| SettingsError::Unknown(name.into()))?;
+        let target = sources
+            .get_mut(i)
+            .ok_or_else(|| SettingsError::Unknown(name.into()))?;
+        for key in ["name", "kind", "url", "content", "category", "enabled"] {
+            match table.get(key) {
+                Some(item) => {
+                    target.insert(key, item.clone());
+                }
+                None => {
+                    target.remove(key);
+                }
+            }
+        }
+        Ok(())
+    })
+}
+
+/// Deletes source `name`.
+pub fn remove_source(path: &Path, name: &str) -> Result<Saved, SettingsError> {
+    edit_sources(path, |sources| {
+        let i = position(sources, name).ok_or_else(|| SettingsError::Unknown(name.into()))?;
+        sources.remove(i);
+        Ok(())
+    })
+}
+
 /// Default value of a fixed setting.
 pub fn default_value(key: &str) -> Option<String> {
     let defaults = Config::parse(DEFAULT_CONFIG, Path::new("<defaults>")).ok()?;
@@ -493,6 +625,61 @@ mod tests {
         assert_eq!(restored.config.profile.home_city.as_deref(), Some("Cusco"));
         assert!(restored.backup.is_some());
         assert_eq!(default_value("ui.density").as_deref(), Some("comfortable"));
+    }
+
+    #[test]
+    fn manages_custom_sources() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, USER).unwrap();
+        let draft = SourceDraft {
+            name: "my-blog".into(),
+            kind: "rss".into(),
+            url: "https://blog.example/feed.xml".into(),
+            content: "news".into(),
+            category: String::new(),
+            enabled: true,
+        };
+        let saved = add_source(&path, &draft).unwrap();
+        let src = saved.config.source("my-blog").unwrap();
+        assert_eq!(src.content, sentri_core::ContentKind::News);
+        assert!(
+            std::fs::read_to_string(&path)
+                .unwrap()
+                .contains("# my notes stay")
+        );
+
+        assert!(add_source(&path, &draft).is_err(), "duplicate name");
+        let bad_url = SourceDraft {
+            name: "x".into(),
+            url: "ftp://x".into(),
+            ..draft.clone()
+        };
+        assert!(add_source(&path, &bad_url).is_err());
+        let bad_kind = SourceDraft {
+            name: "y".into(),
+            kind: "linkedin".into(),
+            ..draft.clone()
+        };
+        assert!(add_source(&path, &bad_kind).is_err());
+
+        let renamed = SourceDraft {
+            name: "my-cal".into(),
+            kind: "ical".into(),
+            url: "webcal://cal.example/a.ics".into(),
+            content: "opportunity".into(),
+            enabled: false,
+            ..draft.clone()
+        };
+        let saved = update_source(&path, "my-blog", &renamed).unwrap();
+        let cal = saved.config.source("my-cal").unwrap();
+        assert!(!cal.enabled);
+        assert_eq!(cal.content, sentri_core::ContentKind::Opportunity);
+
+        let saved = remove_source(&path, "my-cal").unwrap();
+        assert!(saved.config.source("my-cal").is_none());
+        assert!(saved.config.source("feed").is_some(), "others untouched");
+        assert!(remove_source(&path, "nope").is_err());
     }
 
     #[test]
