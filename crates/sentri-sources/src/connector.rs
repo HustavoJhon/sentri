@@ -8,6 +8,7 @@ use sentri_core::{Category, ContentKind, Opportunity, SourceKind, Stance, classi
 use thiserror::Error;
 
 use crate::SafeClient;
+use crate::gdg::Gdg;
 use crate::github::GitHub;
 use crate::hackernews::HackerNews;
 use crate::http::FetchError;
@@ -54,6 +55,7 @@ pub enum Connector {
     GitHub(GitHub),
     HackerNews(HackerNews),
     Calendar(Calendar),
+    Gdg(Gdg),
 }
 
 impl Connector {
@@ -68,6 +70,7 @@ impl Connector {
             | SourceKind::YouTube => Feed::new(spec).map(Self::Feed),
             SourceKind::GitHub => GitHub::new(spec).map(Self::GitHub),
             SourceKind::HackerNews => HackerNews::new(spec).map(Self::HackerNews),
+            SourceKind::Gdg => Gdg::new(spec).map(Self::Gdg),
             // Calendar feeds (`.ics`, `webcal://`).
             SourceKind::ICal | SourceKind::Luma | SourceKind::Meetup => {
                 Calendar::new(spec).map(Self::Calendar)
@@ -82,6 +85,7 @@ impl Connector {
             Self::GitHub(c) => &c.spec,
             Self::HackerNews(c) => &c.spec,
             Self::Calendar(c) => &c.spec,
+            Self::Gdg(c) => &c.spec,
         }
     }
 
@@ -97,6 +101,7 @@ impl Connector {
             Self::GitHub(c) => c.fetch(http, now).await?,
             Self::HackerNews(c) => c.fetch(http, now).await?,
             Self::Calendar(c) => c.fetch(http, now).await?,
+            Self::Gdg(c) => c.fetch(http, now).await?,
         };
         let spec = self.spec();
         Ok(items
