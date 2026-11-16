@@ -28,6 +28,7 @@ use crate::input::LineInput;
 use calendar::{CalEffect, CalendarState};
 use editor::{EditorOutcome, EditorState};
 use history::{HistoryEffect, HistoryState};
+use sentri_app::keys::{KeyAction, KeyName, KeySpec};
 use settings::{SettingsEffect, SettingsState};
 use sources::{SourcesEffect, SourcesState};
 
@@ -228,6 +229,44 @@ const fn history_effect(effect: HistoryEffect) -> Effect {
         HistoryEffect::LoadActivity => Effect::LoadActivity,
         HistoryEffect::LoadDay(day) => Effect::LoadDay(day),
     }
+}
+
+/// Converts a terminal key event into a library-independent key spec.
+pub fn key_spec(key: KeyEvent) -> Option<KeySpec> {
+    let name = match key.code {
+        KeyCode::Char(' ') => KeyName::Space,
+        KeyCode::Char(c) => KeyName::Char(if key.modifiers.contains(KeyModifiers::CONTROL) {
+            c.to_ascii_lowercase()
+        } else {
+            c
+        }),
+        KeyCode::Enter => KeyName::Enter,
+        KeyCode::Esc => KeyName::Esc,
+        KeyCode::Tab => KeyName::Tab,
+        KeyCode::Backspace => KeyName::Backspace,
+        KeyCode::F(n) => KeyName::F(n),
+        _ => return None,
+    };
+    Some(KeySpec {
+        ctrl: key.modifiers.contains(KeyModifiers::CONTROL),
+        alt: key.modifiers.contains(KeyModifiers::ALT),
+        key: name,
+    })
+}
+
+/// Key → action lookup built from the configuration.
+pub type KeyMap = std::collections::BTreeMap<KeySpec, KeyAction>;
+
+/// Builds the lookup from `[keys]`; invalid configurations fall back to the
+/// defaults (the loader already rejects them).
+pub fn keymap(config: &std::collections::BTreeMap<String, String>) -> KeyMap {
+    let effective = sentri_app::keys::effective(config)
+        .or_else(|_| sentri_app::keys::effective(&std::collections::BTreeMap::new()))
+        .unwrap_or_default();
+    effective
+        .into_iter()
+        .map(|(action, spec)| (spec, action))
+        .collect()
 }
 
 /// Case-insensitive subsequence match ("gtsv" matches "Go to Saved").
@@ -446,6 +485,7 @@ pub struct State {
     pub profile: ProfileState,
     pub settings: SettingsState,
     pub sources: SourcesState,
+    pub keymap: KeyMap,
     pub quit: bool,
 }
 
@@ -474,6 +514,7 @@ impl Default for State {
             profile: ProfileState::default(),
             settings: SettingsState::default(),
             sources: SourcesState::default(),
+            keymap: keymap(&std::collections::BTreeMap::new()),
             quit: false,
         }
     }
@@ -827,24 +868,11 @@ impl State {
         if let Some(effects) = self.on_item_key(key) {
             return effects;
         }
-        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         match key.code {
-            KeyCode::Char('q') => self.quit = true,
-            KeyCode::Char('?') => self.mode = Mode::Help,
-            KeyCode::Char(':') => {
-                self.mode = Mode::Palette {
-                    input: LineInput::default(),
-                    selected: 0,
-                }
+            // Fixed alias for the palette (a remapped key above wins).
+            KeyCode::Char('p') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                return self.run_action(KeyAction::Palette);
             }
-            KeyCode::Char('p') if ctrl => {
-                self.mode = Mode::Palette {
-                    input: LineInput::default(),
-                    selected: 0,
-                }
-            }
-            KeyCode::Char('/') => return self.run_command(Command::Search),
-            KeyCode::Char('n') => return self.run_command(Command::AddLink),
             KeyCode::Tab | KeyCode::Char(']') => {
                 return self.go_to((self.section + 1) % Section::ALL.len());
             }
@@ -889,18 +917,6 @@ impl State {
                 }
                 return self.open_detail();
             }
-            KeyCode::Char('S') => return self.cycle_sort(),
-            KeyCode::Char('v') => {
-                self.density = self.density.next();
-                self.info(format!("Density: {}", self.density.label()), Level::Info);
-            }
-            KeyCode::Char('F') => return self.toggle_filter(QuickFilter::Free),
-            KeyCode::Char('T') => return self.toggle_filter(QuickFilter::Travel),
-            KeyCode::Char('U') => return self.toggle_filter(QuickFilter::Upcoming),
-            KeyCode::Char('P') => return self.toggle_filter(QuickFilter::Eligible),
-            KeyCode::Char('C') => return self.toggle_filter(QuickFilter::Certificate),
-            KeyCode::Char('r') => return self.reload(),
-            KeyCode::Char('R') => return self.run_command(Command::Collect),
             _ => {}
         }
         Vec::new()
@@ -973,32 +989,53 @@ impl State {
 
     /// Keys that act on the selected item.
     fn on_item_key(&mut self, key: KeyEvent) -> Option<Vec<Effect>> {
-        if key.modifiers.contains(KeyModifiers::CONTROL) {
-            return None;
-        }
-        let effects = match key.code {
-            KeyCode::Char('l') => self.toggle_flag(Flag::Liked),
-            KeyCode::Char('s') => self.toggle_flag(Flag::Saved),
-            KeyCode::Char('d') => self.toggle_flag(Flag::Dismissed),
-            KeyCode::Char('i') => self.toggle_flag(Flag::Interesting),
-            KeyCode::Char('p') => self.toggle_flag(Flag::Applied),
-            KeyCode::Char('e') => self.toggle_flag(Flag::Enrolled),
-            KeyCode::Char('c') => self.toggle_flag(Flag::Completed),
-            KeyCode::Char('a') => self
-                .selected_item()
-                .map(|r| vec![Effect::Schedule(r.item.id)])
-                .unwrap_or_default(),
-            KeyCode::Char('E') => self
-                .selected_item()
-                .map(|r| vec![Effect::OpenEditor(r.item.id)])
-                .unwrap_or_default(),
-            KeyCode::Char('o') => self
-                .selected_item()
-                .map(|r| vec![Effect::OpenUrl(r.item.opportunity.original_url.clone())])
-                .unwrap_or_default(),
-            _ => return None,
+        let action = self.keymap.get(&key_spec(key)?).copied()?;
+        Some(self.run_action(action))
+    }
+
+    /// Runs a remappable action (see `sentri_app::keys`).
+    fn run_action(&mut self, action: KeyAction) -> Vec<Effect> {
+        let selected = |s: &Self, make: fn(&Ranked) -> Effect| {
+            s.selected_item().map(|r| vec![make(r)]).unwrap_or_default()
         };
-        Some(effects)
+        match action {
+            KeyAction::Like => self.toggle_flag(Flag::Liked),
+            KeyAction::Save => self.toggle_flag(Flag::Saved),
+            KeyAction::Dismiss => self.toggle_flag(Flag::Dismissed),
+            KeyAction::Interesting => self.toggle_flag(Flag::Interesting),
+            KeyAction::Applied => self.toggle_flag(Flag::Applied),
+            KeyAction::Enrolled => self.toggle_flag(Flag::Enrolled),
+            KeyAction::Completed => self.toggle_flag(Flag::Completed),
+            KeyAction::Schedule => selected(self, |r| Effect::Schedule(r.item.id)),
+            KeyAction::Edit => selected(self, |r| Effect::OpenEditor(r.item.id)),
+            KeyAction::Open => selected(self, |r| {
+                Effect::OpenUrl(r.item.opportunity.original_url.clone())
+            }),
+            KeyAction::AddLink => self.run_command(Command::AddLink),
+            KeyAction::Search => self.run_command(Command::Search),
+            KeyAction::Palette => {
+                self.mode = Mode::Palette {
+                    input: LineInput::default(),
+                    selected: 0,
+                };
+                Vec::new()
+            }
+            KeyAction::Density => {
+                self.density = self.density.next();
+                self.info(format!("Density: {}", self.density.label()), Level::Info);
+                Vec::new()
+            }
+            KeyAction::Sort => self.cycle_sort(),
+            KeyAction::Collect => self.run_command(Command::Collect),
+            KeyAction::Reload => self.reload(),
+            KeyAction::Help => self.run_command(Command::Help),
+            KeyAction::Quit => self.run_command(Command::Quit),
+            KeyAction::FilterFree => self.toggle_filter(QuickFilter::Free),
+            KeyAction::FilterTravel => self.toggle_filter(QuickFilter::Travel),
+            KeyAction::FilterUpcoming => self.toggle_filter(QuickFilter::Upcoming),
+            KeyAction::FilterEligible => self.toggle_filter(QuickFilter::Eligible),
+            KeyAction::FilterCertificate => self.toggle_filter(QuickFilter::Certificate),
+        }
     }
 
     fn on_vertical(&mut self, delta: isize) -> Vec<Effect> {
@@ -1138,6 +1175,7 @@ impl State {
             self.density = density;
         }
         self.calendar.sunday_first = saved.config.calendar.week_start == "sunday";
+        self.keymap = keymap(&saved.config.keys);
         let selected = self.settings.selected;
         self.settings = SettingsState::from_config(&saved.config);
         self.settings.selected = selected.min(self.settings.rows.len().saturating_sub(1));
@@ -1424,6 +1462,19 @@ mod tests {
         let effects = s.go_to(index);
         assert!(effects.contains(&Effect::LoadActivity));
         assert!(effects.iter().any(|e| matches!(e, Effect::LoadDay(_))));
+    }
+
+    #[test]
+    fn remapped_shortcuts_replace_defaults() {
+        let mut s = loaded(1);
+        s.keymap = keymap(&[("like".to_owned(), "f".to_owned())].into_iter().collect());
+        assert_eq!(
+            s.on_key(key(KeyCode::Char('f'))),
+            vec![Effect::Act(OpportunityId(1), Action::Set(Flag::Liked))]
+        );
+        assert_eq!(s.on_key(key(KeyCode::Char('l'))), vec![], "old key is free");
+        s.on_key(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL));
+        assert!(matches!(s.mode, Mode::Palette { .. }), "ctrl-p alias");
     }
 
     #[test]
