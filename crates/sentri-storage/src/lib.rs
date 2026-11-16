@@ -11,6 +11,7 @@ mod interactions;
 mod layers;
 mod opportunities;
 mod private_fs;
+mod reclassify;
 mod rows;
 mod runs;
 mod time;
@@ -28,6 +29,7 @@ pub use insights::{Daily, DayActivity, DayEntry, Insights};
 pub use interactions::HistoryEntry;
 pub use layers::{EditState, Override};
 pub use opportunities::Upsert;
+pub use reclassify::StanceChange;
 pub use runs::{CollectionRun, RunStatus, Stats};
 
 static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
