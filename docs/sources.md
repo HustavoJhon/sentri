@@ -177,3 +177,33 @@ calendarios públicos de Google). Soporta líneas plegadas, escapes, fechas UTC,
 `TZID` con `VTIMEZONE` (reglas anuales de horario de verano), zonas sin DST
 conocidas (America/Lima, Bogotá…) y fechas de día completo. Descarta eventos
 cancelados, pasados y sin URL pública (nunca inventa enlaces).
+
+## Fuentes propias, actualización incremental y salud
+
+- **Desde la TUI (Sources):** `+` añade un feed RSS/Atom, iCal (`.ics` /
+  `webcal://`), Luma, Meetup, Mastodon, Bluesky, YouTube o Google News; `e`
+  edita, espacio activa/desactiva, `x` borra (los ítems ya guardados se
+  conservan), `u` refresca ahora. Al guardar, SENTRI **prueba** la fuente
+  (descarga y parsea, sin guardar ítems) y escribe `config.toml` conservando
+  comentarios, con backup. Las fuentes que necesitan consultas o credenciales
+  (GitHub, Hacker News, Devpost, Kaggle, GDG) se editan en el fichero.
+- **Peticiones condicionales:** RSS/Atom e iCal envían `If-None-Match` /
+  `If-Modified-Since`; un `304` no descarga ni procesa nada.
+- **Backoff:** tras un fallo, la recopilación programada omite la fuente
+  15 min, luego 30, 60… hasta 24 h. `sentri collect --source X` y `u` lo
+  ignoran. Último éxito, último error y fallos seguidos se ven en Sources.
+- **Deduplicación de noticias:** además de URL canónica e ID externo, la misma
+  historia publicada en menos de 48 h con el mismo titular normalizado se
+  fusiona (Google News añade " - Medio" y usa enlaces de redirección).
+
+## Reclasificar noticias antiguas
+
+```sh
+sentri reclassify-news            # simulación: muestra qué cambiaría
+sentri reclassify-news --apply    # aplica e imprime el lote para deshacer
+sentri reclassify-news --undo 20261116-031500
+```
+
+Solo cambia la naturaleza **detectada**; correcciones manuales, likes,
+guardados, descartes y notas no se tocan. Desde 2026-11-16 "Unconfirmed" exige
+un término fuerte en el titular o dos señales distintas en el cuerpo.

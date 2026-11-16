@@ -42,10 +42,17 @@ caería la tarde anterior). Ver `sentri_core::dates`.
 Las entradas sólidas (`▪`) están en tu calendario; las tenues (`·`) son fechas
 de oportunidades aún no añadidas.
 
+## Preferencias
+
+`[calendar] week_start` (`monday`/`sunday`) y `default_view`
+(`month`/`week`/`day`/`agenda`), editables en Settings y aplicadas al instante.
+
 ## Google Calendar (pendiente)
 
 **No está conectado.** `sentri sync` y `g` lo dicen explícitamente; nada se
-simula. Política ya implementada (`sentri_core::calendar::sync_policy`) para
+simula. `sentri calendar-doctor` comprueba lo que ya puedes preparar: que el
+fichero OAuth exista, tenga permisos `600`, sea JSON válido y sea un cliente
+*Desktop app* (nunca muestra el secreto), y lista los pasos siguientes. Política ya implementada (`sentri_core::calendar::sync_policy`) para
 cuando se conecte:
 
 | Caso | Sincronización |

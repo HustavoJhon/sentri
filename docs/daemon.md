@@ -8,7 +8,9 @@ de la TUI: puede cerrarse la interfaz y seguir recopilando.
 
 | Aspecto | Comportamiento |
 |---|---|
-| Aislamiento | Cada fuente se ejecuta por separado; un fallo se registra en `collection_runs` y no detiene a las demás. |
+| Aislamiento | Cada fuente se ejecuta por separado; un fallo se registra en `collection_runs` y `source_state` y no detiene a las demás. |
+| Incremental | RSS/Atom e iCal usan `ETag`/`Last-Modified`; un 304 no reprocesa nada. |
+| Backoff | Tras fallos seguidos, la fuente se omite 15 min, 30, 60… hasta 24 h. |
 | Timeouts | Límite por petición (`http.timeout_secs`) y presupuesto total por fuente (×3). |
 | Deduplicación | Por URL canónica e ID externo; repetir un ciclo no duplica nada. |
 | Instancia única | Bloqueo de fichero (`sentri.daemon.lock` junto a la base); el SO lo libera si el proceso muere. |

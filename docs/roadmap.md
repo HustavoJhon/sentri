@@ -48,3 +48,19 @@ Pendiente de esta fase:
   guarda; falta sustituir todos los glifos).
 - Reclasificar noticias antiguas tras mejorar la heurística (las ya guardadas
   conservan su naturaleza detectada).
+
+## Fase de fuentes y fiabilidad (2026-11-16)
+
+Hecho: conector iCal (Luma, Meetup, `.ics`), GDG (schema.org), Devpost
+(opcional), Kaggle (con credenciales), parser de NVIDIA, deduplicación de
+noticias entre feeds, heurística "Unconfirmed" más estricta y reclasificación
+reversible, peticiones condicionales y backoff por fuente, gestor de fuentes
+en la TUI, preferencias de calendario y `calendar-doctor`, atajos editables con
+detección de conflictos, modo ASCII real.
+
+Pendiente:
+
+- OAuth y sincronización con Google Calendar (requiere credenciales del usuario).
+- Probar Kaggle contra la API real cuando haya credenciales.
+- Eventbrite (solo con token y por organizador) y HackerRank: sin conector.
+- Conectores de empleo remoto (Remotive, RemoteOK, Arbeitnow) y Microsoft Learn.

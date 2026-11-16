@@ -53,7 +53,7 @@ Ratón: rueda para desplazarse, clic para seleccionar, segundo clic abre detalle
 | Saved, Likes, Applications | Listas personales (oportunidades y noticias) |
 | Calendar | Mes, semana, día y agenda ([calendar.md](calendar.md)) |
 | History | Mapa de actividad anual, rachas y resumen por día (`h`/`l` día, `H`/`L` semana, `t` hoy) |
-| Sources | Estado de cada fuente |
+| Sources | Gestor: añadir/editar/activar/borrar/refrescar fuentes, último éxito y último error ([sources.md](sources.md)) |
 | Settings | Formulario editable ([configuration.md](configuration.md)) |
 
 ## Cards
@@ -79,3 +79,9 @@ avatar, nombre, usuario y repositorios públicos.
 `++` manual · `RS` RSS · `IC` iCal · `GH` GitHub · `HN` Hacker News ·
 `r/` Reddit · `in` LinkedIn · `X` X · `LU` Luma · `GDG` GDG · `DP` Devpost ·
 `MU` Meetup · `EB` Eventbrite · `KG` Kaggle · `MS` Microsoft Learn · `WW` web.
+
+## Atajos personalizables y ASCII
+
+Los atajos de acciones se cambian en **Settings › Shortcuts** o en `[keys]`
+([configuration.md](configuration.md)); `?` muestra siempre las teclas
+efectivas. `ascii_icons = true` dibuja toda la interfaz en ASCII.

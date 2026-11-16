@@ -98,3 +98,37 @@ En `[[sources]]`, `content = "news"` envía los ítems a **Tech News** y
 
 Todo lo anterior también se edita desde **Settings** en la TUI
 (`Ctrl-s` guarda con backup; `D` restaura los valores por defecto).
+
+## `[calendar]`
+
+| Clave | Valores |
+|---|---|
+| `week_start` | `monday` (por defecto) o `sunday` |
+| `default_view` | `month`, `week`, `day`, `agenda` |
+| `google_credentials` | Fichero OAuth (por defecto `~/.config/sentri/google-oauth.json`). Ver `sentri calendar-doctor`. |
+
+## `[keys]`
+
+Atajos remapeables: `acción = "tecla"`. Teclas: un carácter (`l`, `S`, `?`),
+`ctrl-x`, `alt-x`, `enter`, `space`, `f1`…`f12`. Acciones: `like`, `save`,
+`dismiss`, `interesting`, `applied`, `enrolled`, `completed`, `schedule`,
+`edit`, `open`, `add_link`, `search`, `palette`, `density`, `sort`, `collect`,
+`reload`, `help`, `quit`, `filter_free`, `filter_travel`, `filter_upcoming`,
+`filter_eligible`, `filter_certificate`.
+
+```toml
+[keys]
+like = "f"
+collect = "f5"
+```
+
+Se rechazan teclas duplicadas y las reservadas para navegar (`j` `k` `g` `G`
+`[` `]` dígitos, Enter, Esc, Tab, espacio, Ctrl-c, Ctrl-s). Dentro de
+Calendar, History, Sources, Settings y el editor, sus teclas propias tienen
+prioridad. Editable en **Settings › Shortcuts** (vacío = valor por defecto).
+
+## Modo ASCII
+
+`[ui] ascii_icons = true` sustituye bordes, iconos, barras y marcas por ASCII
+en todas las pantallas; el texto de las oportunidades no se modifica. Para una
+terminal totalmente ASCII, combínalo con `images = "off"` o `"ascii"`.
