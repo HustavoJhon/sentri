@@ -418,7 +418,9 @@ mod tests {
         assert!(wide.contains("Categories · sources · modality"));
 
         state.mode = Mode::Help;
-        assert!(render(120, 40, &mut state).contains("command palette"));
+        let help = render(120, 50, &mut state);
+        assert!(help.contains("command palette"));
+        assert!(help.contains("Like"), "remappable actions listed");
         state.mode = Mode::Palette {
             input: crate::input::LineInput::with_value("saved"),
             selected: 0,

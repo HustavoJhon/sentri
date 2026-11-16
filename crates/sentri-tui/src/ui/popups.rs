@@ -11,7 +11,8 @@ use crate::input::LineInput;
 use crate::state::{Mode, State};
 use crate::theme::Theme;
 
-const HELP: &[(&str, &str)] = &[
+/// Fixed navigation keys (not remappable).
+const NAVIGATION: &[(&str, &str)] = &[
     ("j k ↓ ↑", "move"),
     ("g G", "first / last"),
     ("Enter", "open details"),
@@ -19,33 +20,15 @@ const HELP: &[(&str, &str)] = &[
     ("Tab ⇧Tab [ ]", "next / previous section"),
     ("1…9 0", "jump to section"),
     ("← →", "focus sidebar / list / details"),
-    ("l", "like"),
-    ("s", "save"),
-    ("d", "dismiss"),
-    ("i", "interesting"),
-    ("p e c", "applied / enrolled / completed"),
-    ("a", "add to calendar (phase 7)"),
-    ("o", "open original link"),
-    ("E", "edit every field, notes and custom fields"),
-    ("n", "add a link"),
-    ("/", "search"),
-    (": Ctrl-p", "command palette"),
-    ("S", "cycle sort"),
-    ("v", "card density: compact / comfortable / detailed"),
-    (
-        "F T U E C",
-        "free / travel / upcoming / eligible / certificate",
-    ),
-    ("r", "reload"),
-    ("R", "collect from sources now"),
-    ("q Ctrl-c", "quit"),
+    ("Ctrl-p", "command palette"),
+    ("Ctrl-c", "quit"),
 ];
 
 pub fn render(frame: &mut Frame, state: &State, theme: &Theme) {
     let area = frame.area();
     match &state.mode {
         Mode::Normal | Mode::Editor(_) => {}
-        Mode::Help => help(frame, area, theme),
+        Mode::Help => help(frame, area, state, theme),
         Mode::Palette { input, selected } => palette(frame, area, state, theme, input, *selected),
         Mode::Search(input) => prompt(
             frame,
@@ -66,18 +49,34 @@ pub fn render(frame: &mut Frame, state: &State, theme: &Theme) {
     }
 }
 
-fn help(frame: &mut Frame, area: Rect, theme: &Theme) {
-    let height = u16::try_from(HELP.len()).unwrap_or(u16::MAX) + 4;
-    let popup = centered(area, 64, height);
-    let lines: Vec<Line> = HELP
+fn help(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
+    let line = |keys: String, what: &str| {
+        Line::from(vec![
+            Span::styled(format!("{keys:>14}  "), theme.accent()),
+            Span::raw(what.to_owned()),
+        ])
+    };
+    let mut lines: Vec<Line> = NAVIGATION
         .iter()
-        .map(|(keys, what)| {
-            Line::from(vec![
-                Span::styled(format!("{keys:>14}  "), theme.accent()),
-                Span::raw(*what),
-            ])
-        })
+        .map(|(k, w)| line((*k).to_owned(), w))
         .collect();
+    lines.push(Line::default());
+    let mut actions: Vec<_> = state
+        .keymap
+        .iter()
+        .map(|(spec, action)| (*action, spec.to_string()))
+        .collect();
+    actions.sort();
+    for (action, key) in actions {
+        lines.push(line(key, action.label()));
+    }
+    lines.push(Line::default());
+    lines.push(Line::from(Span::styled(
+        "Change shortcuts in Settings › Shortcuts. Sections like Calendar have their own keys.",
+        theme.muted(),
+    )));
+    let height = u16::try_from(lines.len()).unwrap_or(u16::MAX) + 2;
+    let popup = centered(area, 72, height);
     frame.render_widget(Clear, popup);
     frame.render_widget(
         Paragraph::new(lines).block(panel(theme, "Keyboard · any key closes", true)),

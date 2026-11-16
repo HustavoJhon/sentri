@@ -2,7 +2,9 @@
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use sentri_app::Config;
-use sentri_app::settings::{SETTINGS, SettingKind, current, default_value, source_settings};
+use sentri_app::settings::{
+    SETTINGS, SettingKind, current, default_value, key_settings, source_settings,
+};
 
 use crate::input::LineInput;
 
@@ -58,6 +60,21 @@ impl SettingsState {
                 }
             })
             .collect();
+        for (key, label, kind) in key_settings() {
+            let value = current(config, &key).unwrap_or_default();
+            rows.push(SettingRow {
+                key,
+                group: "Shortcuts".into(),
+                label,
+                kind,
+                help:
+                    "e.g. l, S, ctrl-x, f5 · empty restores the default · duplicates are rejected"
+                        .into(),
+                live: true,
+                original: value.clone(),
+                value,
+            });
+        }
         for (key, label, kind) in source_settings(config) {
             let value = current(config, &key).unwrap_or_default();
             rows.push(SettingRow {
@@ -266,6 +283,14 @@ mod tests {
             s.on_key(key(KeyCode::Char('y'))),
             Some(vec![SettingsEffect::RestoreDefaults])
         );
+    }
+
+    #[test]
+    fn includes_shortcuts() {
+        let s = state();
+        let like = s.rows.iter().find(|r| r.key == "keys.like").unwrap();
+        assert_eq!(like.value, "l");
+        assert_eq!(like.group, "Shortcuts");
     }
 
     #[test]
