@@ -28,6 +28,6 @@ pub use profile::GitHubProfile;
 pub use ranking::{Ranked, rank};
 pub use sentri_storage::{
     CollectionRun, Daily, DayActivity, DayEntry, EditState, HistoryEntry, Insights, NewEntry,
-    Override, RunStatus, Stats,
+    Override, RunStatus, SourceState, StanceChange, Stats,
 };
 pub use service::{AppError, Sentri};

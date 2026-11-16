@@ -22,12 +22,14 @@ pub mod calendar;
 pub mod editor;
 pub mod history;
 pub mod settings;
+pub mod sources;
 
 use crate::input::LineInput;
 use calendar::{CalEffect, CalendarState};
 use editor::{EditorOutcome, EditorState};
 use history::{HistoryEffect, HistoryState};
 use settings::{SettingsEffect, SettingsState};
+use sources::{SourcesEffect, SourcesState};
 
 /// A navigable page.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -278,6 +280,13 @@ pub enum Effect {
     LoadDay(chrono::NaiveDate),
     LoadProfile,
     SaveSettings(Vec<(String, String)>),
+    SaveSource {
+        original: Option<String>,
+        draft: sentri_app::settings::SourceDraft,
+    },
+    DeleteSource(String),
+    ToggleSource(String, bool),
+    RefreshSource(String),
     RestoreDefaults,
     SaveEdit {
         id: OpportunityId,
@@ -291,6 +300,7 @@ pub enum Effect {
 #[derive(Debug, Clone, Default)]
 pub struct Overview {
     pub config: sentri_app::Config,
+    pub states: Vec<sentri_app::SourceState>,
     pub stats: Stats,
     pub insights: Insights,
     /// Latest news for the dashboard.
@@ -392,6 +402,8 @@ pub enum Msg {
     DayEntries(chrono::NaiveDate, Vec<sentri_app::DayEntry>),
     Profile(ProfileState),
     SettingsSaved(Box<sentri_app::settings::Saved>),
+    /// Sources changed; the text says what happened.
+    SourcesSaved(Box<sentri_app::settings::Saved>, String),
     Saved(OpportunityId),
     Failed(String),
 }
@@ -432,6 +444,7 @@ pub struct State {
     pub history: HistoryState,
     pub profile: ProfileState,
     pub settings: SettingsState,
+    pub sources: SourcesState,
     pub quit: bool,
 }
 
@@ -459,6 +472,7 @@ impl Default for State {
             history: HistoryState::default(),
             profile: ProfileState::default(),
             settings: SettingsState::default(),
+            sources: SourcesState::default(),
             quit: false,
         }
     }
@@ -920,6 +934,33 @@ impl State {
                     .collect(),
             );
         }
+        if self.current() == Section::Sources
+            && let Some(effects) = self.sources.on_key(key, &self.overview.config.sources)
+        {
+            return Some(
+                effects
+                    .into_iter()
+                    .filter_map(|e| match e {
+                        SourcesEffect::Save { original, draft } => {
+                            self.info("Testing the source…", Level::Info);
+                            Some(Effect::SaveSource { original, draft })
+                        }
+                        SourcesEffect::Delete(name) => Some(Effect::DeleteSource(name)),
+                        SourcesEffect::Toggle { name, enabled } => {
+                            Some(Effect::ToggleSource(name, enabled))
+                        }
+                        SourcesEffect::Refresh(name) => {
+                            self.info(format!("Refreshing {name}…"), Level::Info);
+                            Some(Effect::RefreshSource(name))
+                        }
+                        SourcesEffect::Message(text) => {
+                            self.info(text, Level::Info);
+                            None
+                        }
+                    })
+                    .collect(),
+            );
+        }
         if self.current() == Section::Feed(FeedView::History)
             && let Some(effects) = self.history.on_key(key)
         {
@@ -1122,6 +1163,14 @@ impl State {
                 self.overview = *overview;
             }
             Msg::SettingsSaved(saved) => self.on_settings_saved(*saved),
+            Msg::SourcesSaved(saved, text) => {
+                self.settings = SettingsState::from_config(&saved.config);
+                self.overview.config = saved.config;
+                let last = self.overview.config.sources.len().saturating_sub(1);
+                self.sources.selected = self.sources.selected.min(last);
+                self.info(text, Level::Success);
+                return self.reload();
+            }
             Msg::Detail(detail) => self.detail = Some(*detail),
             Msg::Calendar(data) => self.calendar.set_data(*data),
             Msg::Activity(days) => self.history.set_activity(days),

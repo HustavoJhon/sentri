@@ -171,6 +171,10 @@ fn execute(
             });
         }
         Effect::LoadProfile => load_profile(app, tx),
+        source @ (Effect::SaveSource { .. }
+        | Effect::DeleteSource(_)
+        | Effect::ToggleSource(..)
+        | Effect::RefreshSource(_)) => execute_source(app, config_path, source, tx),
         settings @ (Effect::SaveSettings(_) | Effect::RestoreDefaults) => {
             let msg = execute_settings(config_path, settings);
             if let Msg::SettingsSaved(saved) = &msg {
@@ -180,24 +184,7 @@ fn execute(
             }
             let _ = tx.send(msg);
         }
-        Effect::LoadActivity => {
-            tokio::spawn(async move {
-                let msg = match app.activity(crate::state::history::DAYS).await {
-                    Ok(days) => Msg::Activity(days),
-                    Err(e) => Msg::Failed(format!("Could not load activity: {e}")),
-                };
-                let _ = tx.send(msg);
-            });
-        }
-        Effect::LoadDay(day) => {
-            tokio::spawn(async move {
-                let msg = match app.day_entries(day).await {
-                    Ok(entries) => Msg::DayEntries(day, entries),
-                    Err(e) => Msg::Failed(format!("Could not load {day}: {e}")),
-                };
-                let _ = tx.send(msg);
-            });
-        }
+        history @ (Effect::LoadActivity | Effect::LoadDay(_)) => execute_history(app, &history, tx),
         calendar @ (Effect::Schedule(_)
         | Effect::LoadCalendar(..)
         | Effect::CreateEntry(_)
@@ -211,6 +198,71 @@ fn execute(
             let _ = tx.send(open_url(&url));
         }
     }
+}
+
+/// Source management: test, save (with backup), toggle, delete, refresh.
+fn execute_source(app: Sentri, config_path: &str, effect: Effect, tx: UnboundedSender<Msg>) {
+    let path = std::path::PathBuf::from(config_path);
+    tokio::spawn(async move {
+        use sentri_app::settings;
+        let saved = match effect {
+            Effect::SaveSource { original, draft } => {
+                let test = match sentri_app::draft_config(&draft) {
+                    Ok(config) => app.test_source(&config).await,
+                    Err(e) => Err(e),
+                };
+                let result = match &original {
+                    Some(name) => settings::update_source(&path, name, &draft),
+                    None => settings::add_source(&path, &draft),
+                };
+                result.map(|saved| {
+                    let note = match test {
+                        Ok(n) => format!("Saved {} · test found {n} item(s)", draft.name),
+                        Err(e) => format!("Saved {} · warning: test failed: {e}", draft.name),
+                    };
+                    (saved, note)
+                })
+            }
+            Effect::DeleteSource(name) => settings::remove_source(&path, &name).map(|saved| {
+                let store = app.store().clone();
+                let forget = name.clone();
+                tokio::spawn(async move { store.forget_source(&forget).await });
+                (
+                    saved,
+                    format!("Deleted {name} (its items stay in your feed)"),
+                )
+            }),
+            Effect::ToggleSource(name, enabled) => {
+                let key = format!("sources.{name}.enabled");
+                settings::save(&path, &[(key, enabled.to_string())]).map(|saved| {
+                    let verb = if enabled { "Enabled" } else { "Disabled" };
+                    (saved, format!("{verb} {name}"))
+                })
+            }
+            Effect::RefreshSource(name) => {
+                let reports = app.collect(Some(&name)).await;
+                let text = reports.first().map_or_else(
+                    || format!("{name}: not found"),
+                    |r| match (&r.result, &r.note) {
+                        (Ok(_), Some(note)) => format!("{name}: {note}"),
+                        (Ok((seen, new)), None) => format!("{name}: {seen} seen, {new} new"),
+                        (Err(e), _) => format!("{name} failed: {e}"),
+                    },
+                );
+                let _ = tx.send(Msg::Collected(text));
+                return;
+            }
+            _ => return,
+        };
+        let msg = match saved {
+            Ok((saved, note)) => {
+                app.reload_config(saved.config.clone());
+                Msg::SourcesSaved(Box::new(saved), note)
+            }
+            Err(e) => Msg::Failed(format!("Sources not changed: {e}")),
+        };
+        let _ = tx.send(msg);
+    });
 }
 
 /// Writes settings to the configuration file (with a backup).
@@ -239,6 +291,31 @@ fn load_profile(app: Sentri, tx: UnboundedSender<Msg>) {
         };
         let _ = tx.send(Msg::Profile(profile));
     });
+}
+
+/// History section loads.
+fn execute_history(app: Sentri, effect: &Effect, tx: UnboundedSender<Msg>) {
+    match effect {
+        Effect::LoadActivity => {
+            tokio::spawn(async move {
+                let msg = match app.activity(crate::state::history::DAYS).await {
+                    Ok(days) => Msg::Activity(days),
+                    Err(e) => Msg::Failed(format!("Could not load activity: {e}")),
+                };
+                let _ = tx.send(msg);
+            });
+        }
+        &Effect::LoadDay(day) => {
+            tokio::spawn(async move {
+                let msg = match app.day_entries(day).await {
+                    Ok(entries) => Msg::DayEntries(day, entries),
+                    Err(e) => Msg::Failed(format!("Could not load {day}: {e}")),
+                };
+                let _ = tx.send(msg);
+            });
+        }
+        _ => {}
+    }
 }
 
 /// Calendar effects. Nothing here talks to Google Calendar.
@@ -346,8 +423,10 @@ async fn overview(app: &Sentri, config_path: String) -> Msg {
     };
     let news = app.feed(&news_query).await.unwrap_or_default();
     let runs = app.store().latest_runs().await.unwrap_or_default();
+    let source_health = app.store().source_states().await.unwrap_or_default();
     Msg::Overview(Box::new(Overview {
         config: (*app.config()).clone(),
+        states: source_health,
         stats,
         insights,
         news,
