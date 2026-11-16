@@ -495,6 +495,9 @@ impl State {
                     .flatten(),
             );
         }
+        if self.current() == Section::Feed(FeedView::History) {
+            effects.extend(self.history.open().into_iter().map(history_effect));
+        }
         effects
     }
 
@@ -1271,6 +1274,18 @@ mod tests {
         s.on_key(key(KeyCode::Up));
         s.images.clear();
         assert_eq!(s.pending(), vec![Effect::LoadDetail(OpportunityId(1))]);
+    }
+
+    #[test]
+    fn opening_history_loads_activity_and_the_day() {
+        let mut s = loaded(0);
+        let index = Section::ALL
+            .iter()
+            .position(|x| *x == Section::Feed(FeedView::History))
+            .unwrap();
+        let effects = s.go_to(index);
+        assert!(effects.contains(&Effect::LoadActivity));
+        assert!(effects.iter().any(|e| matches!(e, Effect::LoadDay(_))));
     }
 
     #[test]
