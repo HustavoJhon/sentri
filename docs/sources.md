@@ -143,7 +143,7 @@ Nunca se usan cookies ni credenciales de cuentas personales.
 | Google News | RSS de búsqueda (`news.google.com/rss/search?q=…`) | ✅ 100 ítems por consulta. Solo lectura personal no comercial; los enlaces pasan por `news.google.com`. El medio aparece al final del titular. |
 | Ars Technica, The Verge, TechCrunch, Phoronix, LWN, BleepingComputer | RSS | ✅ |
 | Blogs oficiales: Rust, Go, GitHub, OpenAI | RSS/Atom | ✅ (`stance = "official"`) |
-| Blog de NVIDIA | RSS | ❌ el parser (`feed-rs`) falla con este feed; desactivado. |
+| Blog de NVIDIA | RSS | ✅ desde 2026-11-16: el feed trae `<media:description>` vacíos que `feed-rs` rechazaba; SENTRI reintenta sin esos elementos vacíos. |
 | Reddit | — | ❌ RSS retirado el 13-nov-2026 (ver arriba). |
 
 ### Naturaleza de las noticias
