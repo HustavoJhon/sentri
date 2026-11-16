@@ -378,6 +378,32 @@ pub fn stance(headline: &str, body: &str, fallback: Option<Stance>) -> Stance {
     }
 }
 
+/// Normalized headline that identifies the same story across feeds.
+/// Google News appends " - Outlet" to titles; that suffix is removed so the
+/// key matches the outlet's own feed. Returns `None` for short, generic
+/// headlines that would merge unrelated stories.
+pub fn news_key(title: &str, source: crate::SourceKind) -> Option<String> {
+    let title = if source == crate::SourceKind::GoogleNews {
+        title.rsplit_once(" - ").map_or(
+            title,
+            |(head, outlet)| {
+                if outlet.len() <= 60 { head } else { title }
+            },
+        )
+    } else {
+        title
+    };
+    let key: String = title
+        .to_lowercase()
+        .chars()
+        .map(|c| if c.is_alphanumeric() { c } else { ' ' })
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    (key.split(' ').count() >= 5).then_some(key)
+}
+
 /// Main topic of a news item.
 pub fn news_topic(text: &str) -> Option<&'static str> {
     let text = text.to_lowercase();
@@ -535,6 +561,23 @@ mod tests {
         assert_eq!(
             entities("Jensen Huang and Sam Altman"),
             ["nvidia", "openai"]
+        );
+    }
+
+    #[test]
+    fn news_keys_match_across_outlets() {
+        use crate::SourceKind;
+        let google = news_key(
+            "Jensen Huang steps down as NVIDIA CEO - Reuters",
+            SourceKind::GoogleNews,
+        );
+        let direct = news_key("Jensen Huang steps down as NVIDIA CEO!", SourceKind::Rss);
+        assert!(google.is_some());
+        assert_eq!(google, direct);
+        assert_eq!(
+            news_key("Security updates", SourceKind::Rss),
+            None,
+            "too generic"
         );
     }
 

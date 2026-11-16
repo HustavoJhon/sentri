@@ -199,3 +199,45 @@ async fn sorts_by_deadline_with_unknowns_last() {
         ["Global Fellowship", "Backend Developer", "Rust 100%"]
     );
 }
+
+#[tokio::test]
+async fn merges_the_same_story_from_different_feeds() {
+    let store = Store::in_memory().await.unwrap();
+    let news = |url: &str, title: &str, source: SourceKind, hours: i64| {
+        let mut o = opp(url, title, Category::Other);
+        o.source = source;
+        o.content = sentri_core::ContentKind::News;
+        o.dates.published_at = Some(now() - Duration::hours(hours));
+        o
+    };
+    let first = store
+        .upsert_opportunity(&news(
+            "https://reuters.example/nvidia-ceo",
+            "Jensen Huang steps down as NVIDIA CEO",
+            SourceKind::Rss,
+            2,
+        ))
+        .await
+        .unwrap();
+    let google = store
+        .upsert_opportunity(&news(
+            "https://news.google.com/rss/articles/abc",
+            "Jensen Huang steps down as NVIDIA CEO - Reuters",
+            SourceKind::GoogleNews,
+            1,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(google, Upsert::Merged(first.id()));
+    // Same generic headline a week later is a different story.
+    let later = store
+        .upsert_opportunity(&news(
+            "https://reuters.example/nvidia-ceo-2",
+            "Jensen Huang steps down as NVIDIA CEO",
+            SourceKind::Rss,
+            24 * 8,
+        ))
+        .await
+        .unwrap();
+    assert!(later.is_new());
+}

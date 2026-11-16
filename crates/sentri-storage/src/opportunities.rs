@@ -152,6 +152,9 @@ async fn find_duplicate(
     if by_url.is_some() {
         return Ok(by_url);
     }
+    if let Some(id) = find_same_story(conn, o).await? {
+        return Ok(Some(id));
+    }
     let Some(external_id) = &o.external_id else {
         return Ok(None);
     };
@@ -160,6 +163,31 @@ async fn find_duplicate(
     )
     .bind(&o.source_name)
     .bind(external_id)
+    .fetch_optional(&mut *conn)
+    .await?)
+}
+
+/// The same news story already stored from another feed: same normalized
+/// headline, published within 48 hours.
+async fn find_same_story(
+    conn: &mut SqliteConnection,
+    o: &Opportunity,
+) -> Result<Option<i64>, StorageError> {
+    if o.content != sentri_core::ContentKind::News {
+        return Ok(None);
+    }
+    let Some(key) = sentri_core::classify::news_key(&o.title, o.source) else {
+        return Ok(None);
+    };
+    let at = to_db(o.dates.published_at.unwrap_or(o.discovered_at));
+    Ok(sqlx::query_scalar(
+        "SELECT id FROM opportunities
+         WHERE news_key = ? AND content_kind = 'news'
+           AND ABS(COALESCE(published_at, discovered_at) - ?) <= 172800
+         ORDER BY id LIMIT 1",
+    )
+    .bind(key)
+    .bind(at)
     .fetch_optional(&mut *conn)
     .await?)
 }
@@ -177,9 +205,9 @@ async fn insert(
             starts_at, ends_at, deadline, cost_kind, cost_detail, requirements, eligibility,
             certificate, prizes, benefits, travel_covered, accommodation_covered,
             discovered_at, updated_at, author_name, author_handle, author_url, author_avatar,
-            content_kind, stance)
+            content_kind, stance, news_key)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                 ?, ?, ?, ?, ?, ?)
+                 ?, ?, ?, ?, ?, ?, ?)
          RETURNING id",
     )
     .bind(&o.fingerprint)
@@ -216,6 +244,11 @@ async fn insert(
     .bind(&o.author.avatar_url)
     .bind(o.content.as_str())
     .bind(o.stance.map(sentri_core::Stance::as_str))
+    .bind(
+        (o.content == sentri_core::ContentKind::News)
+            .then(|| sentri_core::classify::news_key(&o.title, o.source))
+            .flatten(),
+    )
     .fetch_one(&mut *conn)
     .await?;
     Ok(id)
