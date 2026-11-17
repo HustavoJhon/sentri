@@ -3,6 +3,7 @@
 use std::time::Duration;
 
 use chrono::Utc;
+use sentri_core::SourceKind;
 use sentri_sources::{Connector, SourceSpec};
 
 use crate::{Sentri, SourceConfig};
@@ -78,11 +79,14 @@ impl Sentri {
     /// Fetches and parses a source without storing anything, to validate a
     /// URL and its format before saving it. Returns how many items it has.
     pub async fn test_source(&self, source: &SourceConfig) -> Result<usize, String> {
-        let url = source.url.as_deref().unwrap_or_default();
-        let normalized = url
-            .strip_prefix("webcal://")
-            .map_or_else(|| url.to_owned(), |r| format!("https://{r}"));
-        sentri_core::CanonicalUrl::parse(&normalized).map_err(|e| e.to_string())?;
+        let url = source.url.as_deref().unwrap_or_default().trim();
+        // Peruanos.dev and hack0.dev have public defaults; a URL is optional.
+        if !url.is_empty() || !matches!(source.kind, SourceKind::Peruanos | SourceKind::Hack0) {
+            let normalized = url
+                .strip_prefix("webcal://")
+                .map_or_else(|| url.to_owned(), |r| format!("https://{r}"));
+            sentri_core::CanonicalUrl::parse(&normalized).map_err(|e| e.to_string())?;
+        }
         let connector = Connector::from_spec(spec(source)).map_err(|e| e.to_string())?;
         let budget = Duration::from_secs(self.config().http.timeout_secs.saturating_mul(2));
         let items = tokio::time::timeout(budget, connector.fetch(self.http(), Utc::now()))

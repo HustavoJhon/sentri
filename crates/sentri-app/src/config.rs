@@ -388,6 +388,17 @@ mod tests {
         assert_eq!(config.scoring, Weights::default());
         assert!(config.source("freecodecamp-news").unwrap().enabled);
         assert!(!config.source("github-good-first-issues").unwrap().enabled);
+        let events = config.source("peruanos-events").unwrap();
+        assert!(events.enabled);
+        assert_eq!(events.target.as_deref(), Some("events"));
+        assert_eq!(events.kind, SourceKind::Peruanos);
+        assert_eq!(
+            config.source("peruanos-cfs").unwrap().target.as_deref(),
+            Some("cfs")
+        );
+        assert_eq!(config.source("hack0").unwrap().kind, SourceKind::Hack0);
+        assert!(config.source("gdg-lima").is_some());
+        assert!(config.source("gdg-cloud-lima").is_some());
     }
 
     #[test]

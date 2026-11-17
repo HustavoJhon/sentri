@@ -62,8 +62,14 @@ pub struct Hack0 {
 
 impl Hack0 {
     pub fn new(spec: SourceSpec) -> Result<Self, SourceError> {
-        let listing = Url::parse(spec.url.as_deref().unwrap_or(DEFAULT_LISTING))
-            .map_err(|e| SourceError::Config(format!("{}: {e}", spec.name)))?;
+        let listing = Url::parse(
+            spec.url
+                .as_deref()
+                .map(str::trim)
+                .filter(|url| !url.is_empty())
+                .unwrap_or(DEFAULT_LISTING),
+        )
+        .map_err(|e| SourceError::Config(format!("{}: {e}", spec.name)))?;
         Ok(Self { spec, listing })
     }
 

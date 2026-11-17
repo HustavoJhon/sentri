@@ -142,8 +142,11 @@ actions! {
     FilterFree => "filter_free", "F", "Filter: free";
     FilterTravel => "filter_travel", "T", "Filter: travel";
     FilterUpcoming => "filter_upcoming", "U", "Filter: upcoming";
+    FilterPast => "filter_past", "H", "Filter: past";
     FilterEligible => "filter_eligible", "P", "Filter: open to my country";
     FilterCertificate => "filter_certificate", "C", "Filter: certificate";
+    FilterModality => "filter_modality", "M", "Filter: modality";
+    FilterCity => "filter_city", "L", "Filter: city";
 }
 
 impl KeyAction {

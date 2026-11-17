@@ -457,11 +457,18 @@ fn push_filters(qb: &mut QueryBuilder<Sqlite>, q: &FeedQuery, now: DateTime<Utc>
     }
     if q.only_upcoming {
         // All-day deadlines (midnight UTC) stay open until the end of the day.
-        qb.push(" AND (o.deadline IS NULL OR o.deadline >= ")
+        qb.push(" AND (COALESCE(o.deadline, o.starts_at) IS NULL OR COALESCE(o.deadline, o.starts_at) >= ")
             .push_bind(to_db(now))
-            .push(" OR (o.deadline % 86400 = 0 AND o.deadline + 86400 >= ")
+            .push(" OR (o.deadline IS NOT NULL AND o.deadline % 86400 = 0 AND o.deadline + 86400 >= ")
             .push_bind(to_db(now))
             .push("))");
+    }
+    if q.only_past {
+        qb.push(" AND COALESCE(o.deadline, o.starts_at) IS NOT NULL AND COALESCE(o.deadline, o.starts_at) < ")
+            .push_bind(to_db(now))
+            .push(" AND NOT (o.deadline IS NOT NULL AND o.deadline % 86400 = 0 AND o.deadline + 86400 >= ")
+            .push_bind(to_db(now))
+            .push(")");
     }
 }
 

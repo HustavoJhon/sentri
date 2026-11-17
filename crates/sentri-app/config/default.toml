@@ -126,6 +126,64 @@ url = "https://gdg.community.dev/gdg-cusco/"
 category = "event"
 max_items = 10
 
+# ── Peruvian tech ecosystem ─────────────────────────────────────────────
+# Peruanos.dev publishes a small public JSON API (https://www.peruanos.dev/apis).
+# Four read-only sources cover the directory; each one is independent, so a
+# change in one endpoint cannot break the others.
+
+[[sources]]
+name = "peruanos-events"
+kind = "peruanos"
+target = "events"
+category = "event"
+max_items = 50
+
+[[sources]]
+name = "peruanos-communities"
+kind = "peruanos"
+target = "communities"
+category = "community"
+max_items = 50
+
+[[sources]]
+name = "peruanos-projects"
+kind = "peruanos"
+target = "projects"
+category = "open_source"
+max_items = 50
+
+[[sources]]
+name = "peruanos-cfs"
+kind = "peruanos"
+target = "cfs"
+category = "call_for_speakers"
+max_items = 50
+
+# More GDG chapters in Peru. Add the chapter page URL for other cities.
+[[sources]]
+name = "gdg-lima"
+kind = "gdg"
+url = "https://gdg.community.dev/gdg-lima/"
+category = "event"
+max_items = 10
+
+[[sources]]
+name = "gdg-cloud-lima"
+kind = "gdg"
+url = "https://gdg.community.dev/gdg-cloud-lima/"
+category = "event"
+max_items = 10
+
+# hack0.dev only publishes HTML event pages with schema.org JSON-LD; its
+# /api/ path is disallowed by robots.txt. The connector reads the public
+# listing and a few event pages per run, keeping only Peru.
+[[sources]]
+name = "hack0"
+kind = "hack0"
+url = "https://hack0.dev/eventos"
+category = "event"
+max_items = 10
+
 # Luma: copy "Add iCal Subscription" from any public Luma calendar page.
 [[sources]]
 name = "luma-example"

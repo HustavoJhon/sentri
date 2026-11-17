@@ -282,6 +282,16 @@ fn recommendation<'a>(theme: &Theme, r: &'a Ranked) -> Vec<Line<'a>> {
 pub fn side<'a>(theme: &Theme, r: &'a Ranked, detail: Option<&'a DetailData>) -> Vec<Line<'a>> {
     let mut out = recommendation(theme, r);
     if let Some(d) = detail {
+        if !d.sightings.is_empty() {
+            out.push(Line::default());
+            out.push(section(theme, "Sources"));
+            for sighting in &d.sightings {
+                out.push(Line::from(vec![
+                    Span::styled(format!("• {:<16}", sighting.source_name), theme.accent()),
+                    Span::styled(sighting.original_url.as_str(), theme.muted()),
+                ]));
+            }
+        }
         if !d.edit.overrides.is_empty() {
             out.push(Line::default());
             out.push(section(theme, "Edited by you"));

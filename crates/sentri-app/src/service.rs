@@ -9,7 +9,7 @@ use sentri_core::{
 };
 use sentri_sources::{FetchError, HttpLimits, SafeClient};
 use sentri_storage::{
-    DayActivity, DayEntry, EditState, HistoryEntry, Insights, Stats, StorageError, Store,
+    DayActivity, DayEntry, EditState, HistoryEntry, Insights, Sighting, Stats, StorageError, Store,
 };
 
 use crate::links::{self, AddLinkError, AddOutcome, LinkOverrides};
@@ -193,6 +193,11 @@ impl Sentri {
     /// Detected values, manual overrides and personal notes of an item.
     pub async fn edit_state(&self, id: OpportunityId) -> Result<EditState, AppError> {
         Ok(self.store.edit_state(id).await?)
+    }
+
+    /// Every source that published an item (for cross-source attribution).
+    pub async fn sightings(&self, id: OpportunityId) -> Result<Vec<Sighting>, AppError> {
+        Ok(self.store.sightings(id).await?)
     }
 
     /// Saves an editor session atomically per layer: manual values, fields

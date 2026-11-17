@@ -27,6 +27,16 @@ pub struct Override {
     pub edited_at: DateTime<Utc>,
 }
 
+/// One source that published an opportunity, with its original URL.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Sighting {
+    pub source_name: String,
+    pub external_id: Option<String>,
+    pub original_url: String,
+    pub first_seen_at: DateTime<Utc>,
+    pub last_seen_at: DateTime<Utc>,
+}
+
 /// Everything the editor needs.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EditState {
@@ -297,5 +307,28 @@ impl Store {
             overrides,
             annotations,
         })
+    }
+
+    /// Every source that published this opportunity, in first-seen order.
+    pub async fn sightings(&self, id: OpportunityId) -> Result<Vec<Sighting>, StorageError> {
+        let rows = sqlx::query(
+            "SELECT source_name, external_id, original_url, first_seen_at, last_seen_at
+             FROM opportunity_sightings WHERE opportunity_id = ?
+             ORDER BY first_seen_at, source_name",
+        )
+        .bind(id.0)
+        .fetch_all(&self.pool)
+        .await?;
+        let mut out = Vec::with_capacity(rows.len());
+        for row in rows {
+            out.push(Sighting {
+                source_name: row.try_get("source_name")?,
+                external_id: row.try_get("external_id")?,
+                original_url: row.try_get("original_url")?,
+                first_seen_at: from_db(row.try_get("first_seen_at")?, "first_seen_at")?,
+                last_seen_at: from_db(row.try_get("last_seen_at")?, "last_seen_at")?,
+            });
+        }
+        Ok(out)
     }
 }

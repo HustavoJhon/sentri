@@ -169,6 +169,8 @@ pub struct FeedQuery {
     pub deadline_before: Option<DateTime<Utc>>,
     /// Hide items whose deadline already passed.
     pub only_upcoming: bool,
+    /// Hide items whose date has not passed yet.
+    pub only_past: bool,
     pub min_score: Option<i32>,
     pub sort: SortOrder,
     pub limit: Option<u32>,
@@ -207,6 +209,14 @@ mod tests {
                 .categories()
                 .unwrap()
                 .contains(&Category::Internship)
+        );
+        assert_eq!(
+            FeedView::Communities.categories(),
+            Some(&[Category::Community][..])
+        );
+        assert_eq!(
+            FeedView::CallForSpeakers.categories(),
+            Some(&[Category::CallForSpeakers][..])
         );
         assert_eq!(FeedView::Discover.categories(), None);
     }

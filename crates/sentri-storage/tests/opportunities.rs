@@ -188,6 +188,45 @@ async fn searches_text_tags_and_escapes_wildcards() {
 }
 
 #[tokio::test]
+async fn upcoming_and_past_filters_use_event_dates_without_a_deadline() {
+    let store = Store::in_memory().await.unwrap();
+    let mut future = opp("https://events.example/future", "Futuro", Category::Event);
+    future.dates.starts_at = Some(now() + Duration::days(3));
+    let mut past = opp("https://events.example/past", "Pasado", Category::Event);
+    past.dates.starts_at = Some(now() - Duration::days(3));
+    let undated = opp(
+        "https://events.example/undated",
+        "Sin fecha",
+        Category::Event,
+    );
+    for o in [future, past, undated] {
+        store.upsert_opportunity(&o).await.unwrap();
+    }
+
+    let titles_of = |items: Vec<sentri_core::FeedItem>| {
+        let mut out: Vec<String> = items.into_iter().map(|i| i.opportunity.title).collect();
+        out.sort();
+        out
+    };
+    let upcoming = FeedQuery {
+        only_upcoming: true,
+        ..FeedQuery::default()
+    };
+    assert_eq!(
+        titles_of(store.list(&upcoming, now()).await.unwrap()),
+        ["Futuro", "Sin fecha"]
+    );
+    let past = FeedQuery {
+        only_past: true,
+        ..FeedQuery::default()
+    };
+    assert_eq!(
+        titles_of(store.list(&past, now()).await.unwrap()),
+        ["Pasado"]
+    );
+}
+
+#[tokio::test]
 async fn sorts_by_deadline_with_unknowns_last() {
     let store = seeded().await;
     let q = FeedQuery {

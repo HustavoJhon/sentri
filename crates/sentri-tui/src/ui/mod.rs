@@ -86,28 +86,37 @@ fn draw_header(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
     }
 }
 
-fn active_filters(state: &State) -> Vec<&'static str> {
+fn active_filters(state: &State) -> Vec<String> {
     let q = &state.query;
     let mut chips = Vec::new();
     match q.sort {
         SortOrder::Relevance => {}
-        SortOrder::Newest => chips.push("newest"),
-        SortOrder::Deadline => chips.push("by deadline"),
+        SortOrder::Newest => chips.push("newest".to_owned()),
+        SortOrder::Deadline => chips.push("by deadline".to_owned()),
     }
     if q.price == Some(PriceFilter::Free) {
-        chips.push("free");
+        chips.push("free".to_owned());
     }
     if q.with_travel {
-        chips.push("travel");
+        chips.push("travel".to_owned());
     }
     if q.only_upcoming {
-        chips.push("upcoming");
+        chips.push("upcoming".to_owned());
+    }
+    if q.only_past {
+        chips.push("past".to_owned());
     }
     if q.open_to_country {
-        chips.push("eligible");
+        chips.push("eligible".to_owned());
     }
     if q.with_certificate {
-        chips.push("certificate");
+        chips.push("certificate".to_owned());
+    }
+    for modality in &q.modalities {
+        chips.push(modality.label().to_lowercase());
+    }
+    if let Some(location) = q.location.as_deref().filter(|l| !l.trim().is_empty()) {
+        chips.push(location.to_owned());
     }
     chips
 }

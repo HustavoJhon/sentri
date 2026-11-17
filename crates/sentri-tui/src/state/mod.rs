@@ -15,7 +15,8 @@ use sentri_app::{
     Stats, Thumbnail,
 };
 use sentri_core::{
-    Action, FeedQuery, FeedView, Flag, InteractionState, OpportunityId, Profile, SortOrder,
+    Action, FeedQuery, FeedView, Flag, InteractionState, Modality, OpportunityId, Profile,
+    SortOrder,
 };
 
 pub mod calendar;
@@ -43,7 +44,7 @@ pub enum Section {
 }
 
 impl Section {
-    pub const ALL: [Self; 18] = [
+    pub const ALL: [Self; 20] = [
         Self::Dashboard,
         Self::Feed(FeedView::Discover),
         Self::Feed(FeedView::News),
@@ -54,6 +55,8 @@ impl Section {
         Self::Feed(FeedView::Scholarships),
         Self::Feed(FeedView::Volunteering),
         Self::Feed(FeedView::OpenSource),
+        Self::Feed(FeedView::Communities),
+        Self::Feed(FeedView::CallForSpeakers),
         Self::Feed(FeedView::Travel),
         Self::Feed(FeedView::Saved),
         Self::Feed(FeedView::Liked),
@@ -87,6 +90,8 @@ impl Section {
             Self::Feed(FeedView::Scholarships) => "✪",
             Self::Feed(FeedView::Volunteering) => "♣",
             Self::Feed(FeedView::OpenSource) => "⌥",
+            Self::Feed(FeedView::Communities) => "◍",
+            Self::Feed(FeedView::CallForSpeakers) => "✍",
             Self::Feed(FeedView::Travel) => "✈",
             Self::Feed(FeedView::Saved) => "★",
             Self::Feed(FeedView::Liked) => "♥",
@@ -157,8 +162,11 @@ pub enum QuickFilter {
     Free,
     Travel,
     Upcoming,
+    Past,
     Eligible,
     Certificate,
+    Modality,
+    City,
 }
 
 impl QuickFilter {
@@ -167,8 +175,11 @@ impl QuickFilter {
             Self::Free => "free",
             Self::Travel => "travel",
             Self::Upcoming => "upcoming",
+            Self::Past => "past",
             Self::Eligible => "open to my country",
             Self::Certificate => "certificate",
+            Self::Modality => "modality",
+            Self::City => "city",
         }
     }
 }
@@ -214,8 +225,11 @@ impl Command {
             Self::Toggle(QuickFilter::Free),
             Self::Toggle(QuickFilter::Travel),
             Self::Toggle(QuickFilter::Upcoming),
+            Self::Toggle(QuickFilter::Past),
             Self::Toggle(QuickFilter::Eligible),
             Self::Toggle(QuickFilter::Certificate),
+            Self::Toggle(QuickFilter::Modality),
+            Self::Toggle(QuickFilter::City),
             Self::Reload,
             Self::Help,
             Self::Quit,
@@ -277,6 +291,26 @@ pub fn fuzzy_match(needle: &str, haystack: &str) -> bool {
         .flat_map(char::to_lowercase)
         .filter(|c| !c.is_whitespace())
         .all(|n| hay.any(|h| h == n))
+}
+
+/// Cycles the city filter: all → home city → Lima → Cusco → Arequipa … → all.
+fn next_city(current: Option<&str>, home: Option<&str>) -> Option<String> {
+    let mut cities: Vec<String> = Vec::new();
+    for city in home
+        .into_iter()
+        .chain(["Lima", "Cusco", "Arequipa", "Trujillo", "Piura"])
+    {
+        if !cities.iter().any(|c| c.eq_ignore_ascii_case(city)) {
+            cities.push(city.to_owned());
+        }
+    }
+    match current {
+        None => cities.first().cloned(),
+        Some(value) => cities
+            .iter()
+            .position(|c| c.eq_ignore_ascii_case(value))
+            .and_then(|i| cities.get(i + 1).cloned()),
+    }
 }
 
 /// Modal overlays.
@@ -358,6 +392,7 @@ pub struct DetailData {
     pub id: OpportunityId,
     pub edit: EditState,
     pub history: Vec<HistoryEntry>,
+    pub sightings: Vec<sentri_app::Sighting>,
 }
 
 /// An image being loaded or ready to draw.
@@ -566,6 +601,12 @@ impl State {
         self.detail_open = false;
         self.detail_scroll = 0;
         self.loading = true;
+        // Call for Speakers is a deadline list unless the user sorted it.
+        if self.current() == Section::Feed(FeedView::CallForSpeakers)
+            && self.query.sort == SortOrder::Relevance
+        {
+            self.query.sort = SortOrder::Deadline;
+        }
         let mut effects = vec![Effect::Load];
         if self.current() == Section::Calendar {
             effects.extend(
@@ -631,34 +672,75 @@ impl State {
     }
 
     fn toggle_filter(&mut self, filter: QuickFilter) -> Vec<Effect> {
-        let q = &mut self.query;
-        let slot = match filter {
-            QuickFilter::Free => {
-                q.price = match q.price {
-                    Some(sentri_core::PriceFilter::Free) => None,
-                    _ => Some(sentri_core::PriceFilter::Free),
-                };
-                q.price.is_some()
-            }
-            QuickFilter::Travel => {
-                q.with_travel = !q.with_travel;
-                q.with_travel
-            }
-            QuickFilter::Upcoming => {
-                q.only_upcoming = !q.only_upcoming;
-                q.only_upcoming
-            }
-            QuickFilter::Eligible => {
-                q.open_to_country = !q.open_to_country;
-                q.open_to_country
-            }
-            QuickFilter::Certificate => {
-                q.with_certificate = !q.with_certificate;
-                q.with_certificate
+        let home_city = self
+            .overview
+            .config
+            .profile
+            .home_city
+            .clone()
+            .filter(|city| !city.trim().is_empty());
+        let (slot, detail) = {
+            let q = &mut self.query;
+            match filter {
+                QuickFilter::Free => {
+                    q.price = match q.price {
+                        Some(sentri_core::PriceFilter::Free) => None,
+                        _ => Some(sentri_core::PriceFilter::Free),
+                    };
+                    (q.price.is_some(), None)
+                }
+                QuickFilter::Travel => {
+                    q.with_travel = !q.with_travel;
+                    (q.with_travel, None)
+                }
+                QuickFilter::Upcoming => {
+                    q.only_upcoming = !q.only_upcoming;
+                    if q.only_upcoming {
+                        q.only_past = false;
+                    }
+                    (q.only_upcoming, None)
+                }
+                QuickFilter::Past => {
+                    q.only_past = !q.only_past;
+                    if q.only_past {
+                        q.only_upcoming = false;
+                    }
+                    (q.only_past, None)
+                }
+                QuickFilter::Eligible => {
+                    q.open_to_country = !q.open_to_country;
+                    (q.open_to_country, None)
+                }
+                QuickFilter::Certificate => {
+                    q.with_certificate = !q.with_certificate;
+                    (q.with_certificate, None)
+                }
+                QuickFilter::Modality => {
+                    q.modalities = match q.modalities.as_slice() {
+                        [] => vec![Modality::Online],
+                        [Modality::Online] => vec![Modality::Hybrid],
+                        [Modality::Hybrid] => vec![Modality::InPerson],
+                        _ => Vec::new(),
+                    };
+                    let detail = q
+                        .modalities
+                        .first()
+                        .map_or_else(|| "all".to_owned(), |m| m.label().to_lowercase());
+                    (!q.modalities.is_empty(), Some(detail))
+                }
+                QuickFilter::City => {
+                    q.location = next_city(q.location.as_deref(), home_city.as_deref());
+                    let detail = q.location.clone().unwrap_or_else(|| "all".into());
+                    (q.location.is_some(), Some(detail))
+                }
             }
         };
         let verb = if slot { "on" } else { "off" };
-        self.info(format!("Filter {}: {verb}", filter.label()), Level::Info);
+        let message = detail.map_or_else(
+            || format!("Filter {}: {verb}", filter.label()),
+            |detail| format!("Filter {}: {verb} ({detail})", filter.label()),
+        );
+        self.info(message, Level::Info);
         self.selected = 0;
         self.reload()
     }
@@ -1033,8 +1115,11 @@ impl State {
             KeyAction::FilterFree => self.toggle_filter(QuickFilter::Free),
             KeyAction::FilterTravel => self.toggle_filter(QuickFilter::Travel),
             KeyAction::FilterUpcoming => self.toggle_filter(QuickFilter::Upcoming),
+            KeyAction::FilterPast => self.toggle_filter(QuickFilter::Past),
             KeyAction::FilterEligible => self.toggle_filter(QuickFilter::Eligible),
             KeyAction::FilterCertificate => self.toggle_filter(QuickFilter::Certificate),
+            KeyAction::FilterModality => self.toggle_filter(QuickFilter::Modality),
+            KeyAction::FilterCity => self.toggle_filter(QuickFilter::City),
         }
     }
 
@@ -1409,6 +1494,56 @@ mod tests {
         assert_eq!(s.query.sort, SortOrder::Newest);
         s.on_key(key(KeyCode::Char('F')));
         assert_eq!(s.query.price, Some(sentri_core::PriceFilter::Free));
+    }
+
+    #[test]
+    fn peru_views_are_reachable_and_cfs_sorts_by_deadline() {
+        let mut s = loaded(0);
+        let communities = Section::ALL
+            .iter()
+            .position(|x| *x == Section::Feed(FeedView::Communities))
+            .unwrap();
+        s.go_to(communities);
+        assert_eq!(s.current(), Section::Feed(FeedView::Communities));
+        assert_eq!(
+            s.current().label(),
+            "Communities",
+            "separate discovery view"
+        );
+
+        let cfs = Section::ALL
+            .iter()
+            .position(|x| *x == Section::Feed(FeedView::CallForSpeakers))
+            .unwrap();
+        s.go_to(cfs);
+        assert_eq!(s.current(), Section::Feed(FeedView::CallForSpeakers));
+        assert_eq!(s.query.sort, SortOrder::Deadline);
+        assert_eq!(s.effective_query().view, FeedView::CallForSpeakers);
+    }
+
+    #[test]
+    fn modality_city_and_past_filters_cycle() {
+        let mut s = loaded(0);
+        assert_eq!(s.on_key(key(KeyCode::Char('M'))), vec![Effect::Load]);
+        assert_eq!(s.query.modalities, vec![Modality::Online]);
+        s.on_key(key(KeyCode::Char('M')));
+        assert_eq!(s.query.modalities, vec![Modality::Hybrid]);
+        s.on_key(key(KeyCode::Char('M')));
+        assert_eq!(s.query.modalities, vec![Modality::InPerson]);
+        s.on_key(key(KeyCode::Char('M')));
+        assert_eq!(s.query.modalities.len(), 0);
+
+        s.on_key(key(KeyCode::Char('L')));
+        let first_city = s.query.location.clone();
+        assert!(first_city.is_some());
+        s.on_key(key(KeyCode::Char('L')));
+        assert_ne!(s.query.location, first_city);
+
+        s.on_key(key(KeyCode::Char('U')));
+        assert!(s.query.only_upcoming);
+        s.on_key(key(KeyCode::Char('H')));
+        assert!(s.query.only_past);
+        assert!(!s.query.only_upcoming, "past and upcoming are exclusive");
     }
 
     #[test]

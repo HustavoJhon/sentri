@@ -28,7 +28,7 @@ pub use calendar::NewEntry;
 pub use error::StorageError;
 pub use insights::{Daily, DayActivity, DayEntry, Insights};
 pub use interactions::HistoryEntry;
-pub use layers::{EditState, Override};
+pub use layers::{EditState, Override, Sighting};
 pub use opportunities::Upsert;
 pub use reclassify::StanceChange;
 pub use runs::{CollectionRun, RunStatus, Stats};

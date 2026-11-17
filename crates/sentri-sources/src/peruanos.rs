@@ -74,8 +74,14 @@ impl Peruanos {
     pub fn new(spec: SourceSpec) -> Result<Self, SourceError> {
         let target = Target::parse(spec.target.as_deref())
             .map_err(|e| SourceError::Config(format!("{}: {e}", spec.name)))?;
-        let base = Url::parse(spec.url.as_deref().unwrap_or(DEFAULT_BASE))
-            .map_err(|e| SourceError::Config(format!("{}: {e}", spec.name)))?;
+        let base = Url::parse(
+            spec.url
+                .as_deref()
+                .map(str::trim)
+                .filter(|url| !url.is_empty())
+                .unwrap_or(DEFAULT_BASE),
+        )
+        .map_err(|e| SourceError::Config(format!("{}: {e}", spec.name)))?;
         Ok(Self { spec, target, base })
     }
 

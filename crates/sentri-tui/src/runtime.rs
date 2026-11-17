@@ -375,11 +375,22 @@ fn execute_detail(app: Sentri, effect: Effect, tx: UnboundedSender<Msg>) {
     match effect {
         Effect::LoadDetail(id) => {
             tokio::spawn(async move {
-                let msg = match (app.edit_state(id).await, app.history_for(id, 20).await) {
-                    (Ok(edit), Ok(history)) => {
-                        Msg::Detail(Box::new(crate::state::DetailData { id, edit, history }))
+                let msg = match (
+                    app.edit_state(id).await,
+                    app.history_for(id, 20).await,
+                    app.sightings(id).await,
+                ) {
+                    (Ok(edit), Ok(history), Ok(sightings)) => {
+                        Msg::Detail(Box::new(crate::state::DetailData {
+                            id,
+                            edit,
+                            history,
+                            sightings,
+                        }))
                     }
-                    (Err(e), _) | (_, Err(e)) => Msg::Failed(format!("Could not load #{id}: {e}")),
+                    (Err(e), _, _) | (_, Err(e), _) | (_, _, Err(e)) => {
+                        Msg::Failed(format!("Could not load #{id}: {e}"))
+                    }
                 };
                 let _ = tx.send(msg);
             });
