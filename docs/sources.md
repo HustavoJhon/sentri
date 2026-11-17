@@ -1,6 +1,6 @@
 # Investigación de fuentes
 
-Fecha de la revisión: **2026-11-13**. Las políticas de las plataformas cambian
+Fecha de la revisión: **2026-11-17**. Las políticas de las plataformas cambian
 con frecuencia; cada conector debe revalidarse al implementarse. Las entradas
 marcadas con *(verificar)* se basan en conocimiento previo y no se han
 contrastado en esta revisión.
@@ -95,6 +95,92 @@ Fuentes: [Firecrawl](https://www.firecrawl.dev/blog/google-search-json-api-alter
 | **Empleo remoto** | Remotive API, RemoteOK API, We Work Remotely RSS, Arbeitnow API *(verificar ToS: exigen atribución/enlace)* | No | ✅ | Buen sustituto de LinkedIn para empleos remotos desde Perú. |
 | **Empleo por empresa** | Greenhouse / Lever / Ashby job board APIs públicas | No | ✅ | Seguir empresas concretas. |
 | **Empleo Perú** (Computrabajo, Bumeran) | Sin API pública *(verificar)* | — | ❌ | `sentri add`. |
+
+## Ecosistema tech peruano (revisión 2026-11-17)
+
+| Fuente | Acceso usado | Auth | Estado | Notas |
+|---|---|---|---|---|
+| **Peruanos.dev** | API JSON pública `https://www.peruanos.dev/api/{events,communities,projects,cfs}` | No | ✅ probado contra la API real | Directorio abierto; eventos, comunidades, proyectos open source y Call for Speakers. Solo lectura. |
+| **GDG Community** | Página de capítulo + JSON-LD `Event` de cada evento | No | ✅ conector existente | `gdg.community.dev/api/` está prohibido por `robots.txt`; se leen las páginas públicas de los capítulos configurados. |
+| **hack0.dev** | Listado `/eventos` + JSON-LD `Event` de cada evento | No | ✅ probado con páginas públicas | No hay API, RSS ni iCal públicos; `/api/` está prohibido por `robots.txt`. Filtra eventos de Perú y limita las páginas por ejecución. |
+
+### Peruanos.dev
+
+La API es pública, sin autenticación, y devuelve **arrays JSON sin envoltorio**.
+El conector `kind = "peruanos"` elige el endpoint con `target` y admite una `url`
+base o una URL `/api/...` completa (útil para filtros y pruebas):
+
+```toml
+[[sources]]
+name = "peruanos-events"
+kind = "peruanos"
+target = "events"   # events | communities | projects | cfs
+category = "event"
+max_items = 50
+```
+
+| Endpoint | Campos observados (2026-11-17) | Observaciones |
+|---|---|---|
+| `GET /api/events` | `title, description, date, time, location, city, type, image_url, registration_url, tags, organizer` | 11 elementos. `date` es `YYYY-MM-DD`, `time` `HH:MM`. No hay fin, zona horaria, precio ni moneda. |
+| `GET /api/communities` | `name, description, logo_url, city, topics, contact{email,website,socialMedia{...}}` | 32 elementos. `website` y los enlaces sociales pueden faltar o estar vacíos. |
+| `GET /api/projects` | Objetos de repositorio de GitHub REST | 3 elementos. Identidad canónica: `html_url` (deduplica con el conector GitHub). |
+| `GET /api/cfs` | `id, title, community, description, event_date, deadline, cfs_url, website_url, image_url, location, city, type, topics, status` | 3 elementos. `deadline` y `event_date` son fechas separadas. |
+
+- **Filtros del servidor:** `?city=lima` y `?type=presencial` funcionan
+  (`presencial`, `virtual`, `hibrido`); en la revisión solo había eventos
+  `Presencial`, por lo que `virtual`/`hibrido` devolvieron 0. SENTRI importa
+  todos y filtra por ciudad/modalidad en la TUI para no depender de los valores
+  actuales del servidor.
+- **Zona horaria:** las horas de Peruanos.dev no incluyen offset. Se interpretan
+  como hora estándar del Perú (UTC-5, sin horario de verano). Un plazo sin hora
+  se mantiene abierto hasta el final del día peruano.
+- **Datos opcionales:** un campo ausente o vacío nunca descarta el elemento; las
+  fechas inválidas se dejan desconocidas en vez de inventarlas.
+- **Proyectos:** se reutiliza el parser de GitHub, así que el mismo repositorio
+  importado por el conector GitHub y por Peruanos.dev es un solo elemento con dos
+  *sightings*.
+- **Actualización:** sin `ETag`/`Last-Modified` en eventos, comunidades y CFS;
+  se hace una petición por ejecución (por defecto cada 120 minutos) y el
+  `projects` sí aprovecha validadores condicionales cuando el servidor los envía.
+- **Límites:** no se documenta paginación; la API devolvió el conjunto completo.
+  La integración es estrictamente de lectura: SENTRI nunca envía datos al sitio.
+- **Evidencia de pruebas:** unitarias con respuestas reales recortadas
+  (`crates/sentri-sources/src/peruanos.rs`) y de integración con un servidor mock
+  (`crates/sentri-app/tests/peru.rs`). La API real se comprobó manualmente el
+  2026-11-17; las pruebas automáticas no dependen de la red.
+
+**Limitaciones conocidas:** los eventos no publican fecha de fin ni precio; los
+CFS pueden estar vencidos (se conservan y se ordenan por plazo, no se ocultan);
+los tipos `virtual`/`hibrido` aún no aparecen en los datos del servidor.
+
+### GDG Community
+
+Se reutiliza el conector `kind = "gdg"` ya existente. Cada instancia apunta a la
+página pública de un capítulo (`https://gdg.community.dev/<capítulo>/`), lee los
+enlaces de eventos y extrae el JSON-LD `Event` de cada página. El conector omite
+eventos pasados y limita las páginas por ejecución. La configuración por defecto
+incluye `gdg-cusco`, `gdg-lima` y `gdg-cloud-lima`.
+
+### hack0.dev
+
+`hack0.dev` es un directorio de eventos de Latinoamérica sin API pública. Su
+`robots.txt` permite `/eventos` y `/ciudad/...`, pero prohíbe `/api/`. El
+conector `kind = "hack0"` lee el listado público y hasta 10 páginas de evento por
+ejecución, extrae el JSON-LD `Event` y conserva solo eventos de Perú: exige
+`addressCountry` peruano o una ciudad peruana conocida cuando el país falta.
+Prefiere la URL de la oferta (`offers.url`, p. ej. Luma) como identidad para
+deduplicar con otros conectores. Si el sitio cambia su marcado, no se adivina:
+se deja de importar y se usa `sentri add`.
+
+### Deduplicación entre fuentes
+
+El mismo evento puede llegar de Peruanos.dev, GDG y hack0.dev. La deduplicación
+usa, en orden: URL canónica (incluida la URL de registro/oferta), huella de la
+noticia y `(source_name, external_id)`. Al fusionar se conservan todas las
+referencias en `opportunity_sightings` (fuente, URL original, identificador y
+fechas de primera/última vez), y la vista de detalles muestra cada fuente. Las
+correcciones manuales viven en `opportunity_overrides` y ninguna recolección las
+sobrescribe.
 
 ## Orden de implementación propuesto
 

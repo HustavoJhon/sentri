@@ -9,7 +9,7 @@ Las fases son incrementales; cada una termina con funcionalidad probada.
 | 2 | Normalización, deduplicación, búsqueda, filtros | ✅ |
 | 3 | Likes, guardados, descartes, historial, `sentri add`, `sentri edit` | ✅ (formulario de edición en la TUI pendiente) |
 | 4 | TUI: Gruvbox, dashboard, feed, detalles, atajos, command palette | ✅ |
-| 5 | Conectores: RSS/Atom ✅, GitHub ✅, Hacker News, iCalendar (Reddit descartado, ver sources.md) | 🚧 |
+| 5 | Conectores: RSS/Atom ✅, GitHub ✅, Peruanos.dev y hack0.dev ✅, GDG ✅, Hacker News, iCalendar (Reddit descartado, ver sources.md) | 🚧 |
 | 6 | Intereses, scoring, explicaciones, personalización | 🚧 (base hecha en fase 1) |
 | 7 | Eventos y Google Calendar (OAuth2) | 🚧 calendario local completo; Google sin conectar |
 | 8 | Cursos, certificados, proyectos open source, aprendizaje | ⏳ |
@@ -48,6 +48,38 @@ Pendiente de esta fase:
   guarda; falta sustituir todos los glifos).
 - Reclasificar noticias antiguas tras mejorar la heurística (las ya guardadas
   conservan su naturaleza detectada).
+
+## Fase del ecosistema tech peruano (2026-11-17)
+
+Hecho:
+
+- Conector Peruanos.dev (`kind = "peruanos"`) con cuatro objetivos independientes:
+  eventos, comunidades, proyectos open source y Call for Speakers. La API real se
+  comprobó el 2026-11-17 (endpoints, campos y filtros de ciudad/tipo).
+- Conector hack0.dev (`kind = "hack0"`): listado público e JSON-LD de eventos,
+  solo Perú, sin usar `/api/` (prohibido por `robots.txt`).
+- Capítulos GDG de Lima y Cloud Lima añadidos por configuración, reutilizando el
+  conector GDG existente.
+- Categorías nuevas `Community` y `CallForSpeakers`, y vistas dedicadas
+  *Communities* y *Call for Speakers* en la TUI. Los eventos y proyectos de Perú
+  se muestran en las vistas *Events* y *Open Source* existentes.
+- Filtros rápidos de modalidad (`M`), ciudad (`L`, empezando por la ciudad del
+  perfil) y pasados (`H`), además de los existentes de precio, viaje,
+  próximos y elegibles. Los plazos de los CFS se ordenan por fecha límite.
+- Deduplicación entre fuentes con `opportunity_sightings`: un mismo evento de
+  Peruanos.dev, GDG o hack0.dev es un solo elemento con varias referencias; los
+  detalles muestran cada fuente. Las correcciones manuales nunca se sobrescriben.
+- Pruebas unitarias con respuestas reales recortadas y pruebas de integración
+  contra un servidor mock (deduplicación, recolección repetida, ediciones
+  manuales, `429` y JSON inválido sin afectar a las demás fuentes).
+
+Pendiente:
+
+- No hay una API de comunidades de GDG ni de hack0.dev; esas fuentes aportan
+  eventos. Las comunidades se descubren por Peruanos.dev o con `sentri add`.
+- Los CFS de Peruanos.dev no siempre publican elegibilidad ni requisitos.
+- Seguir la evolución del esquema de Peruanos.dev y de hack0.dev (sin versión
+  pública); si cambian, el conector deja de importar y se usa `sentri add`.
 
 ## Fase de fuentes y fiabilidad (2026-11-16)
 
