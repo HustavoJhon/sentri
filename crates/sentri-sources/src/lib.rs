@@ -7,12 +7,14 @@ pub mod connector;
 pub mod devpost;
 pub mod gdg;
 pub mod github;
+pub mod hack0;
 pub mod hackernews;
 pub mod http;
 pub mod ical;
 pub mod kaggle;
 pub mod metadata;
 pub mod net;
+pub mod peruanos;
 pub mod rss;
 
 pub use connector::{Connector, Incremental, SourceError, SourceSpec};

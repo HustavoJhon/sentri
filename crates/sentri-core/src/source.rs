@@ -52,10 +52,12 @@ pub enum SourceKind {
     #[serde(rename = "googlenews")]
     GoogleNews,
     Web,
+    Peruanos,
+    Hack0,
 }
 
 impl SourceKind {
-    pub const ALL: [Self; 24] = [
+    pub const ALL: [Self; 26] = [
         Self::Manual,
         Self::Rss,
         Self::ICal,
@@ -80,6 +82,8 @@ impl SourceKind {
         Self::Mastodon,
         Self::GoogleNews,
         Self::Web,
+        Self::Peruanos,
+        Self::Hack0,
     ];
 
     pub const fn as_str(self) -> &'static str {
@@ -108,6 +112,8 @@ impl SourceKind {
             Self::Mastodon => "mastodon",
             Self::GoogleNews => "googlenews",
             Self::Web => "web",
+            Self::Peruanos => "peruanos",
+            Self::Hack0 => "hack0",
         }
     }
 
@@ -137,6 +143,8 @@ impl SourceKind {
             Self::Mastodon => "Mastodon",
             Self::GoogleNews => "Google News",
             Self::Web => "Web",
+            Self::Peruanos => "Peruanos.dev",
+            Self::Hack0 => "hack0.dev",
         }
     }
 
@@ -167,6 +175,8 @@ impl SourceKind {
             Self::Mastodon => "MA",
             Self::GoogleNews => "GN",
             Self::Web => "WW",
+            Self::Peruanos => "PE",
+            Self::Hack0 => "H0",
         }
     }
 
@@ -214,6 +224,10 @@ impl SourceKind {
             Self::Mastodon
         } else if matches("news.google.com") {
             Self::GoogleNews
+        } else if matches("peruanos.dev") {
+            Self::Peruanos
+        } else if matches("hack0.dev") {
+            Self::Hack0
         } else {
             return None;
         };

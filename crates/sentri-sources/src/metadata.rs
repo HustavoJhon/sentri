@@ -34,6 +34,10 @@ pub struct Structured {
     /// `Some(true)` when an offer has price 0.
     pub free: Option<bool>,
     pub price: Option<String>,
+    /// Event or page URL declared in the structured data.
+    pub url: Option<String>,
+    /// Registration URL declared by an offer, when present.
+    pub offer_url: Option<String>,
     pub organization: Option<String>,
     /// The page declares itself a hackathon (`@type: ["Event", "Hackathon"]`).
     pub hackathon: bool,
@@ -247,6 +251,7 @@ fn from_node(node: &Value) -> Option<Structured> {
         starts_at: str_at(node, "startDate").and_then(parse_date),
         ends_at: str_at(node, "endDate").and_then(parse_date),
         deadline: str_at(node, "validThrough").and_then(parse_date),
+        url: str_at(node, "url").map(str::to_owned),
         organization: node
             .get("hiringOrganization")
             .or_else(|| node.get("organizer"))
@@ -267,6 +272,7 @@ fn from_node(node: &Value) -> Option<Structured> {
             .map(str::to_owned);
     }
     if let Some(offer) = node.get("offers").map(first) {
+        s.offer_url = str_at(offer, "url").map(str::to_owned);
         let price = offer.get("price").and_then(|p| match p {
             Value::String(s) => Some(s.clone()),
             Value::Number(n) => Some(n.to_string()),

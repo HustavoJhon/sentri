@@ -78,6 +78,8 @@ const CATEGORY: &[&str] = &[
     "job",
     "internship",
     "open_source",
+    "community",
+    "call_for_speakers",
     "other",
 ];
 const SOURCE: &[&str] = &[
@@ -105,6 +107,8 @@ const SOURCE: &[&str] = &[
     "mastodon",
     "googlenews",
     "web",
+    "peruanos",
+    "hack0",
 ];
 
 fields! {

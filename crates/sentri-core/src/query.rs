@@ -22,6 +22,8 @@ pub enum FeedView {
     Scholarships,
     Volunteering,
     OpenSource,
+    Communities,
+    CallForSpeakers,
     Travel,
     Liked,
     Saved,
@@ -46,6 +48,8 @@ impl FeedView {
             Self::Scholarships => "Scholarships",
             Self::Volunteering => "Volunteering",
             Self::OpenSource => "Open Source",
+            Self::Communities => "Communities",
+            Self::CallForSpeakers => "Call for Speakers",
             Self::Travel => "Travel",
             Self::Liked => "Likes",
             Self::Saved => "Saved",
@@ -77,6 +81,8 @@ impl FeedView {
             ],
             Self::Volunteering => &[Category::Volunteering],
             Self::OpenSource => &[Category::OpenSource],
+            Self::Communities => &[Category::Community],
+            Self::CallForSpeakers => &[Category::CallForSpeakers],
             _ => return None,
         })
     }
@@ -108,6 +114,8 @@ impl FeedView {
             | Self::Scholarships
             | Self::Volunteering
             | Self::OpenSource
+            | Self::Communities
+            | Self::CallForSpeakers
             | Self::Travel => Some(crate::ContentKind::Opportunity),
             _ => None,
         }

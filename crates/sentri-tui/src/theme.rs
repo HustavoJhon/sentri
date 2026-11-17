@@ -156,8 +156,8 @@ impl Theme {
             K::GitHub | K::X | K::Threads | K::TikTok | K::Web => self.p.fg4,
             K::Luma | K::Kaggle => self.p.aqua,
             K::Gdg | K::GoogleNews => self.p.green,
-            K::Rss | K::ICal => self.p.yellow,
-            K::Manual | K::Instagram | K::Mastodon => self.p.purple,
+            K::Rss | K::ICal | K::Hack0 => self.p.yellow,
+            K::Manual | K::Instagram | K::Mastodon | K::Peruanos => self.p.purple,
             K::YouTube => self.p.red,
         }
     }
@@ -165,13 +165,13 @@ impl Theme {
     pub const fn category_color(&self, category: Category) -> Color {
         match category {
             Category::Hackathon | Category::Competition => self.p.red,
-            Category::Job | Category::Internship => self.p.blue,
+            Category::Job | Category::Internship | Category::Community => self.p.blue,
             Category::Course | Category::Training => self.p.green,
             Category::Scholarship | Category::Fellowship | Category::Exchange => self.p.purple,
             Category::Event | Category::Conference | Category::Workshop | Category::Meetup => {
                 self.p.aqua
             }
-            Category::Volunteering | Category::Call => self.p.yellow,
+            Category::Volunteering | Category::Call | Category::CallForSpeakers => self.p.yellow,
             Category::OpenSource => self.p.orange,
             Category::Other => self.p.gray,
         }

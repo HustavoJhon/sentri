@@ -11,11 +11,13 @@ use crate::SafeClient;
 use crate::devpost::Devpost;
 use crate::gdg::Gdg;
 use crate::github::GitHub;
+use crate::hack0::Hack0;
 use crate::hackernews::HackerNews;
 use crate::http::FetchError;
 use crate::http::Validators;
 use crate::ical::Calendar;
 use crate::kaggle::Kaggle;
+use crate::peruanos::Peruanos;
 use crate::rss::Feed;
 
 /// Everything a connector needs, independent of the configuration format.
@@ -70,6 +72,8 @@ pub enum Connector {
     Gdg(Gdg),
     Devpost(Devpost),
     Kaggle(Kaggle),
+    Peruanos(Peruanos),
+    Hack0(Hack0),
 }
 
 impl Connector {
@@ -87,6 +91,8 @@ impl Connector {
             SourceKind::Gdg => Gdg::new(spec).map(Self::Gdg),
             SourceKind::Devpost => Devpost::new(spec).map(Self::Devpost),
             SourceKind::Kaggle => Kaggle::new(spec).map(Self::Kaggle),
+            SourceKind::Peruanos => Peruanos::new(spec).map(Self::Peruanos),
+            SourceKind::Hack0 => Hack0::new(spec).map(Self::Hack0),
             // Calendar feeds (`.ics`, `webcal://`).
             SourceKind::ICal | SourceKind::Luma | SourceKind::Meetup => {
                 Calendar::new(spec).map(Self::Calendar)
@@ -104,6 +110,8 @@ impl Connector {
             Self::Gdg(c) => &c.spec,
             Self::Devpost(c) => &c.spec,
             Self::Kaggle(c) => &c.spec,
+            Self::Peruanos(c) => &c.spec,
+            Self::Hack0(c) => &c.spec,
         }
     }
 
@@ -118,6 +126,20 @@ impl Connector {
         let fetched = match self {
             Self::Feed(c) => c.fetch_conditional(http, now, validators).await,
             Self::Calendar(c) => c.fetch_conditional(http, now, validators).await,
+            Self::Peruanos(c) => {
+                let (items, validators) = c.fetch_conditional(http, now, validators).await?;
+                return Ok(Incremental {
+                    items: Some(self.finish_all(items)),
+                    validators,
+                });
+            }
+            Self::Hack0(c) => {
+                let (items, validators) = c.fetch_conditional(http, now, validators).await?;
+                return Ok(Incremental {
+                    items: Some(self.finish_all(items)),
+                    validators,
+                });
+            }
             _ => {
                 return Ok(Incremental {
                     items: Some(self.fetch(http, now).await?),
@@ -162,6 +184,8 @@ impl Connector {
             Self::Gdg(c) => c.fetch(http, now).await?,
             Self::Devpost(c) => c.fetch(http, now).await?,
             Self::Kaggle(c) => c.fetch(http, now).await?,
+            Self::Peruanos(c) => c.fetch(http, now).await?,
+            Self::Hack0(c) => c.fetch(http, now).await?,
         };
         Ok(self.finish_all(items))
     }

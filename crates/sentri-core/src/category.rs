@@ -25,11 +25,13 @@ pub enum Category {
     Job,
     Internship,
     OpenSource,
+    Community,
+    CallForSpeakers,
     Other,
 }
 
 impl Category {
-    pub const ALL: [Self; 17] = [
+    pub const ALL: [Self; 19] = [
         Self::Event,
         Self::Conference,
         Self::Workshop,
@@ -46,6 +48,8 @@ impl Category {
         Self::Job,
         Self::Internship,
         Self::OpenSource,
+        Self::Community,
+        Self::CallForSpeakers,
         Self::Other,
     ];
 
@@ -68,6 +72,8 @@ impl Category {
             Self::Job => "job",
             Self::Internship => "internship",
             Self::OpenSource => "open_source",
+            Self::Community => "community",
+            Self::CallForSpeakers => "call_for_speakers",
             Self::Other => "other",
         }
     }
@@ -91,6 +97,8 @@ impl Category {
             Self::Job => "Job",
             Self::Internship => "Internship",
             Self::OpenSource => "Open Source",
+            Self::Community => "Community",
+            Self::CallForSpeakers => "Call for Speakers",
             Self::Other => "Other",
         }
     }

@@ -115,31 +115,37 @@ pub fn parse(
     Ok(items
         .iter()
         .filter_map(|item| match target {
-            Target::Repositories => repository(item, source_name, now),
+            Target::Repositories => repository(item, SourceKind::GitHub, source_name, now),
             Target::Issues => issue(item, source_name, now),
         })
         .collect())
 }
 
-fn base(item: &Value, title: &str, source_name: &str, now: DateTime<Utc>) -> Option<Opportunity> {
+fn base(
+    item: &Value,
+    source: SourceKind,
+    title: &str,
+    source_name: &str,
+    now: DateTime<Utc>,
+) -> Option<Opportunity> {
     let link = s(item, "html_url")?;
     let canonical = CanonicalUrl::parse(link).ok()?;
-    let mut o = Opportunity::new(
-        SourceKind::GitHub,
-        source_name,
-        link,
-        &canonical,
-        title,
-        now,
-    );
+    let mut o = Opportunity::new(source, source_name, link, &canonical, title, now);
     o.category = Category::OpenSource;
     o.external_id = item.get("id").map(Value::to_string);
     Some(o)
 }
 
-fn repository(item: &Value, source_name: &str, now: DateTime<Utc>) -> Option<Opportunity> {
+/// Converts a GitHub REST repository object. Shared with aggregators that
+/// publish repositories (Peruanos.dev), so the same repo keeps one identity.
+pub(crate) fn repository(
+    item: &Value,
+    source: SourceKind,
+    source_name: &str,
+    now: DateTime<Utc>,
+) -> Option<Opportunity> {
     let name = s(item, "full_name")?;
-    let mut o = base(item, name, source_name, now)?;
+    let mut o = base(item, source, name, source_name, now)?;
     let stars = item
         .get("stargazers_count")
         .and_then(Value::as_u64)
@@ -188,7 +194,7 @@ fn issue(item: &Value, source_name: &str, now: DateTime<Utc>) -> Option<Opportun
         .and_then(|u| u.split("/repos/").nth(1))
         .unwrap_or("github");
     let title = format!("[{repo}] {}", s(item, "title")?);
-    let mut o = base(item, &title, source_name, now)?;
+    let mut o = base(item, SourceKind::GitHub, &title, source_name, now)?;
     o.summary = s(item, "body").map(str::to_owned);
     o.dates.published_at = date(item, "created_at");
     o.modality = sentri_core::Modality::Online;
