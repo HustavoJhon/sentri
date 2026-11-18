@@ -330,10 +330,15 @@ fn next_city(current: Option<&str>, home: Option<&str>) -> Option<String> {
 pub enum Mode {
     Normal,
     Search(LineInput),
-    Palette { input: LineInput, selected: usize },
+    Palette {
+        input: LineInput,
+        selected: usize,
+    },
     AddLink(LineInput),
     Help,
     Editor(Box<EditorState>),
+    /// Quitting with unsaved settings: asks before discarding them.
+    ConfirmQuit,
 }
 
 /// Severity of a status-bar message.
@@ -851,7 +856,11 @@ impl State {
                 Vec::new()
             }
             Command::Quit => {
-                self.quit = true;
+                if self.settings.is_dirty() {
+                    self.mode = Mode::ConfirmQuit;
+                } else {
+                    self.quit = true;
+                }
                 Vec::new()
             }
         }
@@ -869,6 +878,22 @@ impl State {
             .collect()
     }
 
+    /// `y`/`q` quits without saving, `s` opens Settings to save, anything
+    /// else keeps working.
+    fn on_confirm_quit_key(&mut self, key: KeyEvent) -> Vec<Effect> {
+        self.mode = Mode::Normal;
+        match key.code {
+            KeyCode::Char('y' | 'q') => self.quit = true,
+            KeyCode::Char('s') => {
+                if let Some(index) = Section::ALL.iter().position(|s| *s == Section::Settings) {
+                    return self.go_to(index);
+                }
+            }
+            _ => {}
+        }
+        Vec::new()
+    }
+
     pub fn on_key(&mut self, key: KeyEvent) -> Vec<Effect> {
         // Any key acknowledges the previous message.
         self.message = None;
@@ -882,6 +907,7 @@ impl State {
                 self.mode = Mode::Normal;
                 Vec::new()
             }
+            Mode::ConfirmQuit => self.on_confirm_quit_key(key),
             Mode::Search(input) => self.on_search_key(input, key),
             Mode::AddLink(input) => self.on_add_key(input, key),
             Mode::Palette { input, selected } => self.on_palette_key(input, selected, key),

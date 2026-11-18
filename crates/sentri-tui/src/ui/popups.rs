@@ -24,11 +24,35 @@ const NAVIGATION: &[(&str, &str)] = &[
     ("Ctrl-c", "quit"),
 ];
 
+fn confirm_quit(frame: &mut Frame, area: ratatui::layout::Rect, theme: &Theme) {
+    let popup = centered(area, 60, 7);
+    frame.render_widget(Clear, popup);
+    let lines = vec![
+        Line::from(Span::styled(
+            "Settings have changes that are not saved yet.",
+            theme.warn(),
+        )),
+        Line::default(),
+        Line::from(vec![
+            Span::styled(" s ", theme.key()),
+            Span::styled(" go to Settings (then Ctrl-s)   ", theme.muted()),
+            Span::styled(" y ", theme.key()),
+            Span::styled(" quit without saving", theme.muted()),
+        ]),
+        Line::from(Span::styled("Any other key keeps working.", theme.muted())),
+    ];
+    frame.render_widget(
+        Paragraph::new(lines).block(panel(theme, "Unsaved settings", true)),
+        popup,
+    );
+}
+
 pub fn render(frame: &mut Frame, state: &State, theme: &Theme) {
     let area = frame.area();
     match &state.mode {
         Mode::Normal | Mode::Editor(_) => {}
         Mode::Help => help(frame, area, state, theme),
+        Mode::ConfirmQuit => confirm_quit(frame, area, theme),
         Mode::Palette { input, selected } => palette(frame, area, state, theme, input, *selected),
         Mode::Search(input) => prompt(
             frame,

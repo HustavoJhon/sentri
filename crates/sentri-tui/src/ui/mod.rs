@@ -201,13 +201,18 @@ fn draw_sidebar(frame: &mut Frame, area: Rect, state: &mut State, theme: &Theme)
                     .filter(|n| *n > 0),
                 _ => None,
             };
-            let count = count.map(|n| {
+            let mut count = count.map(|n| {
                 if n > 999 {
                     "999+".to_owned()
                 } else {
                     n.to_string()
                 }
             });
+            // Unsaved settings stay marked wherever you are.
+            let unsaved = *section == Section::Settings && state.settings.is_dirty();
+            if unsaved {
+                count = Some("●".to_owned());
+            }
             // Room after "1 ◆ " inside the bordered, padded panel; some
             // icons (⚡) take two columns.
             let icon_width = Span::raw(section.icon()).width();
@@ -225,7 +230,10 @@ fn draw_sidebar(frame: &mut Frame, area: Rect, state: &mut State, theme: &Theme)
             ];
             if let Some(count) = count {
                 spans.push(Span::raw(" ".repeat(gap + 1)));
-                spans.push(Span::styled(count, theme.muted()));
+                spans.push(Span::styled(
+                    count,
+                    if unsaved { theme.warn() } else { theme.muted() },
+                ));
             }
             ListItem::new(Line::from(spans))
         })
@@ -582,6 +590,43 @@ mod tests {
             "{}",
             row("Call for")
         );
+    }
+
+    #[test]
+    fn quitting_with_unsaved_settings_asks_first() {
+        use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+        let key = |c| KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE);
+        let config = sentri_app::Config::parse(
+            sentri_app::config::DEFAULT_CONFIG,
+            std::path::Path::new("d"),
+        )
+        .unwrap();
+        let mut state = State {
+            settings: crate::state::settings::SettingsState::from_config(&config),
+            ..State::default()
+        };
+        let row = state
+            .settings
+            .rows
+            .iter_mut()
+            .find(|r| r.key == "github.username")
+            .unwrap();
+        row.value = "hustavojhon".into();
+        assert!(state.settings.is_dirty());
+
+        let screen = render(140, 30, &mut state);
+        assert!(
+            screen.contains("Settings       ● │"),
+            "sidebar marker\n{screen}"
+        );
+        state.on_key(key('q'));
+        assert!(!state.quit, "asks first");
+        assert!(render(140, 30, &mut state).contains("Unsaved settings"));
+        state.on_key(key('x'));
+        assert!(!state.quit, "any other key keeps working");
+        state.on_key(key('q'));
+        state.on_key(key('y'));
+        assert!(state.quit);
     }
 
     #[test]
