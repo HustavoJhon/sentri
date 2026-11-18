@@ -97,6 +97,9 @@ pub struct UiConfig {
     pub feed_width: u16,
     /// Where downloaded images and avatars are cached.
     pub cache_dir: Option<PathBuf>,
+    /// Collect when the interface opens: `auto` (empty database or data older
+    /// than `daemon.interval_minutes`), `always` or `never`.
+    pub collect_on_start: String,
 }
 
 impl Default for UiConfig {
@@ -110,6 +113,7 @@ impl Default for UiConfig {
             show_details: true,
             feed_width: 55,
             cache_dir: None,
+            collect_on_start: "auto".into(),
         }
     }
 }
@@ -346,6 +350,11 @@ impl Config {
         if !["month", "week", "day", "agenda"].contains(&self.calendar.default_view.as_str()) {
             return Err(ConfigError::Invalid(
                 "calendar.default_view must be month, week, day or agenda".into(),
+            ));
+        }
+        if !["auto", "always", "never"].contains(&self.ui.collect_on_start.as_str()) {
+            return Err(ConfigError::Invalid(
+                "ui.collect_on_start must be auto, always or never".into(),
             ));
         }
         if self.daemon.interval_minutes < 15 {

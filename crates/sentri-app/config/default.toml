@@ -84,6 +84,7 @@ ascii_icons = false
 show_sidebar = true
 show_details = true
 feed_width = 55           # % of the main area used by the feed
+collect_on_start = "auto" # auto (empty or stale data) | always | never
 
 # Sources. Each one is independent: if it fails, the others keep working.
 [[sources]]

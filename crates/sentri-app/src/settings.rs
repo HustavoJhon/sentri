@@ -129,6 +129,14 @@ pub const SETTINGS: &[Setting] = &[
         true,
     ),
     s(
+        "ui.collect_on_start",
+        "Appearance",
+        "Collect on start",
+        SettingKind::Choice(&["auto", "always", "never"]),
+        "auto: when empty or older than the daemon interval",
+        true,
+    ),
+    s(
         "profile.home_city",
         "Profile",
         "Home city",
@@ -270,6 +278,7 @@ pub fn current(config: &Config, key: &str) -> Option<String> {
         "ui.show_sidebar" => ui.show_sidebar.to_string(),
         "ui.show_details" => ui.show_details.to_string(),
         "ui.feed_width" => ui.feed_width.to_string(),
+        "ui.collect_on_start" => ui.collect_on_start.clone(),
         "profile.home_city" => text(&config.profile.home_city),
         "profile.country" => text(&config.profile.country),
         "github.username" => text(&config.github.username),
