@@ -440,6 +440,26 @@ mod tests {
     }
 
     #[test]
+    fn first_run_shows_welcome_and_progress() {
+        let mut state = State {
+            collecting: Some(crate::state::collect::CollectProgress {
+                done: 5,
+                total: 20,
+                new: 34,
+                first_run: true,
+                ..Default::default()
+            }),
+            ..State::default()
+        };
+        let screen = render(140, 30, &mut state);
+        assert!(screen.contains("Welcome to SENTRI"));
+        assert!(screen.contains("from 20 sources."), "{screen}");
+        assert!(screen.contains("collecting 5/20 · +34"), "header");
+        assert!(screen.contains("+34 new"), "status bar");
+        assert!(!screen.contains("No opportunities here yet"));
+    }
+
+    #[test]
     fn empty_feed_explains_what_to_do() {
         let mut state = State::default();
         let screen = render(100, 20, &mut state);
