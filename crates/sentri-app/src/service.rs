@@ -137,6 +137,24 @@ impl Sentri {
         ))
     }
 
+    /// How many items each view holds right now (no search or filters), for
+    /// the counters next to each section.
+    pub async fn view_counts(
+        &self,
+        views: &[sentri_core::FeedView],
+    ) -> Result<Vec<(sentri_core::FeedView, usize)>, AppError> {
+        let now = Utc::now();
+        let mut counts = Vec::with_capacity(views.len());
+        for view in views {
+            let query = FeedQuery {
+                sort: sentri_core::SortOrder::Newest,
+                ..FeedQuery::view(*view)
+            };
+            counts.push((*view, self.store.list(&query, now).await?.len()));
+        }
+        Ok(counts)
+    }
+
     /// One item with its relevance explanation.
     pub async fn explain(&self, id: OpportunityId) -> Result<Ranked, AppError> {
         let item = self.store.get(id).await?;

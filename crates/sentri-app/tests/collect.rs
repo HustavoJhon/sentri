@@ -213,3 +213,34 @@ async fn collects_in_parallel_and_reports_each_source() {
     assert_eq!(good.result, Ok((2, 2)));
     assert_eq!(app.feed(&FeedQuery::default()).await.unwrap().len(), 2);
 }
+
+#[tokio::test]
+async fn counts_items_per_view() {
+    let server = MockServer::start().await;
+    Mock::given(path("/feed.xml"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_raw(FEED.as_bytes().to_vec(), "application/rss+xml"),
+        )
+        .mount(&server)
+        .await;
+    let store = Store::in_memory().await.unwrap();
+    let app = Sentri::with_store(config(&server), store, true).unwrap();
+    app.collect(Some("good")).await;
+    let counts = app
+        .view_counts(&[
+            sentri_core::FeedView::Discover,
+            sentri_core::FeedView::Hackathons,
+            sentri_core::FeedView::Jobs,
+        ])
+        .await
+        .unwrap();
+    assert_eq!(
+        counts,
+        [
+            (sentri_core::FeedView::Discover, 2),
+            (sentri_core::FeedView::Hackathons, 1),
+            (sentri_core::FeedView::Jobs, 0),
+        ]
+    );
+}
