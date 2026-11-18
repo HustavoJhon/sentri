@@ -69,7 +69,12 @@ fn draw_header(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
         spans.push(Span::raw(" "));
         spans.push(Span::styled(format!("[{chip}]"), theme.warn()));
     }
-    if state.loading {
+    if let Some(progress) = &state.collecting {
+        spans.push(Span::styled(
+            format!("  ⟳ {}", progress.label()),
+            theme.warn(),
+        ));
+    } else if state.loading {
         spans.push(Span::styled("  ⟳", theme.dim()));
     }
     let right = Line::from(vec![
@@ -304,6 +309,22 @@ fn draw_status(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
         Paragraph::new(line).style(Style::new().bg(theme.p.bg0_h)),
         area,
     );
+    if let Some(progress) = state.collecting.as_ref().filter(|_| area.width >= MEDIUM) {
+        let mut spans = vec![Span::styled(
+            format!(
+                "⟳ {}/{} ",
+                progress.done.min(progress.total),
+                progress.total
+            ),
+            theme.warn(),
+        )];
+        spans.extend(widgets::progress_bar(theme, progress.ratio(), 16));
+        spans.push(Span::styled(
+            format!(" +{} new ", progress.new),
+            theme.good(),
+        ));
+        frame.render_widget(Paragraph::new(Line::from(spans).right_aligned()), area);
+    }
 }
 
 #[cfg(test)]

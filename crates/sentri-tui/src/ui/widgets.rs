@@ -146,6 +146,21 @@ mod tests {
     }
 }
 
+/// A thin progress bar: `━` for the done part, `─` for the rest.
+pub fn progress_bar(theme: &Theme, ratio: f64, width: u16) -> Vec<Span<'static>> {
+    let width = usize::from(width);
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        clippy::cast_precision_loss
+    )]
+    let done = ((ratio.clamp(0.0, 1.0) * width as f64).round() as usize).min(width);
+    vec![
+        Span::styled("━".repeat(done), Style::new().fg(theme.p.yellow)),
+        Span::styled("─".repeat(width - done), theme.muted()),
+    ]
+}
+
 /// Characters that change how wide a terminal draws the previous glyph
 /// without changing the width ratatui computes. `🛠️` (U+1F6E0 + VS16) is
 /// laid out as one column but most terminals draw it as two, which shifts
