@@ -50,6 +50,7 @@ pub fn draw(frame: &mut Frame, state: &mut State, theme: &Theme) {
     if let crate::state::Mode::Editor(editor) = &state.mode {
         editor::render(frame, editor, theme);
     }
+    widgets::normalize_widths(frame.buffer_mut());
     if state.ui.ascii_icons {
         ascii::asciify(frame.buffer_mut());
     }

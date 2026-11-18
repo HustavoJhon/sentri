@@ -145,3 +145,45 @@ mod tests {
         assert_eq!(flag_glyphs(&state), "♥★");
     }
 }
+
+/// Characters that change how wide a terminal draws the previous glyph
+/// without changing the width ratatui computes. `🛠️` (U+1F6E0 + VS16) is
+/// laid out as one column but most terminals draw it as two, which shifts
+/// the rest of the row and breaks panel borders. Dropping the selector keeps
+/// the symbol and makes both agree.
+const PRESENTATION_SELECTORS: [char; 2] = ['\u{FE0F}', '\u{FE0E}'];
+
+/// Removes emoji presentation selectors from every cell of the frame.
+pub fn normalize_widths(buf: &mut ratatui::buffer::Buffer) {
+    for cell in &mut buf.content {
+        let symbol = cell.symbol();
+        if symbol.contains(PRESENTATION_SELECTORS) {
+            let cleaned: String = symbol
+                .chars()
+                .filter(|c| !PRESENTATION_SELECTORS.contains(c))
+                .collect();
+            cell.set_symbol(if cleaned.is_empty() { " " } else { &cleaned });
+        }
+    }
+}
+
+#[cfg(test)]
+mod width_tests {
+    use super::*;
+    use ratatui::buffer::Buffer;
+
+    #[test]
+    fn emoji_selectors_no_longer_widen_cells() {
+        let mut buf = Buffer::empty(Rect::new(0, 0, 8, 1));
+        buf.set_string(0, 0, "a\u{1F6E0}\u{FE0F}b", Style::new());
+        normalize_widths(&mut buf);
+        let row: Vec<&str> = buf
+            .content
+            .iter()
+            .map(ratatui::buffer::Cell::symbol)
+            .collect();
+        // ratatui reserves two columns; the plain symbol and a blank fill
+        // them on every terminal, whatever width it gives the selector.
+        assert_eq!(row[..4], ["a", "\u{1F6E0}", " ", "b"]);
+    }
+}
