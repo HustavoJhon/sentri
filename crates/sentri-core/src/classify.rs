@@ -404,6 +404,21 @@ pub fn news_key(title: &str, source: crate::SourceKind) -> Option<String> {
     (key.split(' ').count() >= 5).then_some(key)
 }
 
+/// Key that identifies the same event published by several directories:
+/// the normalized title, when it is specific enough (two words or more).
+/// It is only compared together with the start date.
+pub fn event_key(title: &str) -> Option<String> {
+    let key: String = title
+        .to_lowercase()
+        .chars()
+        .map(|c| if c.is_alphanumeric() { c } else { ' ' })
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    (key.split(' ').count() >= 2 && key.len() >= 8).then_some(key)
+}
+
 /// Main topic of a news item.
 pub fn news_topic(text: &str) -> Option<&'static str> {
     let text = text.to_lowercase();
@@ -614,5 +629,15 @@ mod tests {
         assert_eq!(o.perks.certificate, Some(true));
         assert_eq!(o.perks.travel_covered, Some(true));
         assert_eq!(o.perks.accommodation_covered, Some(true));
+    }
+
+    #[test]
+    fn event_keys_ignore_case_and_punctuation() {
+        assert_eq!(
+            event_key("DevFest Tacna 2026"),
+            event_key("DEVFEST  tacna — 2026!")
+        );
+        assert_eq!(event_key("Meetup"), None);
+        assert_eq!(event_key("AI Day"), None, "too generic");
     }
 }
