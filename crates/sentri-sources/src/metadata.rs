@@ -41,6 +41,10 @@ pub struct Structured {
     pub organization: Option<String>,
     /// The page declares itself a hackathon (`@type: ["Event", "Hackathon"]`).
     pub hackathon: bool,
+    /// Image declared by the item (`image` as text, list or `ImageObject`).
+    pub image: Option<String>,
+    /// Region declared next to the locality (`addressRegion`).
+    pub region: Option<String>,
 }
 
 /// Everything extracted from a page.
@@ -207,6 +211,22 @@ fn structured_data(doc: &Html) -> Structured {
         .unwrap_or_default()
 }
 
+/// Every schema.org item a listing page declares, in page order. Listing
+/// pages embed one block per item, so the cap is larger than for a single
+/// page.
+pub fn structured_items(html: &str, max_blocks: usize) -> Vec<Structured> {
+    let doc = Html::parse_document(html);
+    let Ok(selector) = Selector::parse(r#"script[type="application/ld+json"]"#) else {
+        return Vec::new();
+    };
+    doc.select(&selector)
+        .take(max_blocks)
+        .filter_map(|e| serde_json::from_str::<Value>(&e.text().collect::<String>()).ok())
+        .flat_map(flatten)
+        .filter_map(|node| from_node(&node))
+        .collect()
+}
+
 /// JSON-LD may be an object, an array, or an object with `@graph`.
 fn flatten(value: Value) -> Vec<Value> {
     match value {
@@ -262,6 +282,12 @@ fn from_node(node: &Value) -> Option<Structured> {
     };
     s.hackathon = hackathon;
     s.modality = modality(node);
+    s.image = node.get("image").map(first).and_then(|i| {
+        i.as_str()
+            .or_else(|| str_at(i, "url"))
+            .filter(|u| u.starts_with("https://"))
+            .map(str::to_owned)
+    });
     let place = node.get("location").or_else(|| node.get("jobLocation"));
     if let Some(place) = place.map(first) {
         s.location = place_name(place);
@@ -269,6 +295,10 @@ fn from_node(node: &Value) -> Option<Structured> {
             .get("address")
             .and_then(|a| a.get("addressCountry"))
             .and_then(|c| c.as_str().or_else(|| str_at(c, "name")))
+            .map(str::to_owned);
+        s.region = place
+            .get("address")
+            .and_then(|a| str_at(a, "addressRegion"))
             .map(str::to_owned);
     }
     if let Some(offer) = node.get("offers").map(first) {
