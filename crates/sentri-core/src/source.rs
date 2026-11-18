@@ -54,10 +54,14 @@ pub enum SourceKind {
     Web,
     Peruanos,
     Hack0,
+    #[serde(rename = "devevents")]
+    DevEvents,
+    #[serde(rename = "getonboard")]
+    GetOnBoard,
 }
 
 impl SourceKind {
-    pub const ALL: [Self; 26] = [
+    pub const ALL: [Self; 28] = [
         Self::Manual,
         Self::Rss,
         Self::ICal,
@@ -84,6 +88,8 @@ impl SourceKind {
         Self::Web,
         Self::Peruanos,
         Self::Hack0,
+        Self::DevEvents,
+        Self::GetOnBoard,
     ];
 
     pub const fn as_str(self) -> &'static str {
@@ -114,6 +120,8 @@ impl SourceKind {
             Self::Web => "web",
             Self::Peruanos => "peruanos",
             Self::Hack0 => "hack0",
+            Self::DevEvents => "devevents",
+            Self::GetOnBoard => "getonboard",
         }
     }
 
@@ -145,6 +153,8 @@ impl SourceKind {
             Self::Web => "Web",
             Self::Peruanos => "Peruanos.dev",
             Self::Hack0 => "hack0.dev",
+            Self::DevEvents => "dev.events",
+            Self::GetOnBoard => "Get on Board",
         }
     }
 
@@ -177,6 +187,8 @@ impl SourceKind {
             Self::Web => "WW",
             Self::Peruanos => "PE",
             Self::Hack0 => "H0",
+            Self::DevEvents => "DE",
+            Self::GetOnBoard => "GB",
         }
     }
 
@@ -228,6 +240,10 @@ impl SourceKind {
             Self::Peruanos
         } else if matches("hack0.dev") {
             Self::Hack0
+        } else if matches("dev.events") {
+            Self::DevEvents
+        } else if matches("getonbrd.com") {
+            Self::GetOnBoard
         } else {
             return None;
         };

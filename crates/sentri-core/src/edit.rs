@@ -109,6 +109,8 @@ const SOURCE: &[&str] = &[
     "web",
     "peruanos",
     "hack0",
+    "devevents",
+    "getonboard",
 ];
 
 fields! {
