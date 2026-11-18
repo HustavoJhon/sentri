@@ -20,6 +20,7 @@ use sentri_core::{
 };
 
 pub mod calendar;
+pub mod collect;
 pub mod editor;
 pub mod history;
 pub mod settings;
@@ -465,6 +466,10 @@ pub enum Msg {
     Acted(OpportunityId, InteractionState),
     Added(Box<AddOutcome>),
     Info(String),
+    /// A collection started; how many sources will run.
+    CollectStarted(usize),
+    /// One source finished during a collection.
+    SourceCollected(sentri_app::CollectReport),
     /// Collection finished; the text summarizes it. Triggers a reload.
     Collected(String),
     Detail(Box<DetailData>),
@@ -521,6 +526,9 @@ pub struct State {
     pub settings: SettingsState,
     pub sources: SourcesState,
     pub keymap: KeyMap,
+    /// Running collection, shown in the header and in empty views.
+    pub collecting: Option<collect::CollectProgress>,
+    pub start: collect::StartCheck,
     pub quit: bool,
 }
 
@@ -550,6 +558,8 @@ impl Default for State {
             settings: SettingsState::default(),
             sources: SourcesState::default(),
             keymap: keymap(&std::collections::BTreeMap::new()),
+            collecting: None,
+            start: collect::StartCheck::Pending,
             quit: false,
         }
     }
@@ -657,6 +667,41 @@ impl State {
         let last = self.items.len() - 1;
         self.selected = self.selected.saturating_add_signed(delta).min(last);
         self.detail_scroll = 0;
+    }
+
+    /// Starts a collection unless one is already running.
+    fn start_collect(&mut self, first_run: bool) -> Vec<Effect> {
+        if self.collecting.is_some() {
+            self.info("Already collecting…", Level::Info);
+            return Vec::new();
+        }
+        self.collecting = Some(collect::CollectProgress::started(first_run));
+        self.info(
+            if first_run {
+                "First run: collecting events, jobs and news from your sources…"
+            } else {
+                "Collecting from enabled sources…"
+            },
+            Level::Info,
+        );
+        vec![Effect::Collect]
+    }
+
+    /// Decides once, after the first overview, whether to collect on start.
+    fn check_start(&mut self) -> Vec<Effect> {
+        if self.start == collect::StartCheck::Done {
+            return Vec::new();
+        }
+        self.start = collect::StartCheck::Done;
+        match collect::on_start(&self.overview, chrono::Utc::now()) {
+            Some(collect::StartReason::Empty) => self.start_collect(true),
+            Some(_) => {
+                let effects = self.start_collect(false);
+                self.info("Refreshing sources in the background…", Level::Info);
+                effects
+            }
+            None => Vec::new(),
+        }
     }
 
     fn reload(&mut self) -> Vec<Effect> {
@@ -786,11 +831,7 @@ impl State {
                 self.mode = Mode::AddLink(LineInput::default());
                 Vec::new()
             }
-            Command::Collect => {
-                self.loading = true;
-                self.info("Collecting from enabled sources…", Level::Info);
-                vec![Effect::Collect]
-            }
+            Command::Collect => self.start_collect(false),
             Command::Reload => self.reload(),
             Command::Help => {
                 self.mode = Mode::Help;
@@ -1287,6 +1328,7 @@ impl State {
                     self.settings = SettingsState::from_config(&overview.config);
                 }
                 self.overview = *overview;
+                return self.check_start();
             }
             Msg::SettingsSaved(saved) => self.on_settings_saved(*saved),
             Msg::SourcesSaved(saved, text) => {
@@ -1334,7 +1376,20 @@ impl State {
             }
             Msg::Added(outcome) => return self.on_added(*outcome),
             Msg::Info(text) => self.info(text, Level::Info),
+            Msg::CollectStarted(total) => {
+                if let Some(p) = &mut self.collecting {
+                    p.total = total;
+                }
+            }
+            Msg::SourceCollected(report) => {
+                let brought_new = self.collecting.as_mut().is_some_and(|p| p.record(&report));
+                // Show new items as they arrive.
+                if brought_new {
+                    return self.reload();
+                }
+            }
             Msg::Collected(text) => {
+                self.collecting = None;
                 self.info(text, Level::Success);
                 return self.reload();
             }
@@ -1616,7 +1671,11 @@ mod tests {
     fn collect_key_emits_effect() {
         let mut s = loaded(0);
         assert_eq!(s.on_key(key(KeyCode::Char('R'))), vec![Effect::Collect]);
-        assert!(s.loading);
+        assert!(s.collecting.is_some());
+        assert!(
+            s.on_key(key(KeyCode::Char('R'))).is_empty(),
+            "one at a time"
+        );
     }
 
     #[test]

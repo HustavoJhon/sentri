@@ -111,6 +111,10 @@ fn spawn_terminal_reader(tx: UnboundedSender<Event>) {
     });
 }
 
+/// Sources fetched at the same time. Most live on different hosts; the few
+/// that share one (Google News, Get on Board) stay well under rate limits.
+const COLLECT_PARALLELISM: usize = 4;
+
 /// Runs an effect in the background and reports the result as a [`Msg`].
 fn execute(
     app: &Sentri,
@@ -155,27 +159,7 @@ fn execute(
                 let _ = tx.send(msg);
             });
         }
-        Effect::Collect => {
-            tokio::spawn(async move {
-                let reports = app.collect(None).await;
-                let new: i64 = reports
-                    .iter()
-                    .filter_map(|r| r.result.as_ref().ok())
-                    .map(|(_, n)| n)
-                    .sum();
-                let failed: Vec<&str> = reports
-                    .iter()
-                    .filter(|r| r.result.is_err())
-                    .map(|r| r.source.as_str())
-                    .collect();
-                let mut text = format!("Collected from {} sources: {new} new", reports.len());
-                if !failed.is_empty() {
-                    text.push_str(" · failed: ");
-                    text.push_str(&failed.join(", "));
-                }
-                let _ = tx.send(Msg::Collected(text));
-            });
-        }
+        Effect::Collect => execute_collect(app, tx),
         Effect::LoadProfile => load_profile(app, tx),
         Effect::CalendarDoctor => {
             let d = sentri_app::google::diagnose(&app.config().calendar.credentials_path());
@@ -217,6 +201,33 @@ fn execute(
             let _ = tx.send(open_url(&url));
         }
     }
+}
+
+/// Collects every enabled source in parallel, reporting each as it ends.
+fn execute_collect(app: Sentri, tx: UnboundedSender<Msg>) {
+    tokio::spawn(async move {
+        let enabled = app.config().sources.iter().filter(|s| s.enabled).count();
+        let _ = tx.send(Msg::CollectStarted(enabled));
+        let mut new = 0;
+        let mut failed = Vec::new();
+        let progress = tx.clone();
+        let total = app
+            .collect_each(COLLECT_PARALLELISM, |report| {
+                match &report.result {
+                    Ok((_, n)) => new += n,
+                    Err(_) => failed.push(report.source.clone()),
+                }
+                let _ = progress.send(Msg::SourceCollected(report));
+            })
+            .await;
+        let mut text = format!("Collected from {total} sources: {new} new");
+        if !failed.is_empty() {
+            failed.sort();
+            text.push_str(" · failed: ");
+            text.push_str(&failed.join(", "));
+        }
+        let _ = tx.send(Msg::Collected(text));
+    });
 }
 
 /// Source management: test, save (with backup), toggle, delete, refresh.
