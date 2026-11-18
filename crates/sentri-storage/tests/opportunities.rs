@@ -280,3 +280,44 @@ async fn merges_the_same_story_from_different_feeds() {
         .unwrap();
     assert!(later.is_new());
 }
+
+#[tokio::test]
+async fn the_same_event_from_two_directories_is_stored_once() {
+    let store = Store::in_memory().await.unwrap();
+    let day = chrono::NaiveDate::from_ymd_opt(2026, 11, 20).unwrap();
+    let mut gdg = opp(
+        "https://gdg.community.dev/events/details/devfest-tacna-2026",
+        "DevFest Tacna 2026",
+        Category::Conference,
+    );
+    gdg.source = SourceKind::Gdg;
+    gdg.source_name = "gdg-tacna".into();
+    gdg.dates.starts_at = Some(sentri_core::dates::all_day(day) + Duration::hours(14));
+    let mut listing = opp(
+        "https://dev.events/conferences/dev-fest-tacna-2026",
+        "DevFest Tacna 2026",
+        Category::Conference,
+    );
+    listing.source = SourceKind::DevEvents;
+    listing.source_name = "dev-events-peru".into();
+    listing.dates.starts_at = Some(sentri_core::dates::all_day(day));
+
+    let first = store.upsert_opportunity(&gdg).await.unwrap();
+    let second = store.upsert_opportunity(&listing).await.unwrap();
+    assert!(first.is_new());
+    assert!(!second.is_new(), "matched by title and day");
+    assert_eq!(store.count().await.unwrap(), 1);
+
+    // A monthly meetup keeps one entry per date.
+    let mut next_month = listing.clone();
+    next_month.canonical_url = "https://dev.events/conferences/dev-fest-tacna-2026-dec".into();
+    next_month.fingerprint = "other".into();
+    next_month.dates.starts_at = Some(sentri_core::dates::all_day(day) + Duration::days(30));
+    assert!(
+        store
+            .upsert_opportunity(&next_month)
+            .await
+            .unwrap()
+            .is_new()
+    );
+}

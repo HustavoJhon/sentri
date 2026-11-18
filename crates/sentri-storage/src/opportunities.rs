@@ -155,6 +155,9 @@ async fn find_duplicate(
     if let Some(id) = find_same_story(conn, o).await? {
         return Ok(Some(id));
     }
+    if let Some(id) = find_same_event(conn, o).await? {
+        return Ok(Some(id));
+    }
     let Some(external_id) = &o.external_id else {
         return Ok(None);
     };
@@ -190,6 +193,39 @@ async fn find_same_story(
     .bind(at)
     .fetch_optional(&mut *conn)
     .await?)
+}
+
+/// The same event already stored from another directory (dev.events, GDG,
+/// hack0, Peruanos.dev…): same normalized title starting within 36 hours.
+/// The window covers a date-only listing (midnight UTC) and a timed one.
+async fn find_same_event(
+    conn: &mut SqliteConnection,
+    o: &Opportunity,
+) -> Result<Option<i64>, StorageError> {
+    if o.content == sentri_core::ContentKind::News {
+        return Ok(None);
+    }
+    let (Some(start), Some(key)) = (
+        o.dates.starts_at,
+        sentri_core::classify::event_key(&o.title),
+    ) else {
+        return Ok(None);
+    };
+    let start = to_db(start);
+    let window = 36 * 3600;
+    let candidates: Vec<(i64, String)> = sqlx::query_as(
+        "SELECT id, title FROM opportunities
+         WHERE content_kind != 'news' AND starts_at BETWEEN ? AND ?
+         ORDER BY id",
+    )
+    .bind(start - window)
+    .bind(start + window)
+    .fetch_all(&mut *conn)
+    .await?;
+    Ok(candidates
+        .into_iter()
+        .find(|(_, title)| sentri_core::classify::event_key(title).as_deref() == Some(&key))
+        .map(|(id, _)| id))
 }
 
 async fn insert(
