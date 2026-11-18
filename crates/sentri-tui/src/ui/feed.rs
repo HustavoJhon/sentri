@@ -278,11 +278,12 @@ fn collecting_lines<'a>(
         Line::from(Span::styled(format!("  {heading}"), theme.title())),
         Line::default(),
         Line::from(Span::styled(
-            format!("  Collecting events, jobs, courses and tech news from {sources}."),
+            "  Collecting events, jobs, courses and tech news",
             theme.dim(),
         )),
+        Line::from(Span::styled(format!("  from {sources}."), theme.dim())),
         Line::from(Span::styled(
-            format!("  {title} fills in as each source answers."),
+            format!("  {title} fills in as each one answers."),
             theme.dim(),
         )),
         Line::default(),
