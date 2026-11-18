@@ -123,9 +123,19 @@ fn meta_parts<'a>(theme: &Theme, o: &'a Opportunity, now: DateTime<Utc>) -> Vec<
         ));
     } else if let Some(start) = o.dates.starts_at {
         parts.push(Span::styled(
-            format!("◷ {}", relative(start, now)),
-            theme.dim(),
+            format!("◷ {} · {}", short_date(start, now), relative(start, now)),
+            Style::new().fg(theme.p.blue),
         ));
+    } else if o.category.is_job()
+        && let Some(published) = o.dates.published_at
+    {
+        parts.push(Span::styled(
+            format!("posted {}", relative(published, now)),
+            theme.muted(),
+        ));
+    }
+    if let Some(org) = o.author.display() {
+        parts.push(Span::styled(org, Style::new().fg(theme.p.aqua)));
     }
     if let Some(location) = &o.location {
         parts.push(Span::styled(location.as_str(), theme.dim()));
@@ -137,6 +147,14 @@ fn meta_parts<'a>(theme: &Theme, o: &'a Opportunity, now: DateTime<Utc>) -> Vec<
     if o.cost.is_free() {
         parts.push(Span::styled("free", theme.good()));
     }
+    if let Some(salary) = o
+        .perks
+        .benefits
+        .as_deref()
+        .filter(|b| o.category.is_job() && b.starts_with("USD"))
+    {
+        parts.push(Span::styled(salary, theme.good()));
+    }
     if o.perks.prizes.is_some() {
         parts.push(Span::styled("$ prizes", Style::new().fg(theme.p.yellow)));
     }
@@ -147,6 +165,19 @@ fn meta_parts<'a>(theme: &Theme, o: &'a Opportunity, now: DateTime<Utc>) -> Vec<
         parts.push(Span::styled(o.source_name.as_str(), theme.muted()));
     }
     parts
+}
+
+/// `Fri 20 Nov`, or `20 Nov 2027` outside the current year. All-day dates
+/// keep their calendar day; instants use local time.
+fn short_date(at: DateTime<Utc>, now: DateTime<Utc>) -> String {
+    use chrono::Datelike;
+    let day =
+        sentri_core::dates::calendar_date(at, |d| d.with_timezone(&chrono::Local).date_naive());
+    if day.year() == now.with_timezone(&chrono::Local).year() {
+        day.format("%a %d %b").to_string()
+    } else {
+        day.format("%d %b %Y").to_string()
+    }
 }
 
 fn joined<'a>(indent: &'a str, parts: Vec<Span<'a>>, theme: &Theme) -> Line<'a> {
