@@ -76,6 +76,7 @@ postulado/inscrito +3, descartado −3.
 | `ascii_icons` | `true`/`false` |
 | `show_sidebar`, `show_details` | `true`/`false` |
 | `feed_width` | 30–80 (% del área principal) |
+| `collect_on_start` | `auto` (por defecto): recolecta al abrir la TUI si la base está vacía o ninguna fuente tuvo éxito dentro de `daemon.interval_minutes`; `always`; `never` |
 | `cache_dir` | Caché de imágenes y avatar (`~/.cache/sentri/images`) |
 
 ## `[github]`

@@ -199,9 +199,11 @@ presencial), salario publicado (USD/mes) y prácticas (`Internship`).
 
 ### Deduplicación entre fuentes
 
-El mismo evento puede llegar de Peruanos.dev, GDG y hack0.dev. La deduplicación
-usa, en orden: URL canónica (incluida la URL de registro/oferta), huella de la
-noticia y `(source_name, external_id)`. Al fusionar se conservan todas las
+El mismo evento puede llegar de Peruanos.dev, GDG, hack0.dev y dev.events. La
+deduplicación usa, en orden: URL canónica (incluida la URL de registro/oferta),
+huella de la noticia, **título normalizado del evento con inicio a ±36 h** (cubre
+un listado que solo da la fecha y otro que da la hora; un meetup mensual con el
+mismo título conserva una entrada por fecha) y `(source_name, external_id)`. Al fusionar se conservan todas las
 referencias en `opportunity_sightings` (fuente, URL original, identificador y
 fechas de primera/última vez), y la vista de detalles muestra cada fuente. Las
 correcciones manuales viven en `opportunity_overrides` y ninguna recolección las
