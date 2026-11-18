@@ -306,7 +306,7 @@ fn draw_lists(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
         .map(|(d, r)| {
             Line::from(vec![
                 Span::styled(
-                    format!("{:<9}", relative(*d, now)),
+                    format!("{:<11}", relative(*d, now)),
                     deadline_style(theme, *d, now),
                 ),
                 Span::raw(r.item.opportunity.title.as_str()),
