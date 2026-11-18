@@ -103,6 +103,8 @@ Fuentes: [Firecrawl](https://www.firecrawl.dev/blog/google-search-json-api-alter
 | **Peruanos.dev** | API JSON pública `https://www.peruanos.dev/api/{events,communities,projects,cfs}` | No | ✅ probado contra la API real | Directorio abierto; eventos, comunidades, proyectos open source y Call for Speakers. Solo lectura. |
 | **GDG Community** | Página de capítulo + JSON-LD `Event` de cada evento | No | ✅ conector existente | `gdg.community.dev/api/` está prohibido por `robots.txt`; se leen las páginas públicas de los capítulos configurados. |
 | **hack0.dev** | Listado `/eventos` + JSON-LD `Event` de cada evento | No | ✅ probado con páginas públicas | No hay API, RSS ni iCal públicos; `/api/` está prohibido por `robots.txt`. Filtra eventos de Perú y limita las páginas por ejecución. |
+| **dev.events** | Listado `/meetups/SA/PE` con un JSON-LD `Event` por evento | No | ✅ probado 2026-11-18 (16 eventos: PyDay Lima, DevFest Tacna, AWS Student Community Day…) | `robots.txt` permite todo a agentes normales. Una sola petición por ejecución; no se visitan páginas de detalle. |
+| **Get on Board** | API JSON pública `https://www.getonbrd.com/api/v0/categories/{categoría}/jobs?country_code=PE` | No | ✅ probado 2026-11-18 (32 empleos de programación abiertos a Perú) | API documentada en `api-doc.getonbrd.com` para datos ya públicos. Solo lectura: SENTRI nunca postula por ti. |
 
 ### Peruanos.dev
 
@@ -172,6 +174,29 @@ Prefiere la URL de la oferta (`offers.url`, p. ej. Luma) como identidad para
 deduplicar con otros conectores. Si el sitio cambia su marcado, no se adivina:
 se deja de importar y se usa `sentri add`.
 
+### dev.events
+
+`dev.events` publica por país listados de meetups (`/meetups/SA/PE`) y
+conferencias (`/conferences/SA/PE`). Cada listado incluye un bloque JSON-LD por
+evento (`EducationEvent`, con fecha, URL, imagen y lugar), así que el conector
+`kind = "devevents"` hace **una sola petición** y no abre páginas de detalle. Solo
+acepta URLs de `dev.events`. El país viene en `addressRegion`; los eventos en
+línea quedan sin país. Algunos eventos en línea del listado de Perú no son
+peruanos (p. ej. meetups globales); se conservan porque dev.events los muestra
+para Perú.
+
+### Get on Board
+
+Bolsa de empleo tech de Latinoamérica con API pública sin clave. Su
+`robots.txt` declara `Content-Signal: search=yes, ai-train=no, use=reference`:
+SENTRI solo guarda referencias (título, empresa, enlace, resumen) para uso
+personal y nunca entrena modelos con ellas. El conector `kind = "getonboard"`
+pide una categoría (`target`, p. ej. `programming`, `machine-learning-ai`,
+`data-science-analytics`, `sysadmin-devops-qa`) filtrada por país (`query`, p.
+ej. `PE`), de modo que solo llegan trabajos remotos o presenciales abiertos a
+ese país. Mapea empresa (nombre, web y logo), modalidad (remoto, híbrido,
+presencial), salario publicado (USD/mes) y prácticas (`Internship`).
+
 ### Deduplicación entre fuentes
 
 El mismo evento puede llegar de Peruanos.dev, GDG y hack0.dev. La deduplicación
@@ -230,6 +255,11 @@ Nunca se usan cookies ni credenciales de cuentas personales.
 | Ars Technica, The Verge, TechCrunch, Phoronix, LWN, BleepingComputer | RSS | ✅ |
 | Blogs oficiales: Rust, Go, GitHub, OpenAI | RSS/Atom | ✅ (`stance = "official"`) |
 | Blog de NVIDIA | RSS | ✅ desde 2026-11-16: el feed trae `<media:description>` vacíos que `feed-rs` rechazaba; SENTRI reintenta sin esos elementos vacíos. |
+| Xataka, Genbeta, Hipertextual | RSS en español | ✅ probado 2026-11-18. Xataka mezcla temas generales con tecnología. |
+| El Comercio — Tecnología | RSS (`/arc/outboundfeeds/rss/category/tecnologia/`) | ✅ probado 2026-11-18; noticias tech desde Perú. |
+| Google News Perú | RSS de búsqueda en español (`hl=es-419&gl=PE`) | ✅ probado 2026-11-18; startups y tecnología en Perú. |
+| RPP, La República, Platzi | — | ❌ sin feed de tecnología público (404) a 2026-11-18. |
+| PRONABEC (gob.pe) | — | ❌ gob.pe no publica RSS de noticias institucionales (400); las becas se agregan con `sentri add`. |
 | Reddit | — | ❌ RSS retirado el 13-nov-2026 (ver arriba). |
 
 ### Naturaleza de las noticias
