@@ -397,6 +397,28 @@ mod tests {
     }
 
     #[test]
+    fn top_picks_mix_sources() {
+        let with = |source, id| {
+            let mut r = sample();
+            r.item.opportunity.source = source;
+            r.item.id = OpportunityId(id);
+            r
+        };
+        let items: Vec<Ranked> = (1..=6)
+            .map(|id| with(SourceKind::GetOnBoard, id))
+            .chain([with(SourceKind::DevEvents, 7), with(SourceKind::Rss, 8)])
+            .collect();
+        let ids =
+            |picked: Vec<&Ranked>| -> Vec<i64> { picked.iter().map(|r| r.item.id.0).collect() };
+        assert_eq!(ids(dashboard::diversified(&items, 5, 3)), [1, 2, 3, 7, 8]);
+        // Not enough variety: the rest is filled in ranking order.
+        assert_eq!(
+            ids(dashboard::diversified(&items, 7, 3)),
+            [1, 2, 3, 7, 8, 4, 5]
+        );
+    }
+
+    #[test]
     fn empty_feed_explains_what_to_do() {
         let mut state = State::default();
         let screen = render(100, 20, &mut state);

@@ -11,6 +11,8 @@ use ratatui::widgets::{Bar, BarChart, BarGroup, Paragraph, Sparkline};
 
 use super::charts::{Scale, hbar_line, series};
 use super::widgets::{deadline_style, panel, relative, score_pill, source_badge};
+use sentri_app::Ranked;
+
 use crate::state::State;
 use crate::theme::Theme;
 
@@ -232,6 +234,30 @@ fn distribution(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
     frame.render_widget(Paragraph::new(lines), inner);
 }
 
+/// Items from one platform shown at most in a row of top picks, so a single
+/// busy source (a jobs board, a news site) cannot fill the whole list.
+const MAX_PER_SOURCE: usize = 3;
+
+/// The best `n` items in ranking order, at most `per_source` per platform;
+/// remaining slots are filled in order when there is not enough variety.
+pub(super) fn diversified(items: &[Ranked], n: usize, per_source: usize) -> Vec<&Ranked> {
+    let mut picked: Vec<&Ranked> = Vec::with_capacity(n);
+    let mut counts: std::collections::HashMap<sentri_core::SourceKind, usize> =
+        std::collections::HashMap::new();
+    let mut rest = Vec::new();
+    for r in items {
+        let count = counts.entry(r.item.opportunity.source).or_default();
+        if *count < per_source && picked.len() < n {
+            *count += 1;
+            picked.push(r);
+        } else {
+            rest.push(r);
+        }
+    }
+    picked.extend(rest.into_iter().take(n.saturating_sub(picked.len())));
+    picked
+}
+
 fn draw_lists(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
     let columns: Vec<Rect> = if area.width >= 110 {
         Layout::horizontal(vec![Constraint::Fill(1); 3])
@@ -245,10 +271,8 @@ fn draw_lists(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
     let rows = |r: Rect| usize::from(r.height.saturating_sub(2));
     let now = Utc::now();
 
-    let best: Vec<Line> = state
-        .items
-        .iter()
-        .take(rows(columns[0]))
+    let best: Vec<Line> = diversified(&state.items, rows(columns[0]), MAX_PER_SOURCE)
+        .into_iter()
         .map(|r| {
             Line::from(vec![
                 score_pill(theme, r.relevance.score),
