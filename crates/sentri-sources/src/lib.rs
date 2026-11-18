@@ -7,6 +7,7 @@ pub mod connector;
 pub mod devevents;
 pub mod devpost;
 pub mod gdg;
+pub mod getonboard;
 pub mod github;
 pub mod hack0;
 pub mod hackernews;

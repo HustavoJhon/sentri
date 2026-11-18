@@ -11,6 +11,7 @@ use crate::SafeClient;
 use crate::devevents::DevEvents;
 use crate::devpost::Devpost;
 use crate::gdg::Gdg;
+use crate::getonboard::GetOnBoard;
 use crate::github::GitHub;
 use crate::hack0::Hack0;
 use crate::hackernews::HackerNews;
@@ -76,6 +77,7 @@ pub enum Connector {
     Peruanos(Peruanos),
     Hack0(Hack0),
     DevEvents(DevEvents),
+    GetOnBoard(GetOnBoard),
 }
 
 impl Connector {
@@ -96,6 +98,7 @@ impl Connector {
             SourceKind::Peruanos => Peruanos::new(spec).map(Self::Peruanos),
             SourceKind::Hack0 => Hack0::new(spec).map(Self::Hack0),
             SourceKind::DevEvents => DevEvents::new(spec).map(Self::DevEvents),
+            SourceKind::GetOnBoard => GetOnBoard::new(spec).map(Self::GetOnBoard),
             // Calendar feeds (`.ics`, `webcal://`).
             SourceKind::ICal | SourceKind::Luma | SourceKind::Meetup => {
                 Calendar::new(spec).map(Self::Calendar)
@@ -116,6 +119,7 @@ impl Connector {
             Self::Peruanos(c) => &c.spec,
             Self::Hack0(c) => &c.spec,
             Self::DevEvents(c) => &c.spec,
+            Self::GetOnBoard(c) => &c.spec,
         }
     }
 
@@ -198,6 +202,7 @@ impl Connector {
             Self::Peruanos(c) => c.fetch(http, now).await?,
             Self::Hack0(c) => c.fetch(http, now).await?,
             Self::DevEvents(c) => c.fetch(http, now).await?,
+            Self::GetOnBoard(c) => c.fetch(http, now).await?,
         };
         Ok(self.finish_all(items))
     }
