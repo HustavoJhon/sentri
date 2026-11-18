@@ -9,7 +9,7 @@ Las fases son incrementales; cada una termina con funcionalidad probada.
 | 2 | Normalización, deduplicación, búsqueda, filtros | ✅ |
 | 3 | Likes, guardados, descartes, historial, `sentri add`, `sentri edit` | ✅ (formulario de edición en la TUI pendiente) |
 | 4 | TUI: Gruvbox, dashboard, feed, detalles, atajos, command palette | ✅ |
-| 5 | Conectores: RSS/Atom ✅, GitHub ✅, Peruanos.dev y hack0.dev ✅, GDG ✅, Hacker News, iCalendar (Reddit descartado, ver sources.md) | 🚧 |
+| 5 | Conectores: RSS/Atom ✅, GitHub ✅, Peruanos.dev, hack0.dev y dev.events ✅, Get on Board ✅, GDG ✅, Hacker News, iCalendar (Reddit descartado, ver sources.md) | 🚧 |
 | 6 | Intereses, scoring, explicaciones, personalización | 🚧 (base hecha en fase 1) |
 | 7 | Eventos y Google Calendar (OAuth2) | 🚧 calendario local completo; Google sin conectar |
 | 8 | Cursos, certificados, proyectos open source, aprendizaje | ⏳ |
@@ -48,6 +48,27 @@ Pendiente de esta fase:
   guarda; falta sustituir todos los glifos).
 - Reclasificar noticias antiguas tras mejorar la heurística (las ya guardadas
   conservan su naturaleza detectada).
+
+## Fase de primer arranque y diseño (2026-11-18)
+
+- Nuevas fuentes probadas en vivo: dev.events (meetups y conferencias de Perú,
+  una petición por ejecución), Get on Board (API pública de empleos abiertos a
+  Perú: programación y datos/IA) y noticias en español (Xataka, Genbeta,
+  Hipertextual, El Comercio Tecnología, Google News Perú).
+- Primer arranque sin pantallas vacías: la TUI recolecta en paralelo al abrir
+  (`ui.collect_on_start`) y llena cada sección a medida que responden las
+  fuentes, con progreso en cabecera, barra de estado y pantalla de bienvenida.
+- Escrituras concurrentes seguras (`BEGIN IMMEDIATE`) y registros en
+  `sentri.log` en lugar de la terminal mientras la TUI está abierta.
+- Diseño: contadores por sección, atajos contextuales que respetan los atajos
+  personalizados, cards con empresa, salario y día del evento, recomendaciones
+  que mezclan plataformas, columna de fechas corregida, y bordes que ya no se
+  rompen por iconos o emoji de ancho ambiguo.
+- Eventos publicados por varios directorios se fusionan por título normalizado
+  y fecha de inicio.
+
+Pendiente: los sumarios se guardan en una sola línea (se pierden las viñetas de
+las ofertas de empleo); RPP, La República y PRONABEC no tienen feeds públicos.
 
 ## Fase del ecosistema tech peruano (2026-11-17)
 
