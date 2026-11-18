@@ -171,6 +171,16 @@ fn draw_feed(frame: &mut Frame, area: Rect, state: &mut State, theme: &Theme, ti
     }
 }
 
+/// `text` cut to `width` characters with an ellipsis.
+fn fit(text: &str, width: usize) -> String {
+    if text.chars().count() <= width {
+        return text.to_owned();
+    }
+    let mut out: String = text.chars().take(width.saturating_sub(1)).collect();
+    out.push('…');
+    out
+}
+
 fn draw_sidebar(frame: &mut Frame, area: Rect, state: &mut State, theme: &Theme) {
     let items: Vec<ListItem> = Section::ALL
         .iter()
@@ -181,14 +191,43 @@ fn draw_sidebar(frame: &mut Frame, area: Rect, state: &mut State, theme: &Theme)
                 9 => "0".into(),
                 _ => " ".into(),
             };
-            ListItem::new(Line::from(vec![
+            let count = match section {
+                Section::Feed(view) => state
+                    .overview
+                    .counts
+                    .iter()
+                    .find(|(v, _)| v == view)
+                    .map(|(_, n)| *n)
+                    .filter(|n| *n > 0),
+                _ => None,
+            };
+            let count = count.map(|n| {
+                if n > 999 {
+                    "999+".to_owned()
+                } else {
+                    n.to_string()
+                }
+            });
+            // Room after "1 ◆ " inside the bordered, padded panel; some
+            // icons (⚡) take two columns.
+            let icon_width = Span::raw(section.icon()).width();
+            let room = usize::from(SIDEBAR_WIDTH.saturating_sub(4 + 3)).saturating_sub(icon_width);
+            let count_width = count.as_ref().map_or(0, |c| c.chars().count() + 1);
+            let label = fit(section.label(), room.saturating_sub(count_width));
+            let gap = room.saturating_sub(label.chars().count() + count_width);
+            let mut spans = vec![
                 Span::styled(format!("{key} "), theme.muted()),
                 Span::styled(
                     format!("{} ", section.icon()),
                     Style::new().fg(theme.p.aqua),
                 ),
-                Span::raw(section.label()),
-            ]))
+                Span::raw(label),
+            ];
+            if let Some(count) = count {
+                spans.push(Span::raw(" ".repeat(gap + 1)));
+                spans.push(Span::styled(count, theme.muted()));
+            }
+            ListItem::new(Line::from(spans))
         })
         .collect();
     let list = List::new(items)
@@ -519,6 +558,30 @@ mod tests {
         };
         let screen = render(140, 20, &mut state);
         assert!(screen.contains(" f5  like"), "{screen}");
+    }
+
+    #[test]
+    fn sidebar_shows_counts_that_fit() {
+        let mut state = State::default();
+        state.overview.counts = vec![
+            (sentri_core::FeedView::Jobs, 49),
+            (sentri_core::FeedView::Hackathons, 7),
+            (sentri_core::FeedView::CallForSpeakers, 3),
+        ];
+        let screen = render(140, 30, &mut state);
+        let rows: Vec<&str> = screen.lines().collect();
+        let row = |label: &str| rows.iter().find(|r| r.contains(label)).copied().unwrap();
+        assert!(
+            row("Jobs").contains("Jobs          49 │"),
+            "{}",
+            row("Jobs")
+        );
+        assert!(row("Hackathons").contains(" 7 │"), "{}", row("Hackathons"));
+        assert!(
+            row("Call for").contains("Call for Spea… 3 │"),
+            "{}",
+            row("Call for")
+        );
     }
 
     #[test]

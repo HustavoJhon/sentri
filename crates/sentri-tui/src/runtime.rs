@@ -464,6 +464,10 @@ async fn overview(app: &Sentri, config_path: String) -> Msg {
     };
     let news = app.feed(&news_query).await.unwrap_or_default();
     let runs = app.store().latest_runs().await.unwrap_or_default();
+    let counts = app
+        .view_counts(&crate::state::Section::counted_views())
+        .await
+        .unwrap_or_default();
     let source_health = app.store().source_states().await.unwrap_or_default();
     Msg::Overview(Box::new(Overview {
         config: (*app.config()).clone(),
@@ -471,6 +475,7 @@ async fn overview(app: &Sentri, config_path: String) -> Msg {
         stats,
         insights,
         news,
+        counts,
         runs,
         sources: app.config().sources.clone(),
         profile: app.config().profile.clone(),

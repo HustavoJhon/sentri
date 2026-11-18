@@ -68,6 +68,17 @@ impl Section {
         Self::Settings,
     ];
 
+    /// Feed views listed in the sidebar (counted for their badges).
+    pub fn counted_views() -> Vec<FeedView> {
+        Self::ALL
+            .iter()
+            .filter_map(|s| match s {
+                Self::Feed(view) if *view != FeedView::History => Some(*view),
+                _ => None,
+            })
+            .collect()
+    }
+
     pub const fn label(self) -> &'static str {
         match self {
             Self::Dashboard => "Dashboard",
@@ -380,6 +391,8 @@ pub struct Overview {
     pub insights: Insights,
     /// Latest news for the dashboard.
     pub news: Vec<Ranked>,
+    /// Items in each feed view, shown next to the sections.
+    pub counts: Vec<(FeedView, usize)>,
     pub runs: Vec<CollectionRun>,
     pub sources: Vec<SourceConfig>,
     pub profile: Profile,
