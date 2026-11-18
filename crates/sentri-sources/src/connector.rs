@@ -8,6 +8,7 @@ use sentri_core::{Category, ContentKind, Opportunity, SourceKind, Stance, classi
 use thiserror::Error;
 
 use crate::SafeClient;
+use crate::devevents::DevEvents;
 use crate::devpost::Devpost;
 use crate::gdg::Gdg;
 use crate::github::GitHub;
@@ -74,6 +75,7 @@ pub enum Connector {
     Kaggle(Kaggle),
     Peruanos(Peruanos),
     Hack0(Hack0),
+    DevEvents(DevEvents),
 }
 
 impl Connector {
@@ -93,6 +95,7 @@ impl Connector {
             SourceKind::Kaggle => Kaggle::new(spec).map(Self::Kaggle),
             SourceKind::Peruanos => Peruanos::new(spec).map(Self::Peruanos),
             SourceKind::Hack0 => Hack0::new(spec).map(Self::Hack0),
+            SourceKind::DevEvents => DevEvents::new(spec).map(Self::DevEvents),
             // Calendar feeds (`.ics`, `webcal://`).
             SourceKind::ICal | SourceKind::Luma | SourceKind::Meetup => {
                 Calendar::new(spec).map(Self::Calendar)
@@ -112,6 +115,7 @@ impl Connector {
             Self::Kaggle(c) => &c.spec,
             Self::Peruanos(c) => &c.spec,
             Self::Hack0(c) => &c.spec,
+            Self::DevEvents(c) => &c.spec,
         }
     }
 
@@ -134,6 +138,13 @@ impl Connector {
                 });
             }
             Self::Hack0(c) => {
+                let (items, validators) = c.fetch_conditional(http, now, validators).await?;
+                return Ok(Incremental {
+                    items: Some(self.finish_all(items)),
+                    validators,
+                });
+            }
+            Self::DevEvents(c) => {
                 let (items, validators) = c.fetch_conditional(http, now, validators).await?;
                 return Ok(Incremental {
                     items: Some(self.finish_all(items)),
@@ -186,6 +197,7 @@ impl Connector {
             Self::Kaggle(c) => c.fetch(http, now).await?,
             Self::Peruanos(c) => c.fetch(http, now).await?,
             Self::Hack0(c) => c.fetch(http, now).await?,
+            Self::DevEvents(c) => c.fetch(http, now).await?,
         };
         Ok(self.finish_all(items))
     }

@@ -80,8 +80,13 @@ impl Sentri {
     /// URL and its format before saving it. Returns how many items it has.
     pub async fn test_source(&self, source: &SourceConfig) -> Result<usize, String> {
         let url = source.url.as_deref().unwrap_or_default().trim();
-        // Peruanos.dev and hack0.dev have public defaults; a URL is optional.
-        if !url.is_empty() || !matches!(source.kind, SourceKind::Peruanos | SourceKind::Hack0) {
+        // Peruanos.dev, hack0.dev and dev.events have public defaults; a URL is optional.
+        if !url.is_empty()
+            || !matches!(
+                source.kind,
+                SourceKind::Peruanos | SourceKind::Hack0 | SourceKind::DevEvents
+            )
+        {
             let normalized = url
                 .strip_prefix("webcal://")
                 .map_or_else(|| url.to_owned(), |r| format!("https://{r}"));
