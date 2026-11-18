@@ -35,13 +35,26 @@ fn draw_tiles(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
     let s = &state.overview.stats;
     let i = &state.overview.insights;
     let p = theme.p;
+    let count = |view: sentri_core::FeedView| {
+        state
+            .overview
+            .counts
+            .iter()
+            .find(|(v, _)| *v == view)
+            .map_or(0, |(_, n)| i64::try_from(*n).unwrap_or(i64::MAX))
+    };
     let tiles = [
         ("✦", "found", s.total, p.fg),
         ("●", "new 24h", s.new_since, p.green),
         ("▤", "news new", i.news_new, p.aqua),
         ("◷", "events", i.upcoming_events, p.blue),
-        ("✎", "courses", i.pending_courses, p.green),
-        ("⚒", "jobs ★", i.interesting_jobs, p.blue),
+        (
+            "✎",
+            "courses",
+            count(sentri_core::FeedView::Courses),
+            p.green,
+        ),
+        ("⚒", "jobs", count(sentri_core::FeedView::Jobs), p.blue),
         ("★", "saved", s.saved, p.yellow),
         ("♥", "liked", s.liked, p.red),
         ("✓", "applied", i.applied, p.purple),
