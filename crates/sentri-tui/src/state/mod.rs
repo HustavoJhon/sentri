@@ -547,6 +547,8 @@ pub struct State {
     /// Running collection, shown in the header and in empty views.
     pub collecting: Option<collect::CollectProgress>,
     pub start: collect::StartCheck,
+    /// Sort to restore when leaving a section that set its own order.
+    pub auto_sort: Option<SortOrder>,
     pub quit: bool,
 }
 
@@ -578,6 +580,7 @@ impl Default for State {
             keymap: keymap(&std::collections::BTreeMap::new()),
             collecting: None,
             start: collect::StartCheck::Pending,
+            auto_sort: None,
             quit: false,
         }
     }
@@ -629,10 +632,17 @@ impl State {
         self.detail_open = false;
         self.detail_scroll = 0;
         self.loading = true;
-        // Call for Speakers is a deadline list unless the user sorted it.
+        // Call for Speakers is a deadline list unless the user sorted it;
+        // the automatic order does not follow you to other sections.
+        if let Some(previous) = self.auto_sort.take()
+            && self.query.sort == SortOrder::Deadline
+        {
+            self.query.sort = previous;
+        }
         if self.current() == Section::Feed(FeedView::CallForSpeakers)
             && self.query.sort == SortOrder::Relevance
         {
+            self.auto_sort = Some(SortOrder::Relevance);
             self.query.sort = SortOrder::Deadline;
         }
         let mut effects = vec![Effect::Load];
@@ -1613,6 +1623,9 @@ mod tests {
         assert_eq!(s.current(), Section::Feed(FeedView::CallForSpeakers));
         assert_eq!(s.query.sort, SortOrder::Deadline);
         assert_eq!(s.effective_query().view, FeedView::CallForSpeakers);
+        // The automatic order stays in Call for Speakers.
+        s.go_to(communities);
+        assert_eq!(s.query.sort, SortOrder::Relevance);
     }
 
     #[test]
