@@ -184,6 +184,32 @@ url = "https://hack0.dev/eventos"
 category = "event"
 max_items = 10
 
+# dev.events lists meetups and conferences per country; robots.txt allows it
+# and each listing embeds schema.org events, so one request reads them all.
+# Use /conferences/SA/PE for conferences only.
+[[sources]]
+name = "dev-events-peru"
+kind = "devevents"
+url = "https://dev.events/meetups/SA/PE"
+category = "event"
+max_items = 50
+
+# Get on Board: public jobs API (no key). `target` is the category and
+# `query` the country the job must be open to (remote or on site).
+[[sources]]
+name = "getonboard-programming"
+kind = "getonboard"
+target = "programming"
+query = "PE"
+max_items = 40
+
+[[sources]]
+name = "getonboard-data-ai"
+kind = "getonboard"
+target = "machine-learning-ai"
+query = "PE"
+max_items = 20
+
 # Luma: copy "Add iCal Subscription" from any public Luma calendar page.
 [[sources]]
 name = "luma-example"
@@ -338,6 +364,42 @@ content = "news"
 stance = "official"
 url = "https://blogs.nvidia.com/feed/"
 max_items = 10
+
+# Tech news in Spanish, including Peruvian outlets.
+[[sources]]
+name = "xataka"
+kind = "rss"
+content = "news"
+url = "https://feeds.weblogssl.com/xataka2"
+max_items = 20
+
+[[sources]]
+name = "genbeta"
+kind = "rss"
+content = "news"
+url = "https://feeds.weblogssl.com/genbeta"
+max_items = 15
+
+[[sources]]
+name = "hipertextual"
+kind = "rss"
+content = "news"
+url = "https://hipertextual.com/feed"
+max_items = 15
+
+[[sources]]
+name = "elcomercio-tecnologia"
+kind = "rss"
+content = "news"
+url = "https://elcomercio.pe/arc/outboundfeeds/rss/category/tecnologia/?outputType=xml"
+max_items = 15
+
+[[sources]]
+name = "google-news-peru-tech"
+kind = "googlenews"
+content = "news"
+url = "https://news.google.com/rss/search?q=tecnolog%C3%ADa+OR+startups+OR+programaci%C3%B3n+Per%C3%BA+when:7d&hl=es-419&gl=PE&ceid=PE:es-419"
+max_items = 20
 
 # Social networks with open feeds (disabled examples; edit to taste).
 [[sources]]
