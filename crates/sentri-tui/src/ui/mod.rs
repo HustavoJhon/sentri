@@ -25,6 +25,8 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, List, ListItem, ListState, Paragraph};
 use sentri_core::{PriceFilter, SortOrder};
 
+use sentri_app::keys::KeyAction;
+
 use crate::state::{Focus, Level, Section, State};
 use crate::theme::Theme;
 use widgets::panel;
@@ -278,6 +280,65 @@ fn draw_profile(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
     frame.render_widget(Paragraph::new(lines), text);
 }
 
+/// Key currently bound to `action` (custom shortcuts included).
+fn key_of(state: &State, action: KeyAction) -> String {
+    state
+        .keymap
+        .iter()
+        .find(|(_, a)| **a == action)
+        .map_or_else(
+            || action.default_key().to_owned(),
+            |(spec, _)| spec.to_string(),
+        )
+}
+
+/// Status bar hints for the current section.
+fn hints(state: &State) -> Vec<(String, &'static str)> {
+    let fixed = |pairs: &[(&str, &'static str)]| -> Vec<(String, &'static str)> {
+        pairs.iter().map(|(k, w)| ((*k).to_owned(), *w)).collect()
+    };
+    let mut hints = match state.current() {
+        Section::Sources => fixed(&[
+            ("+", "add"),
+            ("e", "edit"),
+            ("space", "on/off"),
+            ("u", "refresh"),
+            ("x", "delete"),
+        ]),
+        Section::Calendar => fixed(&[
+            ("h/l", "day"),
+            ("</>", "period"),
+            ("v", "view"),
+            ("t", "today"),
+            ("+", "new"),
+        ]),
+        Section::Settings => fixed(&[("Enter", "edit"), ("ctrl-s", "save")]),
+        Section::Dashboard => [
+            (KeyAction::Collect, "collect now"),
+            (KeyAction::Search, "search"),
+            (KeyAction::AddLink, "add link"),
+        ]
+        .into_iter()
+        .map(|(a, w)| (key_of(state, a), w))
+        .collect(),
+        Section::Feed(_) => [
+            (KeyAction::Search, "search"),
+            (KeyAction::Like, "like"),
+            (KeyAction::Save, "save"),
+            (KeyAction::Dismiss, "dismiss"),
+            (KeyAction::Open, "open"),
+            (KeyAction::Density, "density"),
+        ]
+        .into_iter()
+        .map(|(a, w)| (key_of(state, a), w))
+        .collect(),
+    };
+    hints.push((key_of(state, KeyAction::Palette), "commands"));
+    hints.push((key_of(state, KeyAction::Help), "help"));
+    hints.push((key_of(state, KeyAction::Quit), "quit"));
+    hints
+}
+
 fn draw_status(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
     let line = if let Some((text, level)) = &state.message {
         let style = match level {
@@ -287,19 +348,8 @@ fn draw_status(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
         };
         Line::from(Span::styled(format!(" {text}"), style))
     } else {
-        let hints = [
-            ("?", "help"),
-            (":", "commands"),
-            ("/", "search"),
-            ("n", "add link"),
-            ("l", "like"),
-            ("s", "save"),
-            ("d", "dismiss"),
-            ("o", "open"),
-            ("q", "quit"),
-        ];
         let mut spans = vec![Span::raw(" ")];
-        for (key, what) in hints {
+        for (key, what) in hints(state) {
             spans.push(Span::styled(format!(" {key} "), theme.key()));
             spans.push(Span::styled(format!(" {what}  "), theme.muted()));
         }
@@ -457,6 +507,18 @@ mod tests {
         assert!(screen.contains("collecting 5/20 · +34"), "header");
         assert!(screen.contains("+34 new"), "status bar");
         assert!(!screen.contains("No opportunities here yet"));
+    }
+
+    #[test]
+    fn status_hints_follow_custom_shortcuts() {
+        let mut keys = std::collections::BTreeMap::new();
+        keys.insert("like".to_owned(), "f5".to_owned());
+        let mut state = State {
+            keymap: crate::state::keymap(&keys),
+            ..State::default()
+        };
+        let screen = render(140, 20, &mut state);
+        assert!(screen.contains(" f5  like"), "{screen}");
     }
 
     #[test]
