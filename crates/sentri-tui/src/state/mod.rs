@@ -354,6 +354,8 @@ pub enum Level {
 pub enum Effect {
     /// Reload data for the current section with the current filters.
     Load,
+    /// Refresh counters, charts and source health without reloading the list.
+    RefreshOverview,
     Act(OpportunityId, Action),
     AddLink(String),
     OpenUrl(String),
@@ -1422,6 +1424,8 @@ impl State {
                 if let Some(r) = self.items.iter_mut().find(|r| r.item.id == id) {
                     r.item.state = state;
                 }
+                // Saved/liked counters in the header and sidebar.
+                return vec![Effect::RefreshOverview];
             }
             Msg::Added(outcome) => return self.on_added(*outcome),
             Msg::Info(text) => self.info(text, Level::Info),
@@ -1651,6 +1655,14 @@ mod tests {
         s.on_key(key(KeyCode::Char('H')));
         assert!(s.query.only_past);
         assert!(!s.query.only_upcoming, "past and upcoming are exclusive");
+    }
+
+    #[test]
+    fn interactions_refresh_the_counters() {
+        let mut s = loaded(1);
+        let id = s.items[0].item.id;
+        let effects = s.on_msg(Msg::Acted(id, InteractionState::default()));
+        assert_eq!(effects, vec![Effect::RefreshOverview]);
     }
 
     #[test]

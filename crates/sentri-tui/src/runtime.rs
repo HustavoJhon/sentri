@@ -135,6 +135,12 @@ fn execute(
                 let _ = tx.send(overview(&app, config_path).await);
             });
         }
+        Effect::RefreshOverview => {
+            let config_path = config_path.to_owned();
+            tokio::spawn(async move {
+                let _ = tx.send(overview(&app, config_path).await);
+            });
+        }
         Effect::Act(id, action) => {
             tokio::spawn(async move {
                 let msg = match app.act(id, action).await {
