@@ -71,7 +71,7 @@ impl Store {
                 "this opportunity has no date; add one with Edit first".into(),
             ));
         }
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.write_tx().await?;
         let mut created = 0;
         for (kind, date) in dates {
             let result = sqlx::query(

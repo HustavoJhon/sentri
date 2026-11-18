@@ -26,7 +26,7 @@ impl Store {
         action: Action,
         at: DateTime<Utc>,
     ) -> Result<InteractionState, StorageError> {
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.write_tx().await?;
         let current = sqlx::query(
             "SELECT liked, saved, dismissed, interesting, applied, enrolled, completed,
                     last_viewed_at

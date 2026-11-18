@@ -36,7 +36,7 @@ impl Upsert {
 impl Store {
     /// Inserts an opportunity or merges it into an existing duplicate.
     pub async fn upsert_opportunity(&self, o: &Opportunity) -> Result<Upsert, StorageError> {
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.write_tx().await?;
         let now = to_db(Utc::now());
         let existing = find_duplicate(&mut tx, o).await?;
         let outcome = if let Some(id) = existing {
@@ -76,7 +76,7 @@ impl Store {
         id: OpportunityId,
         o: &Opportunity,
     ) -> Result<(), StorageError> {
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.write_tx().await?;
         let current = crate::layers::load_detected(&mut tx, id.0).await?;
         let mut detected = o.clone();
         detected.fingerprint = current.fingerprint;

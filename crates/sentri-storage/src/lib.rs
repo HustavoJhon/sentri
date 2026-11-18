@@ -74,6 +74,18 @@ impl Store {
         Self::migrate(pool).await
     }
 
+    /// Starts a write transaction that takes the write lock up front.
+    ///
+    /// A deferred transaction (`BEGIN`) that reads and then writes fails with
+    /// `SQLITE_BUSY_SNAPSHOT` (517) when another connection wrote in between,
+    /// and SQLite does not retry it. `BEGIN IMMEDIATE` waits for the lock
+    /// within `busy_timeout` instead, so parallel collection is safe.
+    pub(crate) async fn write_tx(
+        &self,
+    ) -> Result<sqlx::Transaction<'static, sqlx::Sqlite>, StorageError> {
+        Ok(self.pool.begin_with("BEGIN IMMEDIATE").await?)
+    }
+
     async fn migrate(pool: SqlitePool) -> Result<Self, StorageError> {
         MIGRATOR.run(&pool).await?;
         Ok(Self { pool })

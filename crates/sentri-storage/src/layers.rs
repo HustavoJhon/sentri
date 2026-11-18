@@ -180,7 +180,7 @@ impl Store {
         values: &[(Field, String)],
         at: DateTime<Utc>,
     ) -> Result<(), StorageError> {
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.write_tx().await?;
         let mut probe = load_detected(&mut tx, id.0).await?;
         for (field, value) in values {
             field
@@ -215,7 +215,7 @@ impl Store {
         id: OpportunityId,
         fields: &[Field],
     ) -> Result<(), StorageError> {
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.write_tx().await?;
         for field in fields {
             sqlx::query("DELETE FROM opportunity_overrides WHERE opportunity_id = ? AND field = ?")
                 .bind(id.0)
@@ -235,7 +235,7 @@ impl Store {
         a: &Annotations,
         at: DateTime<Utc>,
     ) -> Result<(), StorageError> {
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.write_tx().await?;
         let notes = a.notes.as_deref().map(str::trim).filter(|n| !n.is_empty());
         sqlx::query(
             "INSERT INTO opportunity_notes (opportunity_id, notes, priority, updated_at)

@@ -33,7 +33,7 @@ impl Store {
         apply: bool,
         at: DateTime<Utc>,
     ) -> Result<Vec<StanceChange>, StorageError> {
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.write_tx().await?;
         let rows = sqlx::query(
             "SELECT o.id, o.source_name FROM opportunities o
              WHERE o.content_kind = 'news'
@@ -99,7 +99,7 @@ impl Store {
     /// Restores the stances changed by `batch` (only where the stance is
     /// still the one the batch set). Returns how many were restored.
     pub async fn undo_reclassification(&self, batch: &str) -> Result<u64, StorageError> {
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.write_tx().await?;
         let rows = sqlx::query(
             "SELECT opportunity_id, old_stance, new_stance FROM stance_reclassifications
              WHERE batch = ? ORDER BY id DESC",
