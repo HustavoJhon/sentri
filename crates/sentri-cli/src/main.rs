@@ -16,16 +16,25 @@ use crate::cli::{AddArgs, Cli, Command, ConfigCommand, FeedArgs, FieldArgs};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    init_logging();
     let cli = Cli::parse();
     let config_path = cli.config.clone().unwrap_or_else(paths::config_file);
     match cli.command {
-        Some(Command::Config(cmd)) => config_command(&cmd, &config_path),
+        Some(Command::Config(cmd)) => {
+            init_logging(LogTarget::Stderr);
+            config_command(&cmd, &config_path)
+        }
         Some(command) => {
+            init_logging(LogTarget::Stderr);
             let app = open(&config_path).await?;
             run(&app, command).await
         }
         None => {
+            // The interface owns the terminal: logs written to stderr would
+            // be drawn over it, so they go to a file next to the database.
+            let log = Config::load(&config_path)
+                .ok()
+                .map(|c| c.database_path().with_file_name("sentri.log"));
+            init_logging(log.map_or(LogTarget::Discard, LogTarget::File));
             let app = open(&config_path).await?;
             sentri_tui::run(app, config_path.display().to_string())
                 .await
@@ -34,13 +43,44 @@ async fn main() -> Result<()> {
     }
 }
 
-/// Logs go to stderr; `SENTRI_LOG=debug` raises verbosity.
-fn init_logging() {
+/// Where log lines go.
+enum LogTarget {
+    Stderr,
+    /// Appended to a private file (the interface is running).
+    File(PathBuf),
+    Discard,
+}
+
+/// `SENTRI_LOG=debug` raises verbosity.
+fn init_logging(target: LogTarget) {
     let filter = EnvFilter::try_from_env("SENTRI_LOG").unwrap_or_else(|_| EnvFilter::new("warn"));
-    tracing_subscriber::fmt()
-        .with_env_filter(filter)
-        .with_writer(std::io::stderr)
-        .init();
+    let builder = tracing_subscriber::fmt().with_env_filter(filter);
+    match target {
+        LogTarget::Stderr => builder.with_writer(std::io::stderr).init(),
+        LogTarget::File(path) => match open_log(&path) {
+            Ok(file) => builder
+                .with_ansi(false)
+                .with_writer(std::sync::Mutex::new(file))
+                .init(),
+            Err(_) => builder.with_writer(std::io::sink).init(),
+        },
+        LogTarget::Discard => builder.with_writer(std::io::sink).init(),
+    }
+}
+
+/// Opens the log for appending, readable only by the owner.
+fn open_log(path: &std::path::Path) -> std::io::Result<std::fs::File> {
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let mut options = std::fs::OpenOptions::new();
+    options.create(true).append(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    options.open(path)
 }
 
 async fn open(config_path: &std::path::Path) -> Result<Sentri> {
