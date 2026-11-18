@@ -183,3 +183,33 @@ async fn tests_a_source_without_storing_anything() {
     assert!(app.test_source(&bad).await.is_err());
     assert_eq!(app.store().count().await.unwrap(), 0, "nothing stored");
 }
+
+#[tokio::test]
+async fn collects_in_parallel_and_reports_each_source() {
+    let server = MockServer::start().await;
+    Mock::given(path("/feed.xml"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_raw(FEED.as_bytes().to_vec(), "application/rss+xml")
+                .set_delay(std::time::Duration::from_millis(50)),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(path("/missing.xml"))
+        .respond_with(ResponseTemplate::new(500))
+        .mount(&server)
+        .await;
+
+    let store = Store::in_memory().await.unwrap();
+    let app = Sentri::with_store(config(&server), store, true).unwrap();
+    let mut reports = Vec::new();
+    let total = app.collect_each(4, |r| reports.push(r)).await;
+
+    assert_eq!(total, 3, "enabled sources only");
+    let mut names: Vec<&str> = reports.iter().map(|r| r.source.as_str()).collect();
+    names.sort_unstable();
+    assert_eq!(names, ["broken", "good", "linkedin"]);
+    let good = reports.iter().find(|r| r.source == "good").unwrap();
+    assert_eq!(good.result, Ok((2, 2)));
+    assert_eq!(app.feed(&FeedQuery::default()).await.unwrap().len(), 2);
+}

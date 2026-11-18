@@ -110,56 +110,91 @@ impl Sentri {
     /// that failed repeatedly are skipped until their back-off expires,
     /// unless requested explicitly with `only`.
     pub async fn collect(&self, only: Option<&str>) -> Vec<CollectReport> {
-        let config = self.config();
-        let selected: Vec<&SourceConfig> = config
+        let selected = self.selected_sources(only);
+        let mut reports = Vec::with_capacity(selected.len());
+        for source in selected {
+            reports.push(self.collect_source(&source, only.is_some()).await);
+        }
+        reports
+    }
+
+    /// Runs every enabled source, up to `parallel` at a time, and hands each
+    /// report to `on_report` as soon as that source finishes. Used on start-up
+    /// so the interface fills in progressively instead of waiting for the
+    /// slowest source. Returns how many sources ran.
+    pub async fn collect_each(
+        &self,
+        parallel: usize,
+        mut on_report: impl FnMut(CollectReport),
+    ) -> usize {
+        let selected = self.selected_sources(None);
+        let total = selected.len();
+        let permits = std::sync::Arc::new(tokio::sync::Semaphore::new(parallel.max(1)));
+        let mut tasks = tokio::task::JoinSet::new();
+        for source in selected {
+            let app = self.clone();
+            let permits = permits.clone();
+            tasks.spawn(async move {
+                let _permit = permits.acquire_owned().await;
+                app.collect_source(&source, false).await
+            });
+        }
+        while let Some(joined) = tasks.join_next().await {
+            match joined {
+                Ok(report) => on_report(report),
+                Err(error) => tracing::warn!(%error, "collection task failed"),
+            }
+        }
+        total
+    }
+
+    /// Enabled sources, or only the one named `only` (enabled or not).
+    fn selected_sources(&self, only: Option<&str>) -> Vec<SourceConfig> {
+        self.config()
             .sources
             .iter()
             .filter(|s| only.map_or(s.enabled, |name| s.name == name))
-            .collect();
-        let mut reports = Vec::with_capacity(selected.len());
-        let now = Utc::now();
-        for source in selected {
-            let state = self
-                .store()
-                .source_state(&source.name)
-                .await
+            .cloned()
+            .collect()
+    }
+
+    /// Collects one source, honoring its back-off unless `forced`.
+    async fn collect_source(&self, source: &SourceConfig, forced: bool) -> CollectReport {
+        let state = self
+            .store()
+            .source_state(&source.name)
+            .await
+            .unwrap_or_default();
+        if !forced && state.backing_off(Utc::now()) {
+            let until = state
+                .next_attempt_at
+                .map(|t| t.with_timezone(&chrono::Local).format("%H:%M").to_string())
                 .unwrap_or_default();
-            if only.is_none() && state.backing_off(now) {
-                let until = state
-                    .next_attempt_at
-                    .map(|t| t.with_timezone(&chrono::Local).format("%H:%M").to_string())
-                    .unwrap_or_default();
-                reports.push(CollectReport {
-                    source: source.name.clone(),
-                    result: Ok((0, 0)),
-                    note: Some(format!(
-                        "skipped after {} failures; retry after {until}",
-                        state.consecutive_failures
-                    )),
-                });
-                continue;
-            }
-            let (result, note) = match self.collect_one(source, &state).await {
-                Ok((counts, note)) => (Ok(counts), note),
-                Err(e) => (Err(e), None),
-            };
-            match &result {
-                Ok(_) => {}
-                Err(error) => {
-                    tracing::warn!(source = %source.name, %error, "collection failed");
-                    let _ = self
-                        .store()
-                        .record_source_failure(&source.name, error, Utc::now())
-                        .await;
-                }
-            }
-            reports.push(CollectReport {
+            return CollectReport {
                 source: source.name.clone(),
-                result,
-                note,
-            });
+                result: Ok((0, 0)),
+                note: Some(format!(
+                    "skipped after {} failures; retry after {until}",
+                    state.consecutive_failures
+                )),
+            };
         }
-        reports
+        let (result, note) = match self.collect_one(source, &state).await {
+            Ok((counts, note)) => (Ok(counts), note),
+            Err(e) => (Err(e), None),
+        };
+        if let Err(error) = &result {
+            tracing::warn!(source = %source.name, %error, "collection failed");
+            let _ = self
+                .store()
+                .record_source_failure(&source.name, error, Utc::now())
+                .await;
+        }
+        CollectReport {
+            source: source.name.clone(),
+            result,
+            note,
+        }
     }
 
     async fn collect_one(
