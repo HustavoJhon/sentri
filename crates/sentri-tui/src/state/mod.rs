@@ -92,7 +92,7 @@ impl Section {
             Self::Feed(FeedView::Volunteering) => "♣",
             Self::Feed(FeedView::OpenSource) => "⌥",
             Self::Feed(FeedView::Communities) => "◍",
-            Self::Feed(FeedView::CallForSpeakers) => "✍",
+            Self::Feed(FeedView::CallForSpeakers) => "✐",
             Self::Feed(FeedView::Travel) => "✈",
             Self::Feed(FeedView::Saved) => "★",
             Self::Feed(FeedView::Liked) => "♥",
