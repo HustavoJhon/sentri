@@ -235,6 +235,65 @@ fn card<'a>(
     }
 }
 
+/// What an empty section shows while sources are being collected.
+fn collecting_lines<'a>(
+    theme: &Theme,
+    progress: &crate::state::collect::CollectProgress,
+    title: &str,
+    width: u16,
+) -> Vec<Line<'a>> {
+    let heading = if progress.first_run {
+        "Welcome to SENTRI"
+    } else {
+        "Refreshing your sources"
+    };
+    let sources = if progress.total > 0 {
+        format!("{} sources", progress.total)
+    } else {
+        "your sources".to_owned()
+    };
+    let mut bar = vec![Span::raw("  ")];
+    bar.extend(super::widgets::progress_bar(
+        theme,
+        progress.ratio(),
+        width.saturating_sub(24).clamp(8, 40),
+    ));
+    bar.push(Span::styled(
+        format!("  {}/{}", progress.done.min(progress.total), progress.total),
+        theme.warn(),
+    ));
+    bar.push(Span::styled(
+        format!(" · +{} new", progress.new),
+        theme.good(),
+    ));
+    let key = |k: &'static str, what: &'static str| {
+        vec![
+            Span::raw("  "),
+            Span::styled(format!(" {k} "), theme.key()),
+            Span::styled(format!(" {what}"), theme.muted()),
+        ]
+    };
+    vec![
+        Line::default(),
+        Line::from(Span::styled(format!("  {heading}"), theme.title())),
+        Line::default(),
+        Line::from(Span::styled(
+            format!("  Collecting events, jobs, courses and tech news from {sources}."),
+            theme.dim(),
+        )),
+        Line::from(Span::styled(
+            format!("  {title} fills in as each source answers."),
+            theme.dim(),
+        )),
+        Line::default(),
+        Line::from(bar),
+        Line::default(),
+        Line::from(key("1", "dashboard")),
+        Line::from(key("n", "add a link you found")),
+        Line::from(key("?", "every shortcut")),
+    ]
+}
+
 /// Splits text into two lines at a word boundary near `width` characters.
 fn split_at_width(text: &str, width: usize) -> (String, String) {
     if text.chars().count() <= width {
@@ -262,6 +321,17 @@ pub fn render(frame: &mut Frame, area: Rect, state: &mut State, theme: &Theme, t
     let block = panel(theme, &heading, focused);
 
     if state.items.is_empty() {
+        if let Some(progress) = &state.collecting {
+            let inner = block.inner(area);
+            frame.render_widget(block, area);
+            frame.render_widget(
+                Paragraph::new(collecting_lines(theme, progress, title, inner.width))
+                    .wrap(Wrap { trim: false }),
+                inner,
+            );
+            state.hit.list = area;
+            return;
+        }
         let text = if state.loading {
             "Loading…".to_owned()
         } else if state.query.text.is_some() {
