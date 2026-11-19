@@ -76,25 +76,59 @@ estado los atajos de la sección actual (con tus atajos personalizados).
 
 ## Cards
 
-`v` alterna **compact** (1 línea), **comfortable** (2) y **detailed**
-(con descripción). `◆` marca hackathons, becas, empleos, premios, viajes y
-cursos gratuitos; `NEW` marca lo descubierto en 24 h y aún no abierto. Las
-cards muestran además la organización o empresa, el salario publicado de los
-empleos, el día de la semana de los eventos y hace cuánto se publicó un empleo.
-Las recomendaciones del dashboard mezclan plataformas (máximo tres seguidas de
-la misma) para que una bolsa de empleo activa no ocupe toda la lista.
+Todas las secciones (Discover, Jobs, Events, Communities, Courses, Tech News,
+Open Source, Call for Speakers…) usan la misma card:
+
+```text
+┃ HACKATHON   DP Devpost                          NEW ★ ●●●○○
+┃ AI Hackathon Cusco
+┃ ⏳ closes in 5d · GDG Cusco · Cusco · ⌂ in person · ✈ travel
+```
+
+1. **Kicker**: tipo (categoría, o la clasificación de la noticia: Reported,
+   Official, Unconfirmed, Opinion, Discussion) y plataforma.
+2. **Título**; en empleos va seguido de la empresa.
+3. **Datos** según el tipo: empleos con salario, modalidad (remote / hybrid /
+   on-site), lugar, antigüedad y etiquetas; eventos y comunidades con fecha y
+   hora, organizador, ciudad, modalidad y cierre de inscripción; Call for
+   Speakers con el cierre del CFP; noticias con tema, autor y fecha.
+4. **Estado** a la derecha: `NEW` (descubierto en 24 h y sin abrir), tus
+   marcas (`♥` like, `★` guardado, `✓` postulado…), `closed` y el medidor de
+   coincidencia `●●●○○` (cinco pasos de la puntuación de relevancia; en
+   compact, el número).
+
+La primera columna (**rail**) resume el estado: `▌` amarillo es la card
+seleccionada, `┃` del color de la categoría marca lo importante (hackathons,
+becas, empleos, premios, viajes, cursos gratuitos), `┃` verde un empleo con
+alta coincidencia y `│` apagado lo vencido o descartado. En modo ASCII el rail
+pasa a `>` y `|`, así que la selección no depende del color.
+
+`v` alterna **compact** (1 línea, columnas alineadas), **comfortable** (3
+líneas) y **detailed** (más dos líneas de descripción). Las recomendaciones
+del dashboard mezclan plataformas (máximo tres seguidas de la misma) para que
+una bolsa de empleo activa no ocupe toda la lista.
 
 ## Details y editor
 
-Cabecera con plataforma, autor/usuario y avatar si la fuente lo declara;
-imagen (half-blocks) si existe; fechas separadas (evento, deadline, inicio,
-fin); notas; recomendación de SENTRI con barras; campos editados frente a
-detectados; historial. `E` abre el editor ([editing.md](editing.md)).
+Cabecera con tipo, plataforma y tus marcas, título, organizador o autor (con
+avatar si la fuente lo declara). Debajo, **Key facts** (fechas con su
+distancia, lugar, modalidad, salario, costo, premios, lo que incluye, enlace),
+**Overview** (la descripción, conservando párrafos y listas), requisitos y
+elegibilidad, etiquetas y notas. En paneles anchos la imagen y la
+recomendación de SENTRI van en una columna a la derecha; en estrechos, la
+imagen arriba con un tercio de la altura como máximo. Los datos desconocidos
+no ocupan filas. Se ven también campos editados frente a detectados e
+historial. `E` abre el editor ([editing.md](editing.md)).
+
+Las imágenes usan Kitty, Sixel o iTerm2 si la terminal lo soporta y medios
+bloques si no ([configuration.md](configuration.md#imágenes)).
 
 ## Perfil
 
-Con `[github] username`, la parte inferior de la barra lateral muestra tu
-avatar, nombre, usuario y repositorios públicos.
+Con `[github] username`, la parte inferior de la barra lateral muestra una
+card de GitHub: avatar cuadrado (pedido a 460 px y remuestreado al tamaño
+real), nombre, usuario y repositorios. Sin imagen se ven tus iniciales. En
+terminales bajas la card se reduce a una fila.
 
 ## Badges de fuentes
 
