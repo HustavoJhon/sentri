@@ -23,6 +23,9 @@ pub struct GitHubProfile {
     pub public_repos: u64,
     #[serde(default)]
     pub followers: u64,
+    /// Changes whenever the profile (avatar included) is edited.
+    #[serde(default)]
+    pub updated_at: Option<String>,
 }
 
 impl GitHubProfile {
@@ -38,6 +41,17 @@ impl GitHubProfile {
             initials = self.login.chars().take(2).collect();
         }
         initials.to_uppercase()
+    }
+
+    /// Cache key for the avatar: a new profile version (for example a new
+    /// picture) downloads it again instead of reusing the old file.
+    pub fn avatar_cache_key(&self) -> String {
+        format!(
+            "github-avatar:{}:{}:{}",
+            self.login.to_ascii_lowercase(),
+            self.avatar_url,
+            self.updated_at.as_deref().unwrap_or("")
+        )
     }
 }
 
@@ -109,9 +123,17 @@ impl Sentri {
         Ok(Some(profile))
     }
 
-    /// The avatar at a size worth drawing (see [`crate::image_source`]).
+    /// The avatar, requested at [`crate::image_source::REQUESTED_EDGE`]
+    /// pixels (GitHub scales it on demand) and cached as downloaded. The
+    /// interface resamples it to whatever size it draws.
     pub async fn github_avatar(&self, profile: &GitHubProfile) -> Result<Thumbnail, AppError> {
-        Ok(self.image(&profile.avatar_url).await?)
+        Ok(self
+            .image_cached(
+                &profile.avatar_url,
+                &profile.avatar_cache_key(),
+                crate::images::SOURCE_EDGE,
+            )
+            .await?)
     }
 }
 
@@ -139,5 +161,27 @@ mod tests {
         let unsafe_urls =
             br#"{"login":"x","name":null,"html_url":"http://x","avatar_url":"javascript:1"}"#;
         assert!(parse(unsafe_urls).is_err());
+    }
+
+    #[test]
+    fn avatar_cache_follows_profile_changes() {
+        let body = |updated: &str| {
+            format!(
+                r#"{{"login":"Octocat","name":null,"html_url":"https://github.com/octocat",
+                "avatar_url":"https://avatars.githubusercontent.com/u/583231?v=4","updated_at":"{updated}"}}"#
+            )
+        };
+        let old = parse(body("2026-01-01T00:00:00Z").as_bytes()).unwrap();
+        let same = parse(body("2026-01-01T00:00:00Z").as_bytes()).unwrap();
+        let new = parse(body("2026-11-19T00:00:00Z").as_bytes()).unwrap();
+        assert_eq!(old.avatar_cache_key(), same.avatar_cache_key());
+        assert_ne!(old.avatar_cache_key(), new.avatar_cache_key());
+        assert!(old.avatar_cache_key().contains("octocat"));
+        let first = crate::image_source::candidates(&old.avatar_url);
+        assert_eq!(
+            first[0].query(),
+            Some("v=4&s=460"),
+            "avatar requested at 460 px, not GitHub's default thumbnail"
+        );
     }
 }

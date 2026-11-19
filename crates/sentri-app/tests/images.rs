@@ -107,3 +107,33 @@ async fn invalid_and_missing_images_are_errors_not_panics() {
         .unwrap_or_default();
     assert!(cached.is_empty(), "failures are not cached");
 }
+
+#[tokio::test]
+async fn avatar_keeps_its_resolution_and_refreshes_with_the_profile() {
+    let server = MockServer::start().await;
+    Mock::given(path("/u/1"))
+        .respond_with(image(png(460, 460)))
+        .expect(2)
+        .mount(&server)
+        .await;
+    let cache = tempfile::tempdir().unwrap();
+    let app = app(cache.path()).await;
+    let mut profile = sentri_app::GitHubProfile {
+        login: "octocat".into(),
+        name: None,
+        html_url: "https://github.com/octocat".into(),
+        avatar_url: format!("{}/u/1", server.uri()),
+        public_repos: 0,
+        followers: 0,
+        updated_at: Some("2026-01-01T00:00:00Z".into()),
+    };
+    let avatar = app.github_avatar(&profile).await.unwrap();
+    assert_eq!(
+        (avatar.width(), avatar.height()),
+        (460, 460),
+        "no tiny thumbnail"
+    );
+    app.github_avatar(&profile).await.unwrap(); // cached
+    profile.updated_at = Some("2026-11-19T00:00:00Z".into());
+    app.github_avatar(&profile).await.unwrap(); // new profile version: downloaded again
+}
