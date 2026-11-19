@@ -58,7 +58,13 @@ fn field<'a>(theme: &Theme, name: &str, value: impl Into<Span<'a>>) -> Line<'a> 
 }
 
 fn date_value(d: DateTime<Utc>, now: DateTime<Utc>) -> String {
-    format!("{}  ({})", card::short_date(d, now), relative(d, now))
+    let days = (d - now).num_days();
+    let distance = match days {
+        -60..=60 => relative(d, now),
+        61.. => format!("in {days}d"),
+        _ => format!("{}d ago", -days),
+    };
+    format!("{}  ({distance})", card::short_date(d, now))
 }
 
 /// Text with Markdown emphasis markers removed (`**bold**`, `__x__`).
@@ -76,8 +82,16 @@ pub fn paragraphs(text: &str, width: usize) -> Vec<String> {
         if line.is_empty() {
             continue;
         }
-        // Inline "a • b • c" lists become separate bullets.
-        let mut parts = line.split(" • ");
+        // Inline "a • b • c" lists, and "intro: - a - b" lists flattened by
+        // the source, become separate bullets.
+        let separator = if line.contains(" • ") {
+            " • "
+        } else if line.contains(": - ") && line.matches(" - ").count() >= 2 {
+            " - "
+        } else {
+            " • "
+        };
+        let mut parts = line.split(separator);
         if let Some(first) = parts.next() {
             let (bullet, body) = bullet(first);
             blocks.push((bullet, body.to_owned()));
@@ -691,6 +705,21 @@ mod tests {
     fn inline_bullets_become_a_list() {
         let lines = paragraphs("Perks: • remote • equity", 40);
         assert_eq!(lines, ["Perks:", "", "• remote", "• equity"]);
+    }
+
+    #[test]
+    fn flattened_dash_lists_are_split_but_single_dashes_kept() {
+        let lines = paragraphs("Details: - Place: UDEP - Time: 9:00", 40);
+        assert_eq!(lines, ["Details:", "", "• Place: UDEP", "• Time: 9:00"]);
+        let lines = paragraphs("Rust - the language - is fast", 40);
+        assert_eq!(lines, ["Rust - the language - is fast"]);
+    }
+
+    #[test]
+    fn far_dates_still_say_how_far() {
+        let now = Utc::now();
+        let old = date_value(now - chrono::Duration::days(71), now);
+        assert!(old.ends_with("(71d ago)"), "{old}");
     }
 
     #[test]
