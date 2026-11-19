@@ -84,8 +84,16 @@ pub const SETTINGS: &[Setting] = &[
         "ui.images",
         "Appearance",
         "Images",
-        SettingKind::Choice(&["halfblock", "ascii", "off"]),
-        "Half blocks work over SSH; ascii for limited terminals",
+        SettingKind::Choice(&[
+            "auto",
+            "kitty",
+            "sixel",
+            "iterm2",
+            "halfblock",
+            "ascii",
+            "off",
+        ]),
+        "auto detects Kitty/Sixel/iTerm2 graphics, else half blocks",
         true,
     ),
     s(

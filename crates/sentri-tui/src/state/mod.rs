@@ -440,7 +440,7 @@ pub struct UiPrefs {
 impl Default for UiPrefs {
     fn default() -> Self {
         Self {
-            images: ImageMode::Halfblock,
+            images: ImageMode::Auto,
             indexed_colors: false,
             ascii_icons: false,
             show_sidebar: true,
@@ -536,6 +536,8 @@ pub struct State {
     pub detail: Option<DetailData>,
     pub detail_requested: Option<OpportunityId>,
     pub images: HashMap<String, ImageSlot>,
+    /// How images are drawn (graphics protocol or half blocks).
+    pub graphics: crate::graphics::Graphics,
     pub overview: Overview,
     pub calendar: CalendarState,
     pub history: HistoryState,
@@ -570,6 +572,7 @@ impl Default for State {
             detail: None,
             detail_requested: None,
             images: HashMap::new(),
+            graphics: crate::graphics::Graphics::default(),
             overview: Overview::default(),
             calendar: CalendarState::default(),
             history: HistoryState::default(),

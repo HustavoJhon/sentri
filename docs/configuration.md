@@ -71,7 +71,7 @@ postulado/inscrito +3, descartado −3.
 | Clave | Valores |
 |---|---|
 | `density` | `compact`, `comfortable`, `detailed` |
-| `images` | `halfblock` (por defecto), `ascii`, `off` |
+| `images` | `auto` (por defecto), `kitty`, `sixel`, `iterm2`, `halfblock`, `ascii`, `off` — ver [Imágenes](#imágenes) |
 | `colors` | `auto`, `truecolor`, `indexed` |
 | `ascii_icons` | `true`/`false` |
 | `show_sidebar`, `show_details` | `true`/`false` |
@@ -127,6 +127,31 @@ Se rechazan teclas duplicadas y las reservadas para navegar (`j` `k` `g` `G`
 `[` `]` dígitos, Enter, Esc, Tab, espacio, Ctrl-c, Ctrl-s). Dentro de
 Calendar, History, Sources, Settings y el editor, sus teclas propias tienen
 prioridad. Editable en **Settings › Shortcuts** (vacío = valor por defecto).
+
+## Imágenes
+
+Con `images = "auto"` SENTRI pregunta a la terminal al abrir la TUI qué
+protocolo gráfico entiende y el tamaño de cada celda en píxeles:
+
+| Protocolo | Terminales | Calidad |
+|---|---|---|
+| Kitty | kitty, Ghostty, WezTerm | píxeles reales |
+| Sixel | foot, Windows Terminal, xterm (`-ti vt340`), Konsole, tmux ≥ 3.4 con sixel | píxeles reales |
+| iTerm2 | iTerm2, WezTerm | píxeles reales |
+| Medios bloques | cualquier terminal truecolor o de 256 colores, SSH, consola | 2 píxeles por celda |
+
+Si la terminal no responde o no anuncia ninguno, se usan medios bloques (`▀`).
+`kitty`, `sixel` o `iterm2` fuerzan un protocolo aunque no se anuncie (útil
+dentro de tmux con `set -g allow-passthrough on`). `halfblock` y `ascii`
+dibujan siempre con caracteres. Cambiar a un protocolo desde Settings requiere
+reiniciar la TUI si se abrió con `halfblock`, `ascii` u `off`.
+
+De cada imagen se descarga la mejor variante conocida (el original de
+WordPress en vez del recorte `-500x500`, `highres_` de Meetup, el avatar de
+GitHub a 460 px) y, si no existe, la URL publicada. Los bytes originales se
+guardan en `cache_dir` una semana; cada tamaño que se dibuja se remuestrea una
+sola vez desde ese original con un filtro Lanczos. Las transparencias se
+mezclan con el fondo Gruvbox. Formatos: PNG, JPEG, WebP y GIF (SVG no).
 
 ## Modo ASCII
 

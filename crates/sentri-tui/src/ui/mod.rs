@@ -276,13 +276,14 @@ fn draw_profile(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
         ProfileState::Ready(profile, avatar) => {
             match avatar {
                 Some(thumb) if state.ui.images != sentri_app::ImageMode::Off => {
-                    frame.render_widget(
-                        image::ImageView {
-                            thumb,
-                            mode: state.ui.images,
-                            indexed: state.ui.indexed_colors,
-                        },
+                    state.graphics.draw(
+                        frame.buffer_mut(),
                         Rect { width: 9, ..pic },
+                        &profile.avatar_cache_key(),
+                        thumb,
+                        crate::graphics::Fit::Cover,
+                        state.ui.images,
+                        state.ui.indexed_colors,
                     );
                 }
                 _ => frame.render_widget(

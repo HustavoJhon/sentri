@@ -23,6 +23,8 @@ directories = "6.0.0"
 feed-rs = "3.0.0"
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "webp", "gif"] }
 ratatui = "0.30.2"
+# Kitty, Sixel and iTerm2 graphics; no chafa (system library) needed.
+ratatui-image = { version = "11.1.0", default-features = false, features = ["crossterm"] }
 reqwest = { version = "0.13.5", default-features = false, features = ["rustls", "charset", "http2", "json", "query"] }
 scraper = "0.29.0"
 serde = { version = "1.0.229", features = ["derive"] }

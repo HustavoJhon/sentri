@@ -62,8 +62,17 @@ impl Default for HttpConfig {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ImageMode {
-    /// Colored half blocks (`▀`): works in any truecolor or 256-color terminal.
+    /// Asks the terminal at startup: Kitty, Sixel or iTerm2 graphics when
+    /// supported, colored half blocks otherwise.
     #[default]
+    Auto,
+    /// Kitty graphics protocol (kitty, Ghostty, recent `WezTerm`).
+    Kitty,
+    /// Sixel graphics (foot, xterm `-ti vt340`, Windows Terminal, tmux 3.4+).
+    Sixel,
+    /// iTerm2 inline images (iTerm2, `WezTerm`, Konsole).
+    Iterm2,
+    /// Colored half blocks (`▀`): works in any truecolor or 256-color terminal.
     Halfblock,
     /// Grayscale ASCII ramp, for monochrome or very limited terminals.
     Ascii,

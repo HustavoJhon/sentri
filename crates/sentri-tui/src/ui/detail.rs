@@ -12,10 +12,11 @@ use sentri_core::{ContentKind, Eligibility, Modality, Stance};
 
 use super::charts::bar;
 use super::feed::stance_color;
-use super::image::{ImageView, fitted};
 use super::widgets::{badge, flag_glyphs, panel, relative, source_badge};
+use crate::graphics::Fit;
 use crate::state::{DetailData, Focus, ImageSlot, State};
 use crate::theme::Theme;
+use sentri_app::ImageMode;
 
 fn field<'a>(theme: &Theme, name: &'a str, value: impl Into<Span<'a>>) -> Line<'a> {
     Line::from(vec![
@@ -334,23 +335,20 @@ pub fn side<'a>(theme: &Theme, r: &'a Ranked, detail: Option<&'a DetailData>) ->
 }
 
 fn draw_image(frame: &mut Frame, state: &State, url: Option<&str>, host: Rect, rows: u16) -> u16 {
-    let Some(thumb) = state.image(url) else {
+    let (Some(url), Some(thumb)) = (url, state.image(url)) else {
         return 0;
     };
-    let target = fitted(
-        thumb,
+    let target = state.graphics.draw(
+        frame.buffer_mut(),
         Rect {
             height: rows.min(host.height),
             ..host
         },
-    );
-    frame.render_widget(
-        ImageView {
-            thumb,
-            mode: state.ui.images,
-            indexed: state.ui.indexed_colors,
-        },
-        target,
+        url,
+        thumb,
+        Fit::Contain,
+        state.ui.images,
+        state.ui.indexed_colors,
     );
     if target.height == 0 {
         0
@@ -376,15 +374,17 @@ fn draw_header(frame: &mut Frame, area: Rect, state: &State, theme: &Theme, r: &
         .sum();
     let height = (u16::try_from(wrapped).unwrap_or(4) + 1).min(area.height);
     let head = Rect { height, ..area };
-    let text_area = match state.image(r.item.opportunity.author.avatar_url.as_deref()) {
-        Some(avatar) if head.width > 20 => {
-            frame.render_widget(
-                ImageView {
-                    thumb: avatar,
-                    mode: state.ui.images,
-                    indexed: state.ui.indexed_colors,
-                },
+    let avatar_url = r.item.opportunity.author.avatar_url.as_deref();
+    let text_area = match avatar_url.zip(state.image(avatar_url)) {
+        Some((url, avatar)) if head.width > 20 && state.ui.images != ImageMode::Off => {
+            state.graphics.draw(
+                frame.buffer_mut(),
                 Rect::new(head.x, head.y, 6, head.height.min(3)),
+                url,
+                avatar,
+                Fit::Cover,
+                state.ui.images,
+                state.ui.indexed_colors,
             );
             Rect {
                 x: head.x + 8,

@@ -50,6 +50,8 @@ async fn event_loop(
         sentri_app::ColorMode::Indexed => Palette::INDEXED,
     };
     let theme = Theme::new(palette);
+    // Ask about graphics before the reader thread starts consuming stdin.
+    let graphics = crate::graphics::Graphics::detect(ui.images);
     let (event_tx, mut events) = mpsc::unbounded_channel();
     spawn_terminal_reader(event_tx);
     let (msg_tx, mut msgs) = mpsc::unbounded_channel();
@@ -59,6 +61,7 @@ async fn event_loop(
         density: crate::state::Density::from_name(&ui.density).unwrap_or_default(),
         ui: crate::state::UiPrefs::from_config(ui, palette == Palette::INDEXED),
         keymap: crate::state::keymap(&app.config().keys),
+        graphics,
         calendar: crate::state::calendar::CalendarState {
             view: crate::state::calendar::CalView::from_name(&app.config().calendar.default_view),
             sunday_first: app.config().calendar.week_start == "sunday",

@@ -78,7 +78,7 @@ default_view = "month"    # month | week | day | agenda
 # Appearance (also editable from Settings in the TUI).
 [ui]
 density = "comfortable"   # compact | comfortable | detailed
-images = "halfblock"      # halfblock | ascii | off
+images = "auto"           # auto | kitty | sixel | iterm2 | halfblock | ascii | off
 colors = "auto"           # auto | truecolor | indexed
 ascii_icons = false
 show_sidebar = true
