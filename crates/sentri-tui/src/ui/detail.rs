@@ -10,8 +10,8 @@ use ratatui::widgets::{Paragraph, Wrap};
 use sentri_app::Ranked;
 use sentri_core::{ContentKind, Eligibility, Modality, Stance};
 
+use super::card::stance_color;
 use super::charts::bar;
-use super::feed::stance_color;
 use super::widgets::{badge, flag_glyphs, panel, relative, source_badge};
 use crate::graphics::Fit;
 use crate::state::{DetailData, Focus, ImageSlot, State};

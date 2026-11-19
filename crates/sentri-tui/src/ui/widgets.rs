@@ -5,7 +5,7 @@ use ratatui::layout::{Constraint, Flex, Layout, Rect};
 use ratatui::style::{Color, Style};
 use ratatui::text::Span;
 use ratatui::widgets::{Block, BorderType, Padding};
-use sentri_core::{Category, InteractionState, Modality, SourceKind};
+use sentri_core::{InteractionState, SourceKind};
 
 use crate::theme::Theme;
 
@@ -31,27 +31,11 @@ pub fn source_badge(theme: &Theme, kind: SourceKind) -> Span<'static> {
     badge(theme, kind.badge(), theme.source_color(kind))
 }
 
-pub fn category_label(theme: &Theme, category: Category) -> Span<'static> {
-    Span::styled(
-        category.label().to_uppercase(),
-        Style::new().fg(theme.category_color(category)),
-    )
-}
-
 pub fn score_pill(theme: &Theme, score: i32) -> Span<'static> {
     Span::styled(
         format!("{score:>4} "),
         Style::new().fg(theme.score_color(score)),
     )
-}
-
-pub const fn modality_icon(m: Modality) -> &'static str {
-    match m {
-        Modality::Online => "◎ online",
-        Modality::InPerson => "⌂ in person",
-        Modality::Hybrid => "◐ hybrid",
-        Modality::Unknown => "",
-    }
 }
 
 /// Status glyphs for the set flags.

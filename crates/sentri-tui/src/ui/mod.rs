@@ -6,6 +6,7 @@
 
 mod ascii;
 mod calendar;
+mod card;
 mod charts;
 mod dashboard;
 mod detail;
