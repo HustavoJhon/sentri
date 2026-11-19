@@ -26,7 +26,7 @@ use unicode_width::UnicodeWidthStr;
 
 use super::card::{self, stance_color};
 use super::charts::bar;
-use super::widgets::{badge, panel, relative, source_badge};
+use super::widgets::{badge, distance, panel, source_badge};
 use crate::graphics::Fit;
 use crate::state::{DetailData, Focus, ImageSlot, State};
 use crate::theme::Theme;
@@ -58,13 +58,7 @@ fn field<'a>(theme: &Theme, name: &str, value: impl Into<Span<'a>>) -> Line<'a> 
 }
 
 fn date_value(d: DateTime<Utc>, now: DateTime<Utc>) -> String {
-    let days = (d - now).num_days();
-    let distance = match days {
-        -60..=60 => relative(d, now),
-        61.. => format!("in {days}d"),
-        _ => format!("{}d ago", -days),
-    };
-    format!("{}  ({distance})", card::short_date(d, now))
+    format!("{}  ({})", card::short_date(d, now), distance(d, now))
 }
 
 /// Text with Markdown emphasis markers removed (`**bold**`, `__x__`).

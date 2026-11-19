@@ -27,7 +27,7 @@ use sentri_app::Ranked;
 use sentri_core::{Category, ContentKind, InteractionState, Modality, Opportunity, Stance};
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
-use super::widgets::relative;
+use super::widgets::{distance, relative};
 use crate::state::Density;
 use crate::theme::Theme;
 
@@ -435,7 +435,7 @@ pub fn facts<'a>(theme: &Theme, o: &'a Opportunity, now: DateTime<Utc>) -> Vec<S
         }
         if let Some(published) = o.dates.published_at {
             parts.push(Span::styled(
-                format!("posted {}", relative(published, now)),
+                format!("posted {}", distance(published, now)),
                 theme.muted(),
             ));
         }

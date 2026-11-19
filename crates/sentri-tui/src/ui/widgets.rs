@@ -50,6 +50,17 @@ pub fn relative(date: DateTime<Utc>, now: DateTime<Utc>) -> String {
     }
 }
 
+/// Like [`relative`], but always a distance ("in 90d", "71d ago"), for
+/// places where the full date is already shown or not needed.
+pub fn distance(date: DateTime<Utc>, now: DateTime<Utc>) -> String {
+    let days = (date - now).num_days();
+    match days {
+        -60..=60 => relative(date, now),
+        61.. => format!("in {days}d"),
+        _ => format!("{}d ago", -days),
+    }
+}
+
 /// Deadline urgency color.
 pub fn deadline_style(theme: &Theme, date: DateTime<Utc>, now: DateTime<Utc>) -> Style {
     let days = (date - now).num_days();
@@ -91,6 +102,23 @@ mod tests {
         assert_eq!(
             relative(now - Duration::days(2) - Duration::hours(1), now),
             "2d ago"
+        );
+    }
+
+    #[test]
+    fn distances_never_turn_into_dates() {
+        let now = Utc::now();
+        assert_eq!(
+            distance(now - Duration::days(71) - Duration::hours(1), now),
+            "71d ago"
+        );
+        assert_eq!(
+            distance(now + Duration::days(90) + Duration::hours(1), now),
+            "in 90d"
+        );
+        assert_eq!(
+            distance(now + Duration::days(3) + Duration::hours(1), now),
+            "in 3d"
         );
     }
 
