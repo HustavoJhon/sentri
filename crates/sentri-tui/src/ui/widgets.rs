@@ -5,7 +5,7 @@ use ratatui::layout::{Constraint, Flex, Layout, Rect};
 use ratatui::style::{Color, Style};
 use ratatui::text::Span;
 use ratatui::widgets::{Block, BorderType, Padding};
-use sentri_core::{InteractionState, SourceKind};
+use sentri_core::SourceKind;
 
 use crate::theme::Theme;
 
@@ -36,23 +36,6 @@ pub fn score_pill(theme: &Theme, score: i32) -> Span<'static> {
         format!("{score:>4} "),
         Style::new().fg(theme.score_color(score)),
     )
-}
-
-/// Status glyphs for the set flags.
-pub fn flag_glyphs(state: &InteractionState) -> String {
-    [
-        (state.liked, '♥'),
-        (state.saved, '★'),
-        (state.interesting, '!'),
-        (state.applied, '✓'),
-        (state.enrolled, '✎'),
-        (state.completed, '◉'),
-        (state.dismissed, '✗'),
-    ]
-    .iter()
-    .filter(|(on, _)| *on)
-    .map(|(_, glyph)| *glyph)
-    .collect()
 }
 
 /// "today", "in 3d", "2d ago", or a date when far away.
@@ -117,16 +100,6 @@ mod tests {
         assert_eq!(r, Rect::new(25, 15, 50, 10));
         let clipped = centered(Rect::new(0, 0, 20, 5), 50, 10);
         assert_eq!(clipped, Rect::new(0, 0, 20, 5));
-    }
-
-    #[test]
-    fn glyphs_for_flags() {
-        let state = InteractionState {
-            liked: true,
-            saved: true,
-            ..InteractionState::default()
-        };
-        assert_eq!(flag_glyphs(&state), "♥★");
     }
 }
 
