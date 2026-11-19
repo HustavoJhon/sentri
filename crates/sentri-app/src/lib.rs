@@ -8,6 +8,7 @@ pub mod collect;
 pub mod config;
 pub mod daemon;
 pub mod google;
+pub mod image_source;
 pub mod images;
 pub mod keys;
 pub mod links;
