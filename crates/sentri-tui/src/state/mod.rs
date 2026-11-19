@@ -475,6 +475,9 @@ pub enum ProfileState {
     Unavailable(String),
 }
 
+/// Decoded images kept in memory (each up to 1024 px on its longest edge).
+pub const IMAGES_IN_MEMORY: usize = 16;
+
 /// Results of effects.
 #[derive(Debug, Clone)]
 pub enum Msg {
@@ -536,6 +539,8 @@ pub struct State {
     pub detail: Option<DetailData>,
     pub detail_requested: Option<OpportunityId>,
     pub images: HashMap<String, ImageSlot>,
+    /// Ready images, oldest first.
+    pub image_order: std::collections::VecDeque<String>,
     /// How images are drawn (graphics protocol or half blocks).
     pub graphics: crate::graphics::Graphics,
     pub overview: Overview,
@@ -572,6 +577,7 @@ impl Default for State {
             detail: None,
             detail_requested: None,
             images: HashMap::new(),
+            image_order: std::collections::VecDeque::new(),
             graphics: crate::graphics::Graphics::default(),
             overview: Overview::default(),
             calendar: CalendarState::default(),
@@ -1331,6 +1337,23 @@ impl State {
         self.detail.as_ref().filter(|d| d.id == id)
     }
 
+    /// Keeps a decoded image, forgetting the oldest ones beyond
+    /// [`IMAGES_IN_MEMORY`] (they reload from the disk cache if needed).
+    fn store_image(&mut self, url: String, thumb: Option<Thumbnail>) {
+        let Some(thumb) = thumb else {
+            self.images.insert(url, ImageSlot::Failed);
+            return;
+        };
+        self.images.insert(url.clone(), ImageSlot::Ready(thumb));
+        self.image_order.retain(|u| *u != url);
+        self.image_order.push_back(url);
+        while self.image_order.len() > IMAGES_IN_MEMORY {
+            if let Some(old) = self.image_order.pop_front() {
+                self.images.remove(&old);
+            }
+        }
+    }
+
     pub fn image(&self, url: Option<&str>) -> Option<&Thumbnail> {
         match self.images.get(url?) {
             Some(ImageSlot::Ready(thumb)) => Some(thumb),
@@ -1412,10 +1435,7 @@ impl State {
                 self.detail_requested = None;
                 return self.reload();
             }
-            Msg::Image(url, thumb) => {
-                let slot = thumb.map_or(ImageSlot::Failed, ImageSlot::Ready);
-                self.images.insert(url, slot);
-            }
+            Msg::Image(url, thumb) => self.store_image(url, thumb),
             Msg::Acted(id, state) => {
                 if self.detail_requested == Some(id) {
                     // Refresh history in Details.
@@ -1704,6 +1724,35 @@ mod tests {
         s.on_key(key(KeyCode::Up));
         s.images.clear();
         assert_eq!(s.pending(), vec![Effect::LoadDetail(OpportunityId(1))]);
+    }
+
+    #[test]
+    fn decoded_images_in_memory_are_bounded() {
+        let mut s = loaded(1);
+        let thumb = Thumbnail::from_pixels(1, 1, &[[0; 3]]);
+        for i in 0..IMAGES_IN_MEMORY + 5 {
+            s.on_msg(Msg::Image(
+                format!("https://img.example/{i}.png"),
+                thumb.clone(),
+            ));
+        }
+        s.on_msg(Msg::Image("https://img.example/broken.png".into(), None));
+        let ready = s
+            .images
+            .values()
+            .filter(|slot| matches!(slot, ImageSlot::Ready(_)))
+            .count();
+        assert_eq!(ready, IMAGES_IN_MEMORY);
+        assert!(
+            s.image(Some("https://img.example/0.png")).is_none(),
+            "oldest dropped"
+        );
+        assert!(s.image(Some("https://img.example/20.png")).is_some());
+        assert_eq!(
+            s.images.get("https://img.example/broken.png"),
+            Some(&ImageSlot::Failed),
+            "failures are remembered so they are not retried every frame"
+        );
     }
 
     #[test]
