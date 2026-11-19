@@ -15,6 +15,7 @@ mod feed;
 mod history;
 pub mod image;
 mod popups;
+mod profile;
 mod settings;
 mod sources;
 mod widgets;
@@ -247,86 +248,20 @@ fn draw_sidebar(frame: &mut Frame, area: Rect, state: &mut State, theme: &Theme)
                 .bg(theme.p.bg1)
                 .add_modifier(Modifier::BOLD),
         );
-    let profile_height = if area.height >= 30 { 7 } else { 0 };
+    // Sections need 23 rows; the profile card takes what is left.
+    let profile_height = match area.height {
+        33.. => profile::FULL_HEIGHT,
+        28.. => profile::COMPACT_HEIGHT,
+        _ => 0,
+    };
     let [nav, profile] =
         Layout::vertical([Constraint::Min(0), Constraint::Length(profile_height)]).areas(area);
     let mut list_state = ListState::default().with_selected(Some(state.section));
     frame.render_stateful_widget(list, nav, &mut list_state);
     state.hit.sidebar = nav;
     if profile_height > 0 {
-        draw_profile(frame, profile, state, theme);
+        profile::render(frame, profile, state, theme);
     }
-}
-
-/// GitHub identity at the bottom left: avatar (or initials) and name.
-fn draw_profile(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
-    use crate::state::ProfileState;
-    let block = panel(theme, "", false);
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-    let [pic, text] = Layout::horizontal([Constraint::Length(10), Constraint::Min(0)]).areas(inner);
-    let muted = |t: &str| Line::from(Span::styled(t.to_owned(), theme.muted()));
-    let lines = match &state.profile {
-        ProfileState::Loading => vec![muted("loading…")],
-        ProfileState::NotConfigured => vec![
-            muted("No GitHub user."),
-            muted("Settings › Profile"),
-            muted("or [github] username"),
-        ],
-        ProfileState::Unavailable(_) => vec![muted("GitHub profile"), muted("unavailable")],
-        ProfileState::Ready(profile, avatar) => {
-            match avatar {
-                Some(thumb) if state.ui.images != sentri_app::ImageMode::Off => {
-                    state.graphics.draw(
-                        frame.buffer_mut(),
-                        Rect { width: 9, ..pic },
-                        &profile.avatar_cache_key(),
-                        thumb,
-                        crate::graphics::Fit::Cover,
-                        state.ui.images,
-                        state.ui.indexed_colors,
-                    );
-                }
-                _ => frame.render_widget(
-                    Paragraph::new(vec![
-                        Line::default(),
-                        Line::from(Span::styled(
-                            format!(" {} ", profile.initials()),
-                            theme.badge(theme.p.orange),
-                        )),
-                    ])
-                    .centered(),
-                    pic,
-                ),
-            }
-            vec![
-                Line::from(Span::styled(
-                    profile
-                        .name
-                        .clone()
-                        .unwrap_or_else(|| profile.login.clone()),
-                    Style::new().fg(theme.p.fg).add_modifier(Modifier::BOLD),
-                )),
-                Line::from(Span::styled(
-                    format!("@{}", profile.login),
-                    Style::new().fg(theme.p.aqua),
-                )),
-                Line::from(Span::styled(
-                    format!(
-                        "{} repos · {} followers",
-                        profile.public_repos, profile.followers
-                    ),
-                    theme.muted(),
-                )),
-            ]
-        }
-    };
-    let text = if matches!(state.profile, ProfileState::Ready(..)) {
-        text
-    } else {
-        inner
-    };
-    frame.render_widget(Paragraph::new(lines), text);
 }
 
 /// Key currently bound to `action` (custom shortcuts included).
