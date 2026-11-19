@@ -672,6 +672,52 @@ mod tests {
         }
     }
 
+    /// Long, double-width and emoji-laden content in every density, at the
+    /// sizes SENTRI supports, never pushes a border out of place.
+    #[test]
+    fn layouts_keep_their_borders_at_every_size() {
+        let mut long = sample();
+        let o = &mut long.item.opportunity;
+        o.title =
+            "超長いタイトル 🛠\u{FE0F} with a very long English tail that never ends ".repeat(4);
+        o.summary = Some("Résumé — línea con ñ, 日本語 and emoji 🚀 ".repeat(30));
+        o.author.name = Some("Organización Muy Larga de la Comunidad".into());
+        o.location = Some("Universidad Nacional de San Antonio Abad del Cusco".into());
+        o.image_url = Some("https://img.example/a.png".into());
+        let thumb = sentri_app::Thumbnail::from_pixels(4, 2, &[[200, 120, 40]; 8]).unwrap();
+        for ascii in [false, true] {
+            for (w, h) in [(60, 20), (80, 24), (100, 35), (170, 45)] {
+                for density in [Density::Compact, Density::Comfortable, Density::Detailed] {
+                    for section in 1..=11 {
+                        let mut state = State {
+                            section,
+                            density,
+                            ..State::default()
+                        };
+                        state.ui.ascii_icons = ascii;
+                        state.on_msg(Msg::Loaded(vec![long.clone(), sample()]));
+                        state.on_msg(Msg::Image(
+                            "https://img.example/a.png".into(),
+                            Some(thumb.clone()),
+                        ));
+                        let screen = render(w, h, &mut state);
+                        let rows: Vec<&str> = screen.lines().collect();
+                        assert_eq!(rows.len(), usize::from(h));
+                        let edge = if ascii { ['|', '+'] } else { ['│', '╯'] };
+                        // Every body row ends with a panel border.
+                        for row in &rows[1..rows.len() - 1] {
+                            let last = row.chars().last().unwrap();
+                            assert!(
+                                edge.contains(&last) || last == '╮',
+                                "{w}×{h} {density:?} section {section} ascii={ascii}:\n{screen}"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     #[test]
     fn records_hit_areas_for_mouse() {
         let mut state = State::default();
