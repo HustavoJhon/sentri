@@ -475,9 +475,6 @@ pub enum ProfileState {
     Unavailable(String),
 }
 
-/// Thumbnail size requested for detail images and avatars, in pixels.
-pub const IMAGE_PX: (u32, u32) = (80, 48);
-
 /// Results of effects.
 #[derive(Debug, Clone)]
 pub enum Msg {

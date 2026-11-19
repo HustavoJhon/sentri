@@ -109,15 +109,9 @@ impl Sentri {
         Ok(Some(profile))
     }
 
-    /// The avatar as a small thumbnail (GitHub serves resized avatars).
+    /// The avatar at a size worth drawing (see [`crate::image_source`]).
     pub async fn github_avatar(&self, profile: &GitHubProfile) -> Result<Thumbnail, AppError> {
-        let sep = if profile.avatar_url.contains('?') {
-            '&'
-        } else {
-            '?'
-        };
-        let url = format!("{}{sep}s=96", profile.avatar_url);
-        Ok(self.image_thumbnail(&url, 48, 48).await?)
+        Ok(self.image(&profile.avatar_url).await?)
     }
 }
 

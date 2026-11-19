@@ -414,8 +414,7 @@ fn execute_detail(app: Sentri, effect: Effect, tx: UnboundedSender<Msg>) {
         }
         Effect::LoadImage(url) => {
             tokio::spawn(async move {
-                let (w, h) = crate::state::IMAGE_PX;
-                let thumb = match app.image_thumbnail(&url, w, h).await {
+                let thumb = match app.image(&url).await {
                     Ok(thumb) => Some(thumb),
                     Err(error) => {
                         tracing::debug!(%error, "image unavailable");
