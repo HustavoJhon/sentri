@@ -36,6 +36,10 @@ use widgets::panel;
 const SIDEBAR_WIDTH: u16 = 24;
 const WIDE: u16 = 110;
 const MEDIUM: u16 = 80;
+/// Below `MEDIUM`, a rail of section keys and icons keeps navigation
+/// visible down to this width.
+const NARROW: u16 = 60;
+const RAIL_WIDTH: u16 = 7;
 
 /// Draws the whole interface.
 pub fn draw(frame: &mut Frame, state: &mut State, theme: &Theme) {
@@ -137,6 +141,11 @@ fn draw_body(frame: &mut Frame, area: Rect, state: &mut State, theme: &Theme) {
             Layout::horizontal([Constraint::Length(SIDEBAR_WIDTH), Constraint::Min(0)]).areas(area);
         draw_sidebar(frame, sidebar, state, theme);
         main
+    } else if area.width >= NARROW && state.ui.show_sidebar {
+        let [rail, main] =
+            Layout::horizontal([Constraint::Length(RAIL_WIDTH), Constraint::Min(0)]).areas(area);
+        draw_rail(frame, rail, state, theme);
+        main
     } else {
         state.hit.sidebar = Rect::default();
         area
@@ -183,16 +192,52 @@ fn fit(text: &str, width: usize) -> String {
     out
 }
 
+/// Key shown next to section `i` (1…9, then 0).
+fn section_key(i: usize) -> String {
+    match i {
+        0..=8 => format!("{}", i + 1),
+        9 => "0".into(),
+        _ => " ".into(),
+    }
+}
+
+/// Narrow sidebar: section key and icon only, current section highlighted.
+fn draw_rail(frame: &mut Frame, area: Rect, state: &mut State, theme: &Theme) {
+    let items: Vec<ListItem> = Section::ALL
+        .iter()
+        .enumerate()
+        .map(|(i, section)| {
+            let unsaved = *section == Section::Settings && state.settings.is_dirty();
+            let icon_style = if unsaved {
+                theme.warn()
+            } else {
+                Style::new().fg(theme.p.aqua)
+            };
+            ListItem::new(Line::from(vec![
+                Span::styled(section_key(i), theme.muted()),
+                Span::styled(section.icon(), icon_style),
+            ]))
+        })
+        .collect();
+    let list = List::new(items)
+        .block(panel(theme, "", state.focus == Focus::Sidebar))
+        .highlight_style(
+            Style::new()
+                .fg(theme.p.yellow)
+                .bg(theme.p.bg1)
+                .add_modifier(Modifier::BOLD),
+        );
+    let mut list_state = ListState::default().with_selected(Some(state.section));
+    frame.render_stateful_widget(list, area, &mut list_state);
+    state.hit.sidebar = area;
+}
+
 fn draw_sidebar(frame: &mut Frame, area: Rect, state: &mut State, theme: &Theme) {
     let items: Vec<ListItem> = Section::ALL
         .iter()
         .enumerate()
         .map(|(i, section)| {
-            let key = match i {
-                0..=8 => format!("{}", i + 1),
-                9 => "0".into(),
-                _ => " ".into(),
-            };
+            let key = section_key(i);
             let count = match section {
                 Section::Feed(view) => state
                     .overview
@@ -250,7 +295,7 @@ fn draw_sidebar(frame: &mut Frame, area: Rect, state: &mut State, theme: &Theme)
         );
     // Sections need 23 rows; the profile card takes what is left.
     let profile_height = match area.height {
-        33.. => profile::FULL_HEIGHT,
+        34.. => profile::FULL_HEIGHT,
         28.. => profile::COMPACT_HEIGHT,
         _ => 0,
     };
@@ -795,6 +840,28 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn narrow_terminals_keep_a_section_rail() {
+        let mut state = State::default();
+        state.on_msg(Msg::Loaded(vec![sample()]));
+        let screen = render(64, 24, &mut state);
+        assert_eq!(state.hit.sidebar.width, RAIL_WIDTH);
+        let rows: Vec<&str> = screen.lines().collect();
+        assert!(rows.iter().any(|r| r.starts_with("│ 1◆")), "{screen}");
+        assert!(
+            rows.iter().any(|r| r.starts_with("│ 7⚡")),
+            "wide icons fit: {screen}"
+        );
+        let screen = render(58, 24, &mut state);
+        assert_eq!(
+            state.hit.sidebar.width, 0,
+            "too narrow: Tab switches sections\n{screen}"
+        );
+        state.ui.show_sidebar = false;
+        render(70, 24, &mut state);
+        assert_eq!(state.hit.sidebar.width, 0, "hidden sidebar stays hidden");
     }
 
     #[test]
