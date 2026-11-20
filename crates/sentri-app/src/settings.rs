@@ -246,8 +246,8 @@ pub const SETTINGS: &[Setting] = &[
         "cards.selection",
         "Cards",
         "Selection style",
-        SettingKind::Choice(&["rail", "highlight"]),
-        "highlight also shades the selected card",
+        SettingKind::Choice(&["highlight", "rail"]),
+        "rail: only the colored bar marks the selected card",
         true,
     ),
     s(

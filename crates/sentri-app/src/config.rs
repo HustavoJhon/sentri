@@ -203,7 +203,7 @@ pub struct CardsConfig {
     pub fact_order: String,
     /// `both` (`Fri 20 Nov · in 3d`), `relative` or `absolute`.
     pub dates: String,
-    /// `rail` (colored left bar) or `highlight` (bar plus a shaded card).
+    /// `highlight` (colored left bar plus a shaded card) or `rail` (bar only).
     pub selection: String,
 }
 
@@ -216,7 +216,7 @@ impl Default for CardsConfig {
             facts: all(CARD_FACTS),
             fact_order: "kind".into(),
             dates: "both".into(),
-            selection: "rail".into(),
+            selection: "highlight".into(),
         }
     }
 }
@@ -432,7 +432,7 @@ impl Config {
         list("cards.facts", &c.facts, CARD_FACTS)?;
         choice("cards.fact_order", &c.fact_order, &["kind", "custom"])?;
         choice("cards.dates", &c.dates, &["both", "relative", "absolute"])?;
-        choice("cards.selection", &c.selection, &["rail", "highlight"])?;
+        choice("cards.selection", &c.selection, &["highlight", "rail"])?;
         Ok(())
     }
 

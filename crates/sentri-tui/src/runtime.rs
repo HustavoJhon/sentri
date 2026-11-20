@@ -60,6 +60,8 @@ async fn event_loop(
         loading: true,
         density: crate::state::Density::from_name(&ui.density).unwrap_or_default(),
         ui: crate::state::UiPrefs::from_config(ui, palette == Palette::INDEXED),
+        cards: crate::state::presentation::CardPrefs::from_config(&app.config().cards),
+        dashboard: crate::state::presentation::DashboardPrefs::from_config(&app.config().dashboard),
         keymap: crate::state::keymap(&app.config().keys),
         graphics,
         calendar: crate::state::calendar::CalendarState {

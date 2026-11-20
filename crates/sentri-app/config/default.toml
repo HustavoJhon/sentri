@@ -103,7 +103,7 @@ show_meter = true
 facts = ["when", "deadline", "pay", "organizer", "place", "modality", "cost", "perks", "topic", "skills", "links"]
 fact_order = "kind"       # kind (each card type's own order) | custom (order above)
 dates = "both"            # both | relative | absolute
-selection = "rail"        # rail | highlight
+selection = "highlight"   # highlight (bar + shaded card) | rail (bar only)
 
 # Sources. Each one is independent: if it fails, the others keep working.
 [[sources]]

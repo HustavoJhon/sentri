@@ -23,6 +23,7 @@ pub mod calendar;
 pub mod collect;
 pub mod editor;
 pub mod history;
+pub mod presentation;
 pub mod settings;
 pub mod sources;
 
@@ -536,6 +537,8 @@ pub struct State {
     pub hit: HitAreas,
     pub density: Density,
     pub ui: UiPrefs,
+    pub cards: presentation::CardPrefs,
+    pub dashboard: presentation::DashboardPrefs,
     pub detail: Option<DetailData>,
     pub detail_requested: Option<OpportunityId>,
     pub images: HashMap<String, ImageSlot>,
@@ -574,6 +577,8 @@ impl Default for State {
             hit: HitAreas::default(),
             density: Density::default(),
             ui: UiPrefs::default(),
+            cards: presentation::CardPrefs::default(),
+            dashboard: presentation::DashboardPrefs::default(),
             detail: None,
             detail_requested: None,
             images: HashMap::new(),
@@ -1371,6 +1376,8 @@ impl State {
             .collect();
         let ui = &saved.config.ui;
         self.ui = UiPrefs::from_config(ui, self.ui.indexed_colors);
+        self.cards = presentation::CardPrefs::from_config(&saved.config.cards);
+        self.dashboard = presentation::DashboardPrefs::from_config(&saved.config.dashboard);
         if let Some(density) = Density::from_name(&ui.density) {
             self.density = density;
         }
