@@ -130,6 +130,7 @@ actions! {
     Schedule => "schedule", "a", "Add to calendar";
     Edit => "edit", "E", "Edit item";
     Open => "open", "o", "Open link";
+    ViewImage => "view_image", "z", "View image larger";
     AddLink => "add_link", "n", "Add link";
     Search => "search", "/", "Search";
     Palette => "palette", ":", "Command palette";

@@ -79,11 +79,51 @@ postulado/inscrito +3, descartado −3.
 | `collect_on_start` | `auto` (por defecto): recolecta al abrir la TUI si la base está vacía o ninguna fuente tuvo éxito dentro de `daemon.interval_minutes`; `always`; `never` |
 | `cache_dir` | Caché de imágenes y avatar (`~/.cache/sentri/images`) |
 
+## `[dashboard]`
+
+| Clave | Valores |
+|---|---|
+| `layout` | `detailed` (por defecto) o `compact`: métricas en una línea de texto y gráficos más bajos. Las terminales de menos de 24 filas usan siempre `compact` |
+| `widgets` | Widgets en el orden en que se dibujan: `metrics`, `activity`, `interactions`, `distribution`, `recommendations`, `upcoming`, `news`, `jobs`. Quitar uno lo oculta |
+| `metrics` | Contadores, en orden: `found`, `new`, `news`, `events`, `courses`, `jobs`, `saved`, `liked`, `applied`, `calendar` |
+| `recommendations` | Filas de recomendaciones (1–30, por defecto 10) |
+
+Los gráficos consecutivos comparten fila, y también las listas consecutivas;
+cada fila tiene tantos widgets como quepan (3 desde 110 columnas, 2 desde
+70/60, 1 en terminales estrechas). Si las métricas no caben como recuadros en
+una fila, se muestran como texto en una o dos líneas.
+
+```toml
+[dashboard]
+layout = "compact"
+widgets = ["recommendations", "upcoming", "jobs", "metrics"]
+metrics = ["new", "jobs", "events", "saved"]
+recommendations = 6
+```
+
+## `[cards]`
+
+| Clave | Valores |
+|---|---|
+| `show_category` | Etiqueta de tipo (`JOB`, `MEETUP`, `OFFICIAL`…) |
+| `show_source` | Badge y nombre de la plataforma |
+| `show_meter` | Medidor `●●●○○` (en compact, la columna de puntuación) |
+| `facts` | Datos bajo el título: `when`, `deadline`, `pay`, `organizer`, `place`, `modality`, `cost`, `perks`, `topic`, `skills`, `links`. Quitar uno lo oculta |
+| `fact_order` | `kind` (por defecto: cada tipo de card usa su propio orden) o `custom` (el orden de `facts`) |
+| `dates` | `both` (`Sat 28 Nov 08:30 · in 8d`), `relative` (`in 8d`) o `absolute` (`Sat 28 Nov 08:30`) |
+| `selection` | `highlight` (barra y card sombreada) o `rail` (solo la barra) |
+
+Todo `[dashboard]` y `[cards]` se edita en **Settings › Dashboard / Cards**
+y se aplica al guardar, sin reiniciar. Las listas se escriben separadas por
+comas; Settings muestra las opciones válidas y rechaza nombres desconocidos o
+repetidos.
+
 ## `[github]`
 
 `username`: tu usuario público. Solo se lee `GET /users/<usuario>` (sin token,
-60 peticiones/hora); se guarda en caché 24 h. El avatar aparece abajo a la
-izquierda; si falla, se muestran tus iniciales.
+60 peticiones/hora); se guarda en caché 24 h. Se muestran avatar, nombre,
+usuario, repositorios, seguidores y, si caben, ubicación, empresa o bio
+públicas. Si falla, se muestran tus iniciales.
 
 ## `[daemon]`
 
@@ -113,7 +153,7 @@ Todo lo anterior también se edita desde **Settings** en la TUI
 Atajos remapeables: `acción = "tecla"`. Teclas: un carácter (`l`, `S`, `?`),
 `ctrl-x`, `alt-x`, `enter`, `space`, `f1`…`f12`. Acciones: `like`, `save`,
 `dismiss`, `interesting`, `applied`, `enrolled`, `completed`, `schedule`,
-`edit`, `open`, `add_link`, `search`, `palette`, `density`, `sort`, `collect`,
+`edit`, `open`, `view_image`, `add_link`, `search`, `palette`, `density`, `sort`, `collect`,
 `reload`, `help`, `quit`, `filter_free`, `filter_travel`, `filter_upcoming`,
 `filter_eligible`, `filter_certificate`.
 
@@ -141,6 +181,8 @@ protocolo gráfico entiende y el tamaño de cada celda en píxeles:
 | Medios bloques | cualquier terminal truecolor o de 256 colores, SSH, consola | 2 píxeles por celda |
 
 Si la terminal no responde o no anuncia ninguno, se usan medios bloques (`▀`).
+Dentro de tmux sin `allow-passthrough` la consulta no llega a la terminal
+exterior, así que se usan medios bloques sin preguntar.
 `kitty`, `sixel` o `iterm2` fuerzan un protocolo aunque no se anuncie (útil
 dentro de tmux con `set -g allow-passthrough on`). `halfblock` y `ascii`
 dibujan siempre con caracteres. Cambiar a un protocolo desde Settings requiere
@@ -152,6 +194,11 @@ GitHub a 460 px) y, si no existe, la URL publicada. Los bytes originales se
 guardan en `cache_dir` una semana; cada tamaño que se dibuja se remuestrea una
 sola vez desde ese original con un filtro Lanczos. Las transparencias se
 mezclan con el fondo Gruvbox. Formatos: PNG, JPEG, WebP y GIF (SVG no).
+
+`z` en un elemento con imagen abre el **visor**: la imagen ocupa toda la
+pantalla y `Esc` vuelve exactamente a donde estabas. El pie indica la
+resolución real de la imagen y cómo se dibuja; sin protocolo gráfico lo dice
+(“half-block preview”), en vez de presentar una ampliación que no lo es.
 
 ## Modo ASCII
 

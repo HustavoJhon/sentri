@@ -26,6 +26,13 @@ pub struct GitHubProfile {
     /// Changes whenever the profile (avatar included) is edited.
     #[serde(default)]
     pub updated_at: Option<String>,
+    /// Public profile text, as the user wrote it (sanitized, one line).
+    #[serde(default)]
+    pub bio: Option<String>,
+    #[serde(default)]
+    pub location: Option<String>,
+    #[serde(default)]
+    pub company: Option<String>,
 }
 
 impl GitHubProfile {
@@ -73,6 +80,13 @@ fn parse(body: &[u8]) -> Result<GitHubProfile, AppError> {
         .map(|n| sentri_core::text::clean(&n, 100))
         .filter(|n| !n.is_empty());
     profile.login = sentri_core::text::clean(&profile.login, 39);
+    let line = |v: Option<String>, max: usize| {
+        v.map(|t| sentri_core::text::clean(&t, max))
+            .filter(|t| !t.is_empty())
+    };
+    profile.bio = line(profile.bio.take(), 160);
+    profile.location = line(profile.location.take(), 60);
+    profile.company = line(profile.company.take(), 60);
     if !profile.avatar_url.starts_with("https://") || !profile.html_url.starts_with("https://") {
         return Err(AppError::Profile("GitHub returned non-https URLs".into()));
     }
@@ -161,6 +175,17 @@ mod tests {
         let unsafe_urls =
             br#"{"login":"x","name":null,"html_url":"http://x","avatar_url":"javascript:1"}"#;
         assert!(parse(unsafe_urls).is_err());
+    }
+
+    #[test]
+    fn keeps_public_bio_location_and_company_as_safe_single_lines() {
+        let body = br#"{"login":"octocat","html_url":"https://github.com/octocat",
+            "avatar_url":"https://avatars.githubusercontent.com/u/1","bio":"Rust \u001b[31m dev\n from Cusco",
+            "location":"  Lima, Peru ","company":"","blog":"https://x.example"}"#;
+        let p = parse(body).unwrap();
+        assert_eq!(p.bio.as_deref(), Some("Rust [31m dev from Cusco"));
+        assert_eq!(p.location.as_deref(), Some("Lima, Peru"));
+        assert_eq!(p.company, None, "empty fields are absent");
     }
 
     #[test]

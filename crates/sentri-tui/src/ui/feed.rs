@@ -137,13 +137,15 @@ pub fn render(frame: &mut Frame, area: Rect, state: &mut State, theme: &Theme, t
                     width,
                     selected: i == state.selected,
                     now,
+                    prefs: &state.cards,
                 },
             ))
         })
         .collect();
-    let list = List::new(items)
-        .block(block)
-        .highlight_style(theme.selected());
+    let mut list = List::new(items).block(block);
+    if state.cards.highlight {
+        list = list.highlight_style(theme.selected());
+    }
     let mut list_state = ListState::default()
         .with_offset(state.hit.list_offset)
         .with_selected(Some(state.selected));

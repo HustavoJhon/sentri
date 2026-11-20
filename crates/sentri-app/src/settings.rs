@@ -10,7 +10,7 @@ use chrono::Local;
 use thiserror::Error;
 use toml_edit::{DocumentMut, Item, Table, value};
 
-use crate::config::DEFAULT_CONFIG;
+use crate::config::{CARD_FACTS, DASHBOARD_METRICS, DASHBOARD_WIDGETS, DEFAULT_CONFIG};
 use crate::{Config, ConfigError};
 
 #[derive(Debug, Error)]
@@ -38,6 +38,24 @@ pub enum SettingKind {
     },
     /// Free text; empty removes the key (back to the default).
     Text,
+    /// Comma-separated subset of the options, in the chosen order; stored
+    /// as a TOML array. Empty means none.
+    List(&'static [&'static str]),
+}
+
+/// Parses a [`SettingKind::List`] value: trimmed, known, not repeated.
+pub fn parse_list(text: &str, options: &[&str]) -> Result<Vec<String>, String> {
+    let mut out: Vec<String> = Vec::new();
+    for item in text.split(',').map(str::trim).filter(|i| !i.is_empty()) {
+        if !options.contains(&item) {
+            return Err(format!("unknown {item:?}; use: {}", options.join(", ")));
+        }
+        if out.iter().any(|o| o == item) {
+            return Err(format!("{item:?} is repeated"));
+        }
+        out.push(item.to_owned());
+    }
+    Ok(out)
 }
 
 /// A setting with a fixed key path such as `ui.density`.
@@ -142,6 +160,94 @@ pub const SETTINGS: &[Setting] = &[
         "Collect on start",
         SettingKind::Choice(&["auto", "always", "never"]),
         "auto: when empty or older than the daemon interval",
+        true,
+    ),
+    s(
+        "dashboard.layout",
+        "Dashboard",
+        "Layout",
+        SettingKind::Choice(&["detailed", "compact"]),
+        "compact: one-line metrics and short charts",
+        true,
+    ),
+    s(
+        "dashboard.widgets",
+        "Dashboard",
+        "Widgets (in order)",
+        SettingKind::List(DASHBOARD_WIDGETS),
+        "Comma-separated; leave one out to hide it, reorder to move it",
+        true,
+    ),
+    s(
+        "dashboard.metrics",
+        "Dashboard",
+        "Metrics (in order)",
+        SettingKind::List(DASHBOARD_METRICS),
+        "Counters in the metrics strip",
+        true,
+    ),
+    s(
+        "dashboard.recommendations",
+        "Dashboard",
+        "Recommendations",
+        SettingKind::Int { min: 1, max: 30 },
+        "Rows in the recommendations list",
+        true,
+    ),
+    s(
+        "cards.show_category",
+        "Cards",
+        "Show category",
+        SettingKind::Bool,
+        "JOB, MEETUP, OFFICIAL… label on each card",
+        true,
+    ),
+    s(
+        "cards.show_source",
+        "Cards",
+        "Show source",
+        SettingKind::Bool,
+        "Platform badge and publisher name",
+        true,
+    ),
+    s(
+        "cards.show_meter",
+        "Cards",
+        "Show match meter",
+        SettingKind::Bool,
+        "The ●●●○○ relevance scale",
+        true,
+    ),
+    s(
+        "cards.facts",
+        "Cards",
+        "Facts",
+        SettingKind::List(CARD_FACTS),
+        "Comma-separated; leave one out to hide it",
+        true,
+    ),
+    s(
+        "cards.fact_order",
+        "Cards",
+        "Fact order",
+        SettingKind::Choice(&["kind", "custom"]),
+        "kind: each card type's own order · custom: the Facts order",
+        true,
+    ),
+    s(
+        "cards.dates",
+        "Cards",
+        "Dates",
+        SettingKind::Choice(&["both", "relative", "absolute"]),
+        "Fri 20 Nov · in 3d, only in 3d, or only the date",
+        true,
+    ),
+    s(
+        "cards.selection",
+        "Cards",
+        "Selection style",
+        SettingKind::Choice(&["highlight", "rail"]),
+        "rail: only the colored bar marks the selected card",
         true,
     ),
     s(
@@ -287,6 +393,17 @@ pub fn current(config: &Config, key: &str) -> Option<String> {
         "ui.show_details" => ui.show_details.to_string(),
         "ui.feed_width" => ui.feed_width.to_string(),
         "ui.collect_on_start" => ui.collect_on_start.clone(),
+        "dashboard.layout" => config.dashboard.layout.clone(),
+        "dashboard.widgets" => config.dashboard.widgets.join(", "),
+        "dashboard.metrics" => config.dashboard.metrics.join(", "),
+        "dashboard.recommendations" => config.dashboard.recommendations.to_string(),
+        "cards.show_category" => config.cards.show_category.to_string(),
+        "cards.show_source" => config.cards.show_source.to_string(),
+        "cards.show_meter" => config.cards.show_meter.to_string(),
+        "cards.facts" => config.cards.facts.join(", "),
+        "cards.fact_order" => config.cards.fact_order.clone(),
+        "cards.dates" => config.cards.dates.clone(),
+        "cards.selection" => config.cards.selection.clone(),
         "profile.home_city" => text(&config.profile.home_city),
         "profile.country" => text(&config.profile.country),
         "github.username" => text(&config.github.username),
@@ -360,6 +477,14 @@ fn to_item(key: &str, kind: SettingKind, text: &str) -> Result<Option<Item>, Set
                 return Err(invalid(format!("between {min} and {max}")));
             }
             value(n)
+        }
+        SettingKind::List(options) => {
+            let items = parse_list(text, options).map_err(invalid)?;
+            let mut array = toml_edit::Array::new();
+            for item in items {
+                array.push(item);
+            }
+            value(array)
         }
         SettingKind::Text if text.is_empty() => return Ok(None),
         SettingKind::Text => value(text),
@@ -607,6 +732,36 @@ mod tests {
     use super::*;
 
     const USER: &str = "# my notes stay\n[ui]\ndensity = \"compact\" # inline comment\n\n[[sources]]\nname = \"feed\"\nkind = \"rss\"\nurl = \"https://x.example/feed\"\n";
+
+    #[test]
+    fn lists_are_validated_and_saved_as_arrays() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, USER).unwrap();
+        let saved = save(
+            &path,
+            &[
+                ("dashboard.widgets".into(), "news, metrics".into()),
+                ("cards.facts".into(), "pay,  place".into()),
+            ],
+        )
+        .unwrap();
+        assert_eq!(saved.config.dashboard.widgets, ["news", "metrics"]);
+        assert_eq!(saved.config.cards.facts, ["pay", "place"]);
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.contains("widgets = [\"news\", \"metrics\"]"), "{text}");
+        assert!(text.contains("# my notes stay"));
+        assert_eq!(
+            current(&saved.config, "dashboard.widgets").unwrap(),
+            "news, metrics"
+        );
+
+        let err = save(&path, &[("dashboard.widgets".into(), "news, chart".into())]);
+        assert!(err.is_err());
+        let err = save(&path, &[("cards.facts".into(), "pay, pay".into())]);
+        assert!(err.is_err());
+        assert_eq!(parse_list(" ", CARD_FACTS).unwrap(), Vec::<String>::new());
+    }
 
     #[test]
     fn saves_preserving_comments_with_backup() {

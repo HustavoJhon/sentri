@@ -175,9 +175,9 @@ impl EditorState {
                     self.cycle(field, true);
                     return;
                 }
-                self.value(field).to_owned()
+                inline(self.value(field))
             }
-            Row::Notes => self.notes.clone(),
+            Row::Notes => inline(&self.notes),
             Row::Priority => {
                 self.cycle_priority(true);
                 return;
@@ -188,14 +188,15 @@ impl EditorState {
         self.editing = Some(LineInput::with_value(&text));
     }
 
-    fn commit_editing(&mut self, text: String) -> Result<(), String> {
+    fn commit_editing(&mut self, text: &str) -> Result<(), String> {
         match self.current_row() {
             Row::Field(field) => {
+                let text = multiline(text);
                 let mut probe = self.detected.clone();
                 field.set(&mut probe, &text).map_err(|e| e.to_string())?;
                 self.set_value(field, text.trim().to_owned());
             }
-            Row::Notes => self.notes = text,
+            Row::Notes => self.notes = multiline(text),
             Row::Priority => {}
             row @ (Row::Custom(_) | Row::AddCustom) => {
                 let (key, value) = text.split_once('=').ok_or("Use the form name=value")?;
@@ -224,7 +225,7 @@ impl EditorState {
         if let Some(mut input) = self.editing.take() {
             match key.code {
                 KeyCode::Esc => self.error = None,
-                KeyCode::Enter => match self.commit_editing(input.value()) {
+                KeyCode::Enter => match self.commit_editing(&input.value()) {
                     Ok(()) => self.error = None,
                     Err(e) => {
                         self.error = Some(e);
@@ -303,6 +304,22 @@ impl EditorState {
             }
         }
     }
+}
+
+/// Paragraph and line breaks shown in the one-line input: `¶` separates
+/// paragraphs, `↵` marks a line break. [`multiline`] turns them back.
+pub fn inline(text: &str) -> String {
+    text.replace("\n\n", " ¶ ").replace('\n', " ↵ ")
+}
+
+/// Inverse of [`inline`]: what the user typed, with breaks restored.
+pub fn multiline(text: &str) -> String {
+    let lines: Vec<&str> = text.split('¶').map(str::trim).collect();
+    lines
+        .iter()
+        .map(|p| p.split('↵').map(str::trim).collect::<Vec<_>>().join("\n"))
+        .collect::<Vec<_>>()
+        .join("\n\n")
 }
 
 #[cfg(test)]
@@ -442,5 +459,13 @@ mod tests {
         assert!(
             matches!(Field::Category.kind(), FieldKind::Choice(o) if o.contains(&Category::Hackathon.as_str()))
         );
+    }
+
+    #[test]
+    fn line_breaks_survive_the_one_line_input() {
+        let text = "Intro\n\n• one\n• two";
+        assert_eq!(inline(text), "Intro ¶ • one ↵ • two");
+        assert_eq!(multiline(&inline(text)), text);
+        assert_eq!(multiline("plain text"), "plain text");
     }
 }

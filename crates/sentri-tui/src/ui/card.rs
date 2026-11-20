@@ -29,6 +29,7 @@ use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use super::widgets::{distance, relative};
 use crate::state::Density;
+pub use crate::state::presentation::{CardPrefs, DateStyle, Fact};
 use crate::theme::Theme;
 
 /// Rows each card takes, spacer included.
@@ -357,130 +358,446 @@ fn skills(o: &Opportunity) -> Vec<&str> {
         .collect()
 }
 
-/// The date that matters most for an opportunity that is not a job.
-fn when(theme: &Theme, o: &Opportunity, now: DateTime<Utc>) -> Vec<Span<'static>> {
-    let mut parts = Vec::new();
-    let dated = o.category.is_dated_event() || o.category == Category::Community;
-    if o.category == Category::CallForSpeakers {
-        if let Some(deadline) = o.dates.deadline {
-            parts.push(Span::styled(
-                format!("⏳ CFP closes {}", relative(deadline, now)),
-                Style::new().fg(deadline_color(theme, deadline, now)),
-            ));
-        }
-        if let Some(start) = o.dates.starts_at {
-            parts.push(Span::styled(
-                format!("◷ {}", short_date(start, now)),
-                Style::new().fg(theme.p.blue),
-            ));
-        }
-    } else if let (true, Some(start)) = (dated, o.dates.starts_at) {
-        parts.push(Span::styled(
-            format!("◷ {} · {}", short_date(start, now), relative(start, now)),
-            Style::new().fg(theme.p.blue),
-        ));
-        if let Some(deadline) = o.dates.deadline.filter(|d| *d >= now && *d < start) {
-            parts.push(Span::styled(
-                format!("⏳ register {}", relative(deadline, now)),
-                Style::new().fg(deadline_color(theme, deadline, now)),
-            ));
-        }
-    } else if let Some(deadline) = o.dates.deadline {
-        parts.push(Span::styled(
-            format!("⏳ closes {}", relative(deadline, now)),
-            Style::new().fg(deadline_color(theme, deadline, now)),
-        ));
-    } else if let Some(start) = o.dates.starts_at {
-        parts.push(Span::styled(
-            format!("◷ {}", short_date(start, now)),
-            Style::new().fg(theme.p.blue),
-        ));
-    }
-    parts
+/// Contact and social links a description lists as `Label: url` lines
+/// (community directories publish them that way).
+pub fn links(o: &Opportunity) -> Vec<&str> {
+    const LABELS: &[&str] = &[
+        "Website",
+        "Email",
+        "GitHub",
+        "X",
+        "LinkedIn",
+        "Discord",
+        "Facebook",
+        "YouTube",
+        "Instagram",
+        "Telegram",
+        "WhatsApp",
+        "Meetup",
+    ];
+    segments(o)
+        .filter_map(|line| {
+            let (label, rest) = line.split_once(": ")?;
+            let label = label.trim();
+            (LABELS.contains(&label) && !rest.trim().is_empty()).then_some(label)
+        })
+        .take(6)
+        .collect()
 }
 
-/// The facts row, chosen per kind of item.
-pub fn facts<'a>(theme: &Theme, o: &'a Opportunity, now: DateTime<Utc>) -> Vec<Span<'a>> {
-    let mut parts: Vec<Span> = Vec::new();
-    let same = |a: &str, b: &str| a.trim().eq_ignore_ascii_case(b.trim());
-    // Organizers named like the item (communities) and "Remote" next to
-    // the remote marker add nothing.
-    let org = o.author.display().filter(|org| !same(org, &o.title));
-    let place = o
-        .location
+/// Description lines, also split on ` · ` (how older collections joined
+/// a description and its links on one line).
+fn segments(o: &Opportunity) -> impl Iterator<Item = &str> {
+    o.summary
         .as_deref()
-        .filter(|p| !(o.modality == Modality::Online && same(p, "remote")));
-    if o.content == ContentKind::News {
-        if let Some(topic) = o.news_topic() {
-            parts.push(Span::styled(topic, Style::new().fg(theme.p.aqua)));
+        .unwrap_or("")
+        .lines()
+        .flat_map(|line| line.split(" · "))
+}
+
+/// The description without the link lines [`links`] already shows.
+pub fn preview(o: &Opportunity) -> String {
+    let links = links(o);
+    segments(o)
+        .filter(|line| {
+            line.split_once(": ")
+                .is_none_or(|(label, _)| !links.contains(&label.trim()))
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn date_text(prefs: &CardPrefs, at: DateTime<Utc>, now: DateTime<Utc>) -> String {
+    match prefs.dates {
+        DateStyle::Both => format!("{} · {}", short_date(at, now), relative(at, now)),
+        DateStyle::Relative => distance(at, now),
+        DateStyle::Absolute => short_date(at, now),
+    }
+}
+
+/// Deadlines and starts: `in 5d`, or the date when absolute dates are chosen.
+fn when_text(prefs: &CardPrefs, at: DateTime<Utc>, now: DateTime<Utc>) -> String {
+    match prefs.dates {
+        DateStyle::Absolute => short_date(at, now),
+        _ => relative(at, now),
+    }
+}
+
+/// Card families: each has its own arrangement of facts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Family {
+    Job,
+    Event,
+    Course,
+    Contest,
+    Community,
+    OpenSource,
+    Cfp,
+    News,
+    Other,
+}
+
+pub const fn family(o: &Opportunity) -> Family {
+    if matches!(o.content, ContentKind::News) {
+        return Family::News;
+    }
+    match o.category {
+        Category::Job | Category::Internship => Family::Job,
+        Category::Event | Category::Conference | Category::Workshop | Category::Meetup => {
+            Family::Event
+        }
+        Category::Course | Category::Training => Family::Course,
+        Category::Hackathon | Category::Competition => Family::Contest,
+        Category::Community => Family::Community,
+        Category::OpenSource => Family::OpenSource,
+        Category::CallForSpeakers => Family::Cfp,
+        _ => Family::Other,
+    }
+}
+
+fn deadline_span(
+    theme: &Theme,
+    prefs: &CardPrefs,
+    verb: &str,
+    deadline: DateTime<Utc>,
+    now: DateTime<Utc>,
+) -> Span<'static> {
+    Span::styled(
+        format!("⏳ {verb} {}", when_text(prefs, deadline, now)),
+        Style::new().fg(deadline_color(theme, deadline, now)),
+    )
+}
+
+fn cost_span(theme: &Theme, o: &Opportunity) -> Option<Span<'static>> {
+    use sentri_core::Cost;
+    match &o.cost {
+        Cost::Free => Some(Span::styled("free", theme.good())),
+        Cost::FreeWithPaidCertificate => Some(Span::styled("free · paid cert", theme.good())),
+        Cost::Paid(Some(price)) => Some(Span::styled(price.clone(), theme.dim())),
+        Cost::Paid(None) => Some(Span::styled("paid", theme.dim())),
+        Cost::Unknown => None,
+    }
+}
+
+/// The first line of the published prizes, kept short.
+fn prize_text(o: &Opportunity) -> Option<String> {
+    let first = o
+        .perks
+        .prizes
+        .as_deref()?
+        .lines()
+        .find(|l| !l.trim().is_empty())?;
+    let first = first.trim().trim_start_matches(['•', '-', '*']).trim();
+    let (cut, _) = cut(first, 28);
+    Some(if cut.len() < first.len() {
+        format!("$ {}…", cut.trim_end())
+    } else {
+        format!("$ {cut}")
+    })
+}
+
+/// What every family's fact builder needs.
+struct Ctx<'t, 'a> {
+    theme: &'t Theme,
+    o: &'a Opportunity,
+    now: DateTime<Utc>,
+    prefs: &'t CardPrefs,
+    /// Organizer, unless it only repeats the title.
+    org: Option<&'a str>,
+    /// Location, unless it only says "remote" next to the remote marker.
+    place: Option<&'a str>,
+}
+
+type Facts<'a> = Vec<(Fact, Span<'a>)>;
+
+impl<'a> Ctx<'_, 'a> {
+    fn blue(&self) -> Style {
+        Style::new().fg(self.theme.p.blue)
+    }
+
+    fn aqua(&self) -> Style {
+        Style::new().fg(self.theme.p.aqua)
+    }
+
+    fn org(&self, f: &mut Facts<'a>) {
+        if let Some(org) = self.org {
+            f.push((Fact::Organizer, Span::styled(org, self.aqua())));
+        }
+    }
+
+    fn place(&self, f: &mut Facts<'a>) {
+        if let Some(place) = self.place {
+            f.push((Fact::Place, Span::styled(place, self.theme.dim())));
+        }
+    }
+
+    fn modality(&self, f: &mut Facts<'a>) {
+        let m = event_modality(self.o.modality);
+        if !m.is_empty() {
+            f.push((Fact::Modality, Span::styled(m, self.theme.dim())));
+        }
+    }
+
+    fn start(&self, f: &mut Facts<'a>) {
+        if let Some(start) = self.o.dates.starts_at {
+            let text = format!("◷ {}", date_text(self.prefs, start, self.now));
+            f.push((Fact::When, Span::styled(text, self.blue())));
+        }
+    }
+
+    fn deadline(&self, f: &mut Facts<'a>, verb: &str, at: DateTime<Utc>) {
+        f.push((
+            Fact::Deadline,
+            deadline_span(self.theme, self.prefs, verb, at, self.now),
+        ));
+    }
+
+    fn cost(&self, f: &mut Facts<'a>) {
+        if let Some(cost) = cost_span(self.theme, self.o) {
+            f.push((Fact::Cost, cost));
+        }
+    }
+
+    fn prizes(&self, f: &mut Facts<'a>) {
+        if let Some(prize) = prize_text(self.o) {
+            f.push((
+                Fact::Perks,
+                Span::styled(prize, Style::new().fg(self.theme.p.yellow)),
+            ));
+        }
+    }
+
+    fn travel(&self, f: &mut Facts<'a>) {
+        if self.o.perks.offers_travel() {
+            f.push((
+                Fact::Perks,
+                Span::styled("✈ travel", Style::new().fg(self.theme.p.purple)),
+            ));
+        }
+    }
+
+    fn skills(&self, f: &mut Facts<'a>, kind: Fact, separator: &str) {
+        let skills = skills(self.o);
+        if !skills.is_empty() {
+            f.push((kind, Span::styled(skills.join(separator), self.aqua())));
+        }
+    }
+
+    fn links(&self, f: &mut Facts<'a>) {
+        let links = links(self.o);
+        if !links.is_empty() {
+            f.push((
+                Fact::Links,
+                Span::styled(format!("↗ {}", links.join(" ")), self.blue()),
+            ));
+        }
+    }
+
+    fn news(&self) -> Facts<'a> {
+        let mut f = Vec::new();
+        if let Some(topic) = self.o.news_topic() {
+            f.push((Fact::Topic, Span::styled(topic, self.aqua())));
         }
         // The publisher is already in the kicker.
-        if let Some(author) = org {
-            parts.push(Span::styled(format!("by {author}"), theme.dim()));
+        if let Some(author) = self.org {
+            f.push((
+                Fact::Organizer,
+                Span::styled(format!("by {author}"), self.theme.dim()),
+            ));
         }
-        let published = o.dates.published_at.unwrap_or(o.discovered_at);
-        parts.push(Span::styled(short_date(published, now), theme.muted()));
-        return parts;
+        let published = self.o.dates.published_at.unwrap_or(self.o.discovered_at);
+        let text = match self.prefs.dates {
+            DateStyle::Relative => distance(published, self.now),
+            _ => short_date(published, self.now),
+        };
+        f.push((Fact::When, Span::styled(text, self.theme.muted())));
+        f
     }
-    if o.category.is_job() {
+
+    fn job(&self) -> Facts<'a> {
+        let (o, now) = (self.o, self.now);
+        let mut f = Vec::new();
         if let Some(pay) = salary(o) {
-            parts.push(Span::styled(pay, theme.good().add_modifier(Modifier::BOLD)));
+            f.push((
+                Fact::Pay,
+                Span::styled(pay, self.theme.good().add_modifier(Modifier::BOLD)),
+            ));
         }
         let m = modality(o.modality);
         if !m.is_empty() {
-            parts.push(Span::styled(m, Style::new().fg(theme.p.blue)));
+            f.push((Fact::Modality, Span::styled(m, self.blue())));
         }
-        if let Some(place) = place {
-            parts.push(Span::styled(place, theme.dim()));
-        }
+        self.place(&mut f);
         if let Some(published) = o.dates.published_at {
-            parts.push(Span::styled(
-                format!("posted {}", distance(published, now)),
-                theme.muted(),
+            let when = match self.prefs.dates {
+                DateStyle::Absolute => short_date(published, now),
+                _ => distance(published, now),
+            };
+            f.push((
+                Fact::When,
+                Span::styled(format!("posted {when}"), self.theme.muted()),
             ));
         }
         if let Some(deadline) = o.dates.deadline.filter(|d| *d >= now) {
-            parts.push(Span::styled(
-                format!("⏳ apply {}", relative(deadline, now)),
-                Style::new().fg(deadline_color(theme, deadline, now)),
+            self.deadline(&mut f, "apply", deadline);
+        }
+        self.skills(&mut f, Fact::Skills, " ");
+        f
+    }
+
+    fn event(&self) -> Facts<'a> {
+        let (o, now) = (self.o, self.now);
+        let mut f = Vec::new();
+        self.start(&mut f);
+        self.org(&mut f);
+        self.place(&mut f);
+        self.modality(&mut f);
+        let open = o
+            .dates
+            .deadline
+            .filter(|d| *d >= now && o.dates.starts_at.is_none_or(|s| *d < s));
+        if let Some(deadline) = open {
+            self.deadline(&mut f, "register", deadline);
+        }
+        self.cost(&mut f);
+        f
+    }
+
+    fn course(&self) -> Facts<'a> {
+        let (o, now) = (self.o, self.now);
+        let mut f = Vec::new();
+        self.org(&mut f);
+        self.cost(&mut f);
+        if o.perks.certificate == Some(true) && o.cost != sentri_core::Cost::FreeWithPaidCertificate
+        {
+            f.push((Fact::Perks, Span::styled("certificate", self.blue())));
+        }
+        self.modality(&mut f);
+        if let Some(start) = o.dates.starts_at.filter(|s| *s >= now) {
+            let text = format!("starts {}", when_text(self.prefs, start, now));
+            f.push((Fact::When, Span::styled(text, self.blue())));
+        }
+        if let Some(deadline) = o.dates.deadline.filter(|d| *d >= now) {
+            self.deadline(&mut f, "enroll", deadline);
+        }
+        f
+    }
+
+    fn contest(&self) -> Facts<'a> {
+        let mut f = Vec::new();
+        if let Some(deadline) = self.o.dates.deadline {
+            self.deadline(&mut f, "closes", deadline);
+        } else {
+            self.start(&mut f);
+        }
+        self.prizes(&mut f);
+        self.travel(&mut f);
+        self.modality(&mut f);
+        self.place(&mut f);
+        self.org(&mut f);
+        f
+    }
+
+    fn community(&self) -> Facts<'a> {
+        let (o, now) = (self.o, self.now);
+        let mut f = Vec::new();
+        if let Some(place) = self.place {
+            f.push((
+                Fact::Place,
+                Span::styled(format!("⌂ {place}"), self.theme.dim()),
             ));
         }
-        let skills = skills(o);
-        if !skills.is_empty() {
-            parts.push(Span::styled(
-                skills.join(" "),
-                Style::new().fg(theme.p.aqua),
-            ));
+        self.skills(&mut f, Fact::Topic, " · ");
+        self.links(&mut f);
+        if let Some(start) = o.dates.starts_at.filter(|s| *s >= now) {
+            let text = format!("next ◷ {}", date_text(self.prefs, start, now));
+            f.push((Fact::When, Span::styled(text, self.blue())));
         }
-        return parts;
+        self.org(&mut f);
+        f
     }
-    parts.extend(when(theme, o, now));
-    if let Some(org) = org {
-        parts.push(Span::styled(org, Style::new().fg(theme.p.aqua)));
+
+    fn open_source(&self) -> Facts<'a> {
+        let mut f = Vec::new();
+        self.org(&mut f);
+        self.skills(&mut f, Fact::Skills, " ");
+        if let Some(updated) = self.o.dates.published_at {
+            let text = format!("updated {}", distance(updated, self.now));
+            f.push((Fact::When, Span::styled(text, self.theme.muted())));
+        }
+        self.links(&mut f);
+        f
     }
-    if let Some(place) = place {
-        parts.push(Span::styled(place, theme.dim()));
+
+    fn cfp(&self) -> Facts<'a> {
+        let (o, now) = (self.o, self.now);
+        let mut f = Vec::new();
+        if let Some(deadline) = o.dates.deadline {
+            self.deadline(&mut f, "CFP closes", deadline);
+        }
+        if let Some(start) = o.dates.starts_at {
+            let text = format!("◷ event {}", when_text(self.prefs, start, now));
+            f.push((Fact::When, Span::styled(text, self.blue())));
+        }
+        self.org(&mut f);
+        self.place(&mut f);
+        self.modality(&mut f);
+        self.travel(&mut f);
+        f
     }
-    let m = event_modality(o.modality);
-    if !m.is_empty() {
-        parts.push(Span::styled(m, theme.dim()));
+
+    fn other(&self) -> Facts<'a> {
+        let mut f = Vec::new();
+        if let Some(deadline) = self.o.dates.deadline {
+            self.deadline(&mut f, "closes", deadline);
+        }
+        self.start(&mut f);
+        self.org(&mut f);
+        self.place(&mut f);
+        self.modality(&mut f);
+        self.cost(&mut f);
+        self.prizes(&mut f);
+        self.travel(&mut f);
+        f
     }
-    if o.cost.is_free() {
-        parts.push(Span::styled("free", theme.good()));
+}
+
+/// The facts row: what the item's family shows, filtered and ordered by
+/// the card preferences.
+pub fn facts<'a>(
+    theme: &Theme,
+    o: &'a Opportunity,
+    now: DateTime<Utc>,
+    prefs: &CardPrefs,
+) -> Vec<Span<'a>> {
+    let same = |a: &str, b: &str| a.trim().eq_ignore_ascii_case(b.trim());
+    let ctx = Ctx {
+        theme,
+        o,
+        now,
+        prefs,
+        org: o.author.display().filter(|org| !same(org, &o.title)),
+        place: o
+            .location
+            .as_deref()
+            .filter(|p| !(o.modality == Modality::Online && same(p, "remote"))),
+    };
+    let all = match family(o) {
+        Family::News => ctx.news(),
+        Family::Job => ctx.job(),
+        Family::Event => ctx.event(),
+        Family::Course => ctx.course(),
+        Family::Contest => ctx.contest(),
+        Family::Community => ctx.community(),
+        Family::OpenSource => ctx.open_source(),
+        Family::Cfp => ctx.cfp(),
+        Family::Other => ctx.other(),
+    };
+    let mut out = prefs.select(all);
+    if out.is_empty() {
+        out.push(Span::styled(o.source_name.as_str(), theme.muted()));
     }
-    if o.perks.certificate == Some(true) && o.category.is_learning() {
-        parts.push(Span::styled("certificate", Style::new().fg(theme.p.blue)));
-    }
-    if o.perks.prizes.is_some() {
-        parts.push(Span::styled("$ prizes", Style::new().fg(theme.p.yellow)));
-    }
-    if o.perks.offers_travel() {
-        parts.push(Span::styled("✈ travel", Style::new().fg(theme.p.purple)));
-    }
-    if parts.is_empty() {
-        parts.push(Span::styled(o.source_name.as_str(), theme.muted()));
-    }
-    parts
+    out
 }
 
 /// Spans cut to `width` display columns, ending in `…` when cut.
@@ -603,17 +920,71 @@ fn cut(text: &str, width: usize) -> (String, usize) {
 
 /// Everything needed to lay a card out.
 #[derive(Debug, Clone, Copy)]
-pub struct Layout {
+pub struct Layout<'p> {
     pub density: Density,
     /// Columns available inside the list.
     pub width: u16,
     pub selected: bool,
     pub now: DateTime<Utc>,
+    pub prefs: &'p CardPrefs,
+}
+
+/// Small chips for the Detailed card's second extra row.
+fn chips<'a>(theme: &Theme, words: &[&'a str]) -> Vec<Span<'a>> {
+    let mut out = Vec::new();
+    for (i, w) in words.iter().enumerate() {
+        if i > 0 {
+            out.push(Span::raw(" "));
+        }
+        out.push(Span::styled(
+            format!("#{w}"),
+            Style::new().fg(theme.p.aqua).bg(theme.p.bg1),
+        ));
+    }
+    out
+}
+
+/// The two rows a Detailed card shows between title and facts: the
+/// description, or one description row plus skills (jobs, projects) or
+/// links (communities).
+fn detail_rows<'a>(theme: &Theme, o: &'a Opportunity, width: usize) -> Vec<Vec<Span<'a>>> {
+    let text = preview(o);
+    let extra: Option<Vec<Span<'a>>> = match family(o) {
+        Family::Job | Family::OpenSource => {
+            let skills = skills(o);
+            (!skills.is_empty()).then(|| chips(theme, &skills))
+        }
+        Family::Community => {
+            let links = links(o);
+            (!links.is_empty()).then(|| {
+                vec![Span::styled(
+                    format!("↗ {}", links.join(" · ")),
+                    Style::new().fg(theme.p.blue),
+                )]
+            })
+        }
+        _ => None,
+    };
+    let room = if extra.is_some() { 1 } else { 2 };
+    let mut rows: Vec<Vec<Span<'a>>> = wrap(&text, width, room)
+        .into_iter()
+        .map(|l| vec![Span::styled(l, theme.dim())])
+        .collect();
+    if rows.is_empty() {
+        rows.push(vec![Span::styled("No description.", theme.muted())]);
+    }
+    if let Some(extra) = extra {
+        rows.truncate(1);
+        rows.push(truncate(extra, width));
+    }
+    rows.resize(2, Vec::new());
+    rows
 }
 
 /// The lines of one card.
-pub fn lines<'a>(theme: &Theme, r: &'a Ranked, at: Layout) -> Vec<Line<'a>> {
+pub fn lines<'a>(theme: &Theme, r: &'a Ranked, at: Layout<'_>) -> Vec<Line<'a>> {
     let o = &r.item.opportunity;
+    let prefs = at.prefs;
     let tone = tone(r, at.now);
     let rail = rail(theme, tone, o.category, at.selected);
     let muted = matches!(tone, Tone::Expired | Tone::Dismissed);
@@ -642,14 +1013,30 @@ pub fn lines<'a>(theme: &Theme, r: &'a Ranked, at: Layout) -> Vec<Line<'a>> {
         title.push(Span::styled(" · ", Style::new().fg(theme.p.bg3)));
         title.push(Span::styled(company, Style::new().fg(theme.p.aqua)));
     }
+    let status = |full: bool| {
+        let mut spans = status(theme, r, at.now, tone, full && prefs.show_meter);
+        if !prefs.show_meter && o.content != ContentKind::News && !full {
+            // The compact score column is the meter's short form.
+            spans.pop();
+            if spans.last().is_some_and(|s| s.content == " ") {
+                spans.pop();
+            }
+        }
+        spans
+    };
 
     if at.density == Density::Compact {
-        let mut left = vec![kind(theme, o, muted)];
-        left.extend(source(theme, o, false));
-        left.push(Span::raw(" "));
+        let mut left = Vec::new();
+        if prefs.show_category {
+            left.push(kind(theme, o, muted));
+        }
+        if prefs.show_source {
+            left.extend(source(theme, o, false));
+            left.push(Span::raw(" "));
+        }
         left.extend(title);
-        let mut right: Vec<Span> = facts(theme, o, at.now).into_iter().take(1).collect();
-        let status = status(theme, r, at.now, tone, false);
+        let mut right: Vec<Span> = facts(theme, o, at.now, prefs).into_iter().take(1).collect();
+        let status = status(false);
         if !right.is_empty() && !status.is_empty() {
             right.push(Span::raw("  "));
         }
@@ -657,24 +1044,27 @@ pub fn lines<'a>(theme: &Theme, r: &'a Ranked, at: Layout) -> Vec<Line<'a>> {
         return vec![row(spread(left, right, width))];
     }
 
-    let mut kicker = vec![kind(theme, o, muted), Span::raw(" ")];
-    kicker.extend(source(theme, o, true));
+    let mut kicker = Vec::new();
+    if prefs.show_category {
+        kicker.push(kind(theme, o, muted));
+        kicker.push(Span::raw(" "));
+    }
+    if prefs.show_source {
+        kicker.extend(source(theme, o, true));
+    }
     let mut out = vec![
-        row(spread(kicker, status(theme, r, at.now, tone, true), width)),
+        row(spread(kicker, status(true), width)),
         row(truncate(title, width)),
     ];
     if at.density == Density::Detailed {
-        let summary = o.summary.as_deref().unwrap_or("");
-        let mut text = wrap(summary, width, 2);
-        if text.is_empty() {
-            text.push("No description.".to_owned());
-        }
-        text.resize(2, String::new());
-        for line in text {
-            out.push(row(vec![Span::styled(line, theme.dim())]));
+        for spans in detail_rows(theme, o, width) {
+            out.push(row(spans));
         }
     }
-    out.push(row(truncate(joined(theme, facts(theme, o, at.now)), width)));
+    out.push(row(truncate(
+        joined(theme, facts(theme, o, at.now, prefs)),
+        width,
+    )));
     out.push(Line::default());
     out
 }
@@ -718,12 +1108,15 @@ mod tests {
             .collect()
     }
 
-    fn layout(density: Density, width: u16) -> Layout {
+    static PREFS: std::sync::LazyLock<CardPrefs> = std::sync::LazyLock::new(CardPrefs::default);
+
+    fn layout(density: Density, width: u16) -> Layout<'static> {
         Layout {
             density,
             width,
             selected: false,
             now: Utc::now(),
+            prefs: &PREFS,
         }
     }
 
@@ -855,5 +1248,109 @@ mod tests {
         assert_eq!(meter_level(-3), 0);
         assert_eq!(meter_level(42), 3);
         assert_eq!(meter_level(90), 5);
+    }
+
+    fn facts_text(r: &Ranked, prefs: &CardPrefs) -> String {
+        let o = &r.item.opportunity;
+        facts(&Theme::default(), o, Utc::now(), prefs)
+            .iter()
+            .map(|s| s.content.as_ref())
+            .collect::<Vec<_>>()
+            .join(" | ")
+    }
+
+    #[test]
+    fn each_family_arranges_its_own_facts() {
+        let prefs = CardPrefs::default();
+        let now = Utc::now();
+
+        let mut community = ranked("Rust Lima", Category::Community);
+        let o = &mut community.item.opportunity;
+        o.location = Some("Lima".into());
+        o.tags = vec!["rust".into(), "wasm".into()];
+        o.summary = Some(
+            "Rustaceans in Lima.\n\nWebsite: https://r.pe\nGitHub: https://github.com/r".into(),
+        );
+        assert_eq!(
+            facts_text(&community, &prefs),
+            "⌂ Lima | rust · wasm | ↗ Website GitHub"
+        );
+        assert_eq!(preview(&community.item.opportunity), "Rustaceans in Lima. ");
+        // Collected before descriptions kept their lines.
+        community.item.opportunity.summary =
+            Some("Rustaceans in Lima · Website: https://r.pe · Discord: https://d.gg/r".into());
+        assert_eq!(links(&community.item.opportunity), ["Website", "Discord"]);
+        assert_eq!(preview(&community.item.opportunity), "Rustaceans in Lima");
+
+        let mut contest = ranked("AI Hack", Category::Hackathon);
+        let o = &mut contest.item.opportunity;
+        o.dates.deadline = Some(now + Duration::days(5));
+        o.perks.prizes = Some("• USD 10,000 in cash for the three winning teams\n• Swag".into());
+        o.modality = Modality::Online;
+        let text = facts_text(&contest, &prefs);
+        assert!(
+            text.starts_with("⏳ closes in 5d | $ USD 10,000 in cash for the t…"),
+            "{text}"
+        );
+        assert!(text.ends_with("◎ online"), "{text}");
+
+        let mut course = ranked("Rust 101", Category::Course);
+        let o = &mut course.item.opportunity;
+        o.author.name = Some("Platzi".into());
+        o.cost = sentri_core::Cost::Free;
+        o.perks.certificate = Some(true);
+        assert_eq!(facts_text(&course, &prefs), "Platzi | free | certificate");
+
+        let mut cfp = ranked("Talks for PyCon", Category::CallForSpeakers);
+        cfp.item.opportunity.dates.deadline = Some(now + Duration::days(9));
+        assert!(facts_text(&cfp, &prefs).starts_with("⏳ CFP closes in 9d"));
+    }
+
+    #[test]
+    fn card_preferences_hide_and_reorder() {
+        let now = Utc::now();
+        let mut r = ranked("Meetup", Category::Meetup);
+        let o = &mut r.item.opportunity;
+        o.dates.starts_at = Some(now + Duration::days(3));
+        o.author.name = Some("GDG Lima".into());
+        o.location = Some("Lima".into());
+        let mut prefs = CardPrefs::default();
+        assert!(facts_text(&r, &prefs).contains(" · in 3d | GDG Lima | Lima"));
+        prefs.dates = DateStyle::Relative;
+        prefs.facts = vec![Fact::Place, Fact::When];
+        assert_eq!(facts_text(&r, &prefs), "◷ in 3d | Lima");
+        prefs.custom_order = true;
+        assert_eq!(facts_text(&r, &prefs), "Lima | ◷ in 3d");
+
+        prefs.show_category = false;
+        prefs.show_source = false;
+        prefs.show_meter = false;
+        let at = Layout {
+            prefs: &prefs,
+            ..layout(Density::Comfortable, 60)
+        };
+        let rows = text(&lines(&Theme::default(), &r, at));
+        assert!(
+            !rows[0].contains("MEETUP") && !rows[0].contains("GetOnBoard"),
+            "{rows:?}"
+        );
+        assert!(!rows[0].contains('●') && !rows[0].contains('○'), "{rows:?}");
+        let compact = Layout {
+            prefs: &prefs,
+            ..layout(Density::Compact, 60)
+        };
+        let row = &text(&lines(&Theme::default(), &r, compact))[0];
+        assert!(!row.trim_end().ends_with("55"), "no score column: {row:?}");
+    }
+
+    #[test]
+    fn detailed_job_cards_show_skill_chips() {
+        let mut r = ranked("Backend", Category::Job);
+        r.item.opportunity.summary = Some("We build things.".into());
+        r.item.opportunity.tags = vec!["rust".into(), "sql".into()];
+        let rows = text(&lines(&Theme::default(), &r, layout(Density::Detailed, 60)));
+        assert_eq!(rows.len(), 6);
+        assert!(rows[2].contains("We build things."));
+        assert!(rows[3].contains("#rust #sql"), "{rows:?}");
     }
 }

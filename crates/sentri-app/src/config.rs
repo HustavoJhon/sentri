@@ -127,6 +127,100 @@ impl Default for UiConfig {
     }
 }
 
+/// Dashboard widgets, in the order they are drawn.
+pub const DASHBOARD_WIDGETS: &[&str] = &[
+    "metrics",
+    "activity",
+    "interactions",
+    "distribution",
+    "recommendations",
+    "upcoming",
+    "news",
+    "jobs",
+];
+
+/// Counters the metrics strip can show.
+pub const DASHBOARD_METRICS: &[&str] = &[
+    "found", "new", "news", "events", "courses", "jobs", "saved", "liked", "applied", "calendar",
+];
+
+/// Facts a card can show under its title.
+pub const CARD_FACTS: &[&str] = &[
+    "when",
+    "deadline",
+    "pay",
+    "organizer",
+    "place",
+    "modality",
+    "cost",
+    "perks",
+    "topic",
+    "skills",
+    "links",
+];
+
+fn all(names: &[&str]) -> Vec<String> {
+    names.iter().map(|n| (*n).to_owned()).collect()
+}
+
+/// What the dashboard shows and how densely.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct DashboardConfig {
+    /// `detailed` (charts with room to breathe) or `compact` (one-line
+    /// metrics, short charts, more list rows).
+    pub layout: String,
+    /// Widgets to show, in order. Leaving one out hides it.
+    pub widgets: Vec<String>,
+    /// Counters in the metrics strip, in order.
+    pub metrics: Vec<String>,
+    /// Maximum rows in the recommendations list.
+    pub recommendations: u16,
+}
+
+impl Default for DashboardConfig {
+    fn default() -> Self {
+        Self {
+            layout: "detailed".into(),
+            widgets: all(DASHBOARD_WIDGETS),
+            metrics: all(DASHBOARD_METRICS),
+            recommendations: 10,
+        }
+    }
+}
+
+/// How feed cards present an item.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct CardsConfig {
+    pub show_source: bool,
+    pub show_category: bool,
+    pub show_meter: bool,
+    /// Facts to show under the title. Leaving one out hides it.
+    pub facts: Vec<String>,
+    /// `kind`: each kind of card keeps its own arrangement; `custom`: facts
+    /// follow the order of `facts`.
+    pub fact_order: String,
+    /// `both` (`Fri 20 Nov · in 3d`), `relative` or `absolute`.
+    pub dates: String,
+    /// `highlight` (colored left bar plus a shaded card) or `rail` (bar only).
+    pub selection: String,
+}
+
+impl Default for CardsConfig {
+    fn default() -> Self {
+        Self {
+            show_source: true,
+            show_category: true,
+            show_meter: true,
+            facts: all(CARD_FACTS),
+            fact_order: "kind".into(),
+            dates: "both".into(),
+            selection: "highlight".into(),
+        }
+    }
+}
+
 /// Local calendar preferences and Google Calendar setup.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -237,6 +331,8 @@ pub struct Config {
     pub ui: UiConfig,
     pub github: GitHubConfig,
     pub calendar: CalendarConfig,
+    pub dashboard: DashboardConfig,
+    pub cards: CardsConfig,
     /// Keyboard shortcuts: action name → key (see `sentri_app::keys`).
     pub keys: std::collections::BTreeMap<String, String>,
     pub sources: Vec<SourceConfig>,
@@ -295,6 +391,49 @@ impl Config {
 
     pub fn source(&self, name: &str) -> Option<&SourceConfig> {
         self.sources.iter().find(|s| s.name == name)
+    }
+
+    fn validate_presentation(&self) -> Result<(), ConfigError> {
+        fn list(key: &str, values: &[String], allowed: &[&str]) -> Result<(), ConfigError> {
+            let mut seen = HashSet::new();
+            for v in values {
+                if !allowed.contains(&v.as_str()) {
+                    return Err(ConfigError::Invalid(format!(
+                        "{key}: unknown {v:?} (use {})",
+                        allowed.join(", ")
+                    )));
+                }
+                if !seen.insert(v) {
+                    return Err(ConfigError::Invalid(format!("{key}: {v:?} is repeated")));
+                }
+            }
+            Ok(())
+        }
+        fn choice(key: &str, value: &str, allowed: &[&str]) -> Result<(), ConfigError> {
+            if allowed.contains(&value) {
+                Ok(())
+            } else {
+                Err(ConfigError::Invalid(format!(
+                    "{key} must be one of: {}",
+                    allowed.join(", ")
+                )))
+            }
+        }
+        let d = &self.dashboard;
+        choice("dashboard.layout", &d.layout, &["detailed", "compact"])?;
+        list("dashboard.widgets", &d.widgets, DASHBOARD_WIDGETS)?;
+        list("dashboard.metrics", &d.metrics, DASHBOARD_METRICS)?;
+        if !(1..=30).contains(&d.recommendations) {
+            return Err(ConfigError::Invalid(
+                "dashboard.recommendations must be between 1 and 30".into(),
+            ));
+        }
+        let c = &self.cards;
+        list("cards.facts", &c.facts, CARD_FACTS)?;
+        choice("cards.fact_order", &c.fact_order, &["kind", "custom"])?;
+        choice("cards.dates", &c.dates, &["both", "relative", "absolute"])?;
+        choice("cards.selection", &c.selection, &["highlight", "rail"])?;
+        Ok(())
     }
 
     fn validate(&self) -> Result<(), ConfigError> {
@@ -366,6 +505,7 @@ impl Config {
                 "ui.collect_on_start must be auto, always or never".into(),
             ));
         }
+        self.validate_presentation()?;
         if self.daemon.interval_minutes < 15 {
             return Err(ConfigError::Invalid(
                 "daemon.interval_minutes must be at least 15 (be polite with sources)".into(),

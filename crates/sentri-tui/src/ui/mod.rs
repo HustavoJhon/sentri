@@ -36,6 +36,10 @@ use widgets::panel;
 const SIDEBAR_WIDTH: u16 = 24;
 const WIDE: u16 = 110;
 const MEDIUM: u16 = 80;
+/// Below `MEDIUM`, a rail of section keys and icons keeps navigation
+/// visible down to this width.
+const NARROW: u16 = 60;
+const RAIL_WIDTH: u16 = 7;
 
 /// Draws the whole interface.
 pub fn draw(frame: &mut Frame, state: &mut State, theme: &Theme) {
@@ -137,6 +141,11 @@ fn draw_body(frame: &mut Frame, area: Rect, state: &mut State, theme: &Theme) {
             Layout::horizontal([Constraint::Length(SIDEBAR_WIDTH), Constraint::Min(0)]).areas(area);
         draw_sidebar(frame, sidebar, state, theme);
         main
+    } else if area.width >= NARROW && state.ui.show_sidebar {
+        let [rail, main] =
+            Layout::horizontal([Constraint::Length(RAIL_WIDTH), Constraint::Min(0)]).areas(area);
+        draw_rail(frame, rail, state, theme);
+        main
     } else {
         state.hit.sidebar = Rect::default();
         area
@@ -183,16 +192,52 @@ fn fit(text: &str, width: usize) -> String {
     out
 }
 
+/// Key shown next to section `i` (1…9, then 0).
+fn section_key(i: usize) -> String {
+    match i {
+        0..=8 => format!("{}", i + 1),
+        9 => "0".into(),
+        _ => " ".into(),
+    }
+}
+
+/// Narrow sidebar: section key and icon only, current section highlighted.
+fn draw_rail(frame: &mut Frame, area: Rect, state: &mut State, theme: &Theme) {
+    let items: Vec<ListItem> = Section::ALL
+        .iter()
+        .enumerate()
+        .map(|(i, section)| {
+            let unsaved = *section == Section::Settings && state.settings.is_dirty();
+            let icon_style = if unsaved {
+                theme.warn()
+            } else {
+                Style::new().fg(theme.p.aqua)
+            };
+            ListItem::new(Line::from(vec![
+                Span::styled(section_key(i), theme.muted()),
+                Span::styled(section.icon(), icon_style),
+            ]))
+        })
+        .collect();
+    let list = List::new(items)
+        .block(panel(theme, "", state.focus == Focus::Sidebar))
+        .highlight_style(
+            Style::new()
+                .fg(theme.p.yellow)
+                .bg(theme.p.bg1)
+                .add_modifier(Modifier::BOLD),
+        );
+    let mut list_state = ListState::default().with_selected(Some(state.section));
+    frame.render_stateful_widget(list, area, &mut list_state);
+    state.hit.sidebar = area;
+}
+
 fn draw_sidebar(frame: &mut Frame, area: Rect, state: &mut State, theme: &Theme) {
     let items: Vec<ListItem> = Section::ALL
         .iter()
         .enumerate()
         .map(|(i, section)| {
-            let key = match i {
-                0..=8 => format!("{}", i + 1),
-                9 => "0".into(),
-                _ => " ".into(),
-            };
+            let key = section_key(i);
             let count = match section {
                 Section::Feed(view) => state
                     .overview
@@ -250,7 +295,7 @@ fn draw_sidebar(frame: &mut Frame, area: Rect, state: &mut State, theme: &Theme)
         );
     // Sections need 23 rows; the profile card takes what is left.
     let profile_height = match area.height {
-        33.. => profile::FULL_HEIGHT,
+        34.. => profile::FULL_HEIGHT,
         28.. => profile::COMPACT_HEIGHT,
         _ => 0,
     };
@@ -265,7 +310,7 @@ fn draw_sidebar(frame: &mut Frame, area: Rect, state: &mut State, theme: &Theme)
 }
 
 /// Key currently bound to `action` (custom shortcuts included).
-fn key_of(state: &State, action: KeyAction) -> String {
+pub(super) fn key_of(state: &State, action: KeyAction) -> String {
     state
         .keymap
         .iter()
@@ -387,7 +432,7 @@ mod tests {
         );
         o.category = Category::Hackathon;
         o.location = Some("Cusco".into());
-        o.dates.deadline = Some(Utc::now() + Duration::days(5) + Duration::hours(1));
+        o.dates.deadline = Some(Utc::now() + Duration::days(5));
         o.perks.travel_covered = Some(true);
         Ranked {
             item: FeedItem {
@@ -716,6 +761,107 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn image_viewer_says_how_it_draws() {
+        let thumb = sentri_app::Thumbnail::from_pixels(4, 2, &[[200, 120, 40]; 8]).unwrap();
+        for (w, h) in [(60, 20), (170, 45)] {
+            let mut state = State::default();
+            state.on_msg(Msg::Loaded(vec![sample()]));
+            let url = "https://img.example/a.png".to_owned();
+            state.on_msg(Msg::Image(url.clone(), Some(thumb.clone())));
+            state.mode = crate::state::Mode::ImageViewer {
+                url,
+                title: "Poster".into(),
+            };
+            let screen = render(w, h, &mut state);
+            assert!(screen.contains("Poster"), "{screen}");
+            assert!(screen.contains("Esc"), "{screen}");
+            assert!(screen.contains("4×2 px"), "{screen}");
+            if w > 100 {
+                assert!(screen.contains("no graphics protocol"), "{screen}");
+            }
+            assert!(screen.contains('▀'), "image drawn: {screen}");
+        }
+    }
+
+    /// Every dashboard arrangement fits every supported size: each widget
+    /// alone, all of them, compact and detailed, Unicode and ASCII.
+    #[test]
+    fn dashboard_layouts_fit_every_size() {
+        use crate::state::presentation::{DashboardPrefs, Widget};
+        let mut job = sample();
+        job.item.opportunity.category = sentri_core::Category::Job;
+        job.item.opportunity.perks.benefits = Some("USD 2000 / month".into());
+        let all = DashboardPrefs::default();
+        let titles = [
+            (Widget::Activity, "Discovered"),
+            (Widget::Interactions, "Likes"),
+            (Widget::Distribution, "Categories"),
+            (Widget::Recommendations, "Top recommendations"),
+            (Widget::Upcoming, "Upcoming dates"),
+            (Widget::News, "Latest tech news"),
+            (Widget::Jobs, "1 open"),
+            (Widget::Metrics, "found"),
+        ];
+        for ascii in [false, true] {
+            for (w, h) in [(60, 20), (80, 24), (100, 35), (170, 45)] {
+                for compact in [false, true] {
+                    let mut variants = vec![all.widgets.clone(), Vec::new()];
+                    variants.extend(titles.iter().map(|(widget, _)| vec![*widget]));
+                    for widgets in variants {
+                        let mut state = State {
+                            section: 0,
+                            dashboard: DashboardPrefs {
+                                compact,
+                                widgets: widgets.clone(),
+                                ..all.clone()
+                            },
+                            ..State::default()
+                        };
+                        state.ui.ascii_icons = ascii;
+                        state.on_msg(Msg::Loaded(vec![sample(), job.clone()]));
+                        let screen = render(w, h, &mut state);
+                        assert_eq!(screen.lines().count(), usize::from(h));
+                        if let [widget] = widgets.as_slice()
+                            && !(ascii && *widget == Widget::Interactions)
+                        {
+                            let title = titles.iter().find(|(x, _)| x == widget).unwrap().1;
+                            assert!(
+                                screen.contains(title),
+                                "{w}×{h} compact={compact} {widget:?}:\n{screen}"
+                            );
+                        }
+                        if widgets.is_empty() {
+                            assert!(screen.contains("widget is hidden"), "{screen}");
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn narrow_terminals_keep_a_section_rail() {
+        let mut state = State::default();
+        state.on_msg(Msg::Loaded(vec![sample()]));
+        let screen = render(64, 24, &mut state);
+        assert_eq!(state.hit.sidebar.width, RAIL_WIDTH);
+        let rows: Vec<&str> = screen.lines().collect();
+        assert!(rows.iter().any(|r| r.starts_with("│ 1◆")), "{screen}");
+        assert!(
+            rows.iter().any(|r| r.starts_with("│ 7⚡")),
+            "wide icons fit: {screen}"
+        );
+        let screen = render(58, 24, &mut state);
+        assert_eq!(
+            state.hit.sidebar.width, 0,
+            "too narrow: Tab switches sections\n{screen}"
+        );
+        state.ui.show_sidebar = false;
+        render(70, 24, &mut state);
+        assert_eq!(state.hit.sidebar.width, 0, "hidden sidebar stays hidden");
     }
 
     #[test]

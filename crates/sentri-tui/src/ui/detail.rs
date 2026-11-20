@@ -57,6 +57,23 @@ fn field<'a>(theme: &Theme, name: &str, value: impl Into<Span<'a>>) -> Line<'a> 
     ])
 }
 
+/// A labelled value that may span several lines (benefits, prizes): the
+/// value wraps in its own column, aligned under the first line.
+fn long_field(
+    out: &mut Vec<Line<'_>>,
+    theme: &Theme,
+    name: &str,
+    text: &str,
+    style: Style,
+    width: usize,
+) {
+    let lines = paragraphs(text, width.saturating_sub(LABEL).max(12));
+    for (i, line) in lines.into_iter().enumerate() {
+        let label = if i == 0 { name } else { "" };
+        out.push(field(theme, label, Span::styled(line, style)));
+    }
+}
+
 fn date_value(d: DateTime<Utc>, now: DateTime<Utc>) -> String {
     format!("{}  ({})", card::short_date(d, now), distance(d, now))
 }
@@ -66,14 +83,19 @@ fn plain(text: &str) -> String {
     text.replace("**", "").replace("__", "")
 }
 
-/// Summary split into paragraphs and bullet items, each wrapped to `width`
-/// with a hanging indent for bullets.
+/// Summary split into paragraphs and list items, each wrapped to `width`
+/// with a hanging indent for items. Blank lines in the source separate
+/// paragraphs; single line breaks are kept; bullets (`•`, `-`, `*`) and
+/// numbered items (`1.`, `2)`) keep their marker.
 pub fn paragraphs(text: &str, width: usize) -> Vec<String> {
     let text = plain(text);
-    let mut blocks: Vec<(bool, String)> = Vec::new();
+    // (gap before, marker, body)
+    let mut blocks: Vec<(bool, Option<String>, String)> = Vec::new();
+    let mut gap = false;
     for raw in text.lines() {
         let line = raw.trim();
         if line.is_empty() {
+            gap = !blocks.is_empty();
             continue;
         }
         // Inline "a • b • c" lists, and "intro: - a - b" lists flattened by
@@ -87,22 +109,28 @@ pub fn paragraphs(text: &str, width: usize) -> Vec<String> {
         };
         let mut parts = line.split(separator);
         if let Some(first) = parts.next() {
-            let (bullet, body) = bullet(first);
-            blocks.push((bullet, body.to_owned()));
+            let (marker, body) = marker(first);
+            blocks.push((gap, marker, body.to_owned()));
         }
-        blocks.extend(parts.map(|p| (true, p.trim().to_owned())));
+        blocks.extend(parts.map(|p| (false, Some("•".to_owned()), p.trim().to_owned())));
+        gap = false;
     }
     let mut out = Vec::new();
-    for (i, (is_bullet, body)) in blocks.iter().enumerate() {
-        if i > 0 && !(*is_bullet && blocks[i - 1].0) {
+    for (i, (gap, marker, body)) in blocks.iter().enumerate() {
+        if i > 0 && (*gap || marker.is_some() != blocks[i - 1].1.is_some()) {
             out.push(String::new());
         }
-        if *is_bullet {
-            for (j, line) in card::wrap(body, width.saturating_sub(2), usize::MAX)
+        if let Some(marker) = marker {
+            let indent = marker.width() + 1;
+            for (j, line) in card::wrap(body, width.saturating_sub(indent), usize::MAX)
                 .into_iter()
                 .enumerate()
             {
-                out.push(format!("{} {line}", if j == 0 { "•" } else { " " }));
+                if j == 0 {
+                    out.push(format!("{marker} {line}"));
+                } else {
+                    out.push(format!("{}{line}", " ".repeat(indent)));
+                }
             }
         } else {
             out.extend(card::wrap(body, width, usize::MAX));
@@ -111,13 +139,24 @@ pub fn paragraphs(text: &str, width: usize) -> Vec<String> {
     out
 }
 
-fn bullet(line: &str) -> (bool, &str) {
-    for marker in ["• ", "- ", "* ", "· "] {
-        if let Some(rest) = line.strip_prefix(marker) {
-            return (true, rest.trim());
+/// The list marker a line starts with, normalized (`-`/`*`/`·` → `•`), and
+/// the rest of the line.
+fn marker(line: &str) -> (Option<String>, &str) {
+    for bullet in ["• ", "- ", "* ", "· ", "▪ ", "◦ "] {
+        if let Some(rest) = line.strip_prefix(bullet) {
+            return (Some("•".to_owned()), rest.trim());
         }
     }
-    (false, line)
+    let digits = line.bytes().take_while(u8::is_ascii_digit).count();
+    if (1..=3).contains(&digits) {
+        let rest = &line[digits..];
+        for close in [". ", ") "] {
+            if let Some(body) = rest.strip_prefix(close) {
+                return (Some(format!("{}.", &line[..digits])), body.trim());
+            }
+        }
+    }
+    (None, line)
 }
 
 /// Kind and source on the left, your marks on the right.
@@ -239,8 +278,11 @@ fn dates(out: &mut Vec<Line<'_>>, theme: &Theme, o: &Opportunity, now: DateTime<
 
 fn place<'a>(out: &mut Vec<Line<'a>>, theme: &Theme, o: &'a Opportunity) {
     let mut where_ = Vec::new();
-    if let Some(location) = &o.location {
-        where_.push(location.as_str());
+    // "Remote" as a place only repeats the modality line below.
+    let remote =
+        |l: &str| o.modality == Modality::Online && l.trim().eq_ignore_ascii_case("remote");
+    if let Some(location) = o.location.as_deref().filter(|l| !remote(l)) {
+        where_.push(location);
     }
     if let Some(country) = o
         .country
@@ -270,7 +312,7 @@ fn place<'a>(out: &mut Vec<Line<'a>>, theme: &Theme, o: &'a Opportunity) {
     }
 }
 
-fn money<'a>(out: &mut Vec<Line<'a>>, theme: &Theme, o: &'a Opportunity) {
+fn money<'a>(out: &mut Vec<Line<'a>>, theme: &Theme, o: &'a Opportunity, width: usize) {
     if let Some(pay) = card::salary(o) {
         out.push(field(
             theme,
@@ -278,7 +320,14 @@ fn money<'a>(out: &mut Vec<Line<'a>>, theme: &Theme, o: &'a Opportunity) {
             Span::styled(pay, theme.good().add_modifier(Modifier::BOLD)),
         ));
     } else if let Some(benefits) = &o.perks.benefits {
-        out.push(field(theme, "Benefits", benefits.as_str()));
+        long_field(
+            out,
+            theme,
+            "Benefits",
+            benefits,
+            Style::new().fg(theme.p.fg),
+            width,
+        );
     }
     if o.cost != sentri_core::Cost::Unknown {
         let style = if o.cost.is_free() {
@@ -289,11 +338,14 @@ fn money<'a>(out: &mut Vec<Line<'a>>, theme: &Theme, o: &'a Opportunity) {
         out.push(field(theme, "Cost", Span::styled(o.cost.label(), style)));
     }
     if let Some(prizes) = &o.perks.prizes {
-        out.push(field(
+        long_field(
+            out,
             theme,
             "Prizes",
-            Span::styled(prizes.as_str(), Style::new().fg(theme.p.yellow)),
-        ));
+            prizes,
+            Style::new().fg(theme.p.yellow),
+            width,
+        );
     }
     let perks: Vec<&str> = [
         (o.perks.certificate, "certificate"),
@@ -328,7 +380,7 @@ fn requirements<'a>(out: &mut Vec<Line<'a>>, theme: &Theme, o: &'a Opportunity, 
         out.push(field(theme, "Eligibility", e));
     }
     if let Some(r) = &o.requirements {
-        out.push(Line::from(r.as_str()));
+        out.extend(paragraphs(r, width).into_iter().map(Line::from));
     }
 }
 
@@ -385,7 +437,7 @@ pub fn body<'a>(
     let mut out = vec![heading(theme, "Key facts", width)];
     dates(&mut out, theme, o, now);
     place(&mut out, theme, o);
-    money(&mut out, theme, o);
+    money(&mut out, theme, o, width);
     out.push(field(
         theme,
         "Link",
@@ -462,6 +514,7 @@ pub fn side<'a>(
     r: &'a Ranked,
     detail: Option<&'a DetailData>,
     width: usize,
+    keys: String,
 ) -> Vec<Line<'a>> {
     let mut out = recommendation(theme, r, width);
     if let Some(d) = detail {
@@ -509,11 +562,33 @@ pub fn side<'a>(
         }
     }
     out.push(Line::default());
-    out.push(Line::from(Span::styled(
-        "E edit · l like · s save · d dismiss · p applied · a calendar · o open",
-        theme.muted(),
-    )));
+    out.push(Line::from(Span::styled(keys, theme.muted())));
     out
+}
+
+/// Item actions with their current keys (custom shortcuts included); the
+/// image viewer is offered only when there is an image to show.
+fn action_keys(state: &State, r: &Ranked) -> String {
+    use sentri_app::keys::KeyAction as A;
+    let o = &r.item.opportunity;
+    let mut actions = vec![
+        (A::Edit, "edit"),
+        (A::Like, "like"),
+        (A::Save, "save"),
+        (A::Dismiss, "dismiss"),
+        (A::Applied, "applied"),
+        (A::Schedule, "calendar"),
+        (A::Open, "open"),
+    ];
+    let image = o.image_url.as_deref().or(o.author.avatar_url.as_deref());
+    if state.ui.images != ImageMode::Off && state.image(image).is_some() {
+        actions.push((A::ViewImage, "enlarge image"));
+    }
+    actions
+        .into_iter()
+        .map(|(a, what)| format!("{} {what}", super::key_of(state, a)))
+        .collect::<Vec<_>>()
+        .join(" · ")
 }
 
 /// Draws the item's image (or a quiet loading line) at the top of `host`;
@@ -651,8 +726,14 @@ pub fn render(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
             main,
         );
         frame.render_widget(
-            Paragraph::new(side(theme, r, detail, usize::from(side_area.width)))
-                .wrap(Wrap { trim: false }),
+            Paragraph::new(side(
+                theme,
+                r,
+                detail,
+                usize::from(side_area.width),
+                action_keys(state, r),
+            ))
+            .wrap(Wrap { trim: false }),
             below(side_area, used),
         );
     } else {
@@ -667,7 +748,7 @@ pub fn render(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
         );
         let mut lines = body(theme, r, detail, now, width);
         lines.push(Line::default());
-        lines.extend(side(theme, r, detail, width));
+        lines.extend(side(theme, r, detail, width, action_keys(state, r)));
         frame.render_widget(
             Paragraph::new(lines)
                 .wrap(Wrap { trim: false })
@@ -689,10 +770,31 @@ mod tests {
         assert_eq!(lines[1], "paragraph.");
         assert_eq!(lines[2], "", "blank line between paragraphs");
         assert_eq!(lines[3], "Second one.");
+        assert_eq!(lines[4], "", "blank line before the list");
         assert_eq!(lines[5], "• item one");
         assert_eq!(lines[6], "• item two that is");
         assert_eq!(lines[7], "  long enough to");
         assert!(lines.iter().all(|l| l.width() <= 20), "{lines:#?}");
+    }
+
+    #[test]
+    fn numbered_items_and_line_breaks_are_kept() {
+        let text = "Steps:\n1. Apply online\n2) Interview with the team\n\nThanks\nThe team";
+        let lines = paragraphs(text, 22);
+        assert_eq!(
+            lines,
+            [
+                "Steps:",
+                "",
+                "1. Apply online",
+                "2. Interview with the",
+                "   team",
+                "",
+                "Thanks",
+                "The team"
+            ]
+        );
+        assert_eq!(paragraphs("2026 was great", 40), ["2026 was great"]);
     }
 
     #[test]

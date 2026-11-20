@@ -196,7 +196,7 @@ fn job(
     .flatten()
     .map(html_to_text)
     .collect::<Vec<_>>()
-    .join("\n");
+    .join("\n\n");
     o.summary = (!summary.trim().is_empty()).then_some(summary);
     o.requirements = text(a, "desirable").map(html_to_text);
     o.dates.published_at = a
@@ -351,7 +351,11 @@ mod tests {
         assert_eq!(j.country.as_deref(), Some("Peru"));
         assert_eq!(j.eligibility, Eligibility::Open);
         assert_eq!(j.perks.benefits.as_deref(), Some("USD 1500–2200 / month"));
-        assert!(j.summary.as_deref().unwrap().contains("Rust & Postgres"));
+        let summary = j.summary.as_deref().unwrap();
+        assert!(
+            summary.contains("Who you are:\n\n• Rust & Postgres"),
+            "{summary:?}"
+        );
         assert!(j.tags.contains(&"peru".to_owned()));
         assert!(j.dates.published_at.is_some());
         let intern = &jobs[1];
