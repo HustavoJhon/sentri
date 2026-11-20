@@ -32,6 +32,29 @@ un orden desde el primer día; la fase 6 lo amplía con personalización.
    se dejará documentado sin inventar credenciales).
 5. Afinidad: excluir la propia oportunidad al explicar "similar a lo que guardaste".
 
+## Fase 10 de UX: dashboard, Details e identidad visual (2026-11-20)
+
+Hecho:
+
+- Dashboard configurable (`[dashboard]`): widgets visibles y su orden,
+  métricas, número de recomendaciones, diseño `detailed`/`compact`, y un
+  widget nuevo de empleos.
+- Cards con un orden de datos propio para cada tipo (empleos, eventos, cursos,
+  concursos, comunidades, open source, CFP, noticias) y preferencias en
+  `[cards]` (datos visibles, orden, fechas, selección, tipo, plataforma,
+  medidor), aplicadas al guardar.
+- Descripciones con estructura: el HTML de las fuentes conserva párrafos y
+  listas; las descripciones aplanadas se actualizan al recolectar de nuevo sin
+  tocar las ediciones manuales.
+- Visor de imágenes (`z`), barra estrecha en terminales de 60–79 columnas,
+  perfil de GitHub con seguidores y ubicación/empresa/bio, fechas relativas por
+  día de calendario y la primera tecla ya no se pierde tras la consulta
+  gráfica.
+
+Pendiente: probar Kitty e iTerm2 en terminales reales; las descripciones
+guardadas antes de esta fase recuperan su estructura solo cuando su fuente
+vuelve a publicarlas igual.
+
 ## Fase de evolución visual (2026-11-15)
 
 Hecho: dashboard con gráficos, Tech News (HN, Google News RSS, medios y blogs
@@ -67,8 +90,7 @@ Pendiente de esta fase:
 - Eventos publicados por varios directorios se fusionan por título normalizado
   y fecha de inicio.
 
-Pendiente: los sumarios se guardan en una sola línea (se pierden las viñetas de
-las ofertas de empleo); RPP, La República y PRONABEC no tienen feeds públicos.
+Pendiente: RPP, La República y PRONABEC no tienen feeds públicos.
 
 ## Fase del ecosistema tech peruano (2026-11-17)
 

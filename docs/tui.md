@@ -23,6 +23,7 @@ terminal: van a `sentri.log`, junto a la base de datos (permisos `600`).
 
 - ≥ 110 columnas: barra lateral · feed · detalles.
 - ≥ 80 columnas: barra lateral · feed (Enter abre los detalles).
+- 60–79 columnas: una barra estrecha con la tecla y el icono de cada sección.
 - Más estrecho (móvil por SSH): solo feed; `Tab` cambia de sección.
 
 ## Atajos
@@ -43,6 +44,7 @@ terminal: van a `sentri.log`, junto a la base de datos (permisos `600`).
 | `p` `e` `c` | postulado / inscrito / completado |
 | `a` | agregar al calendario (fase 7; hoy muestra aviso) |
 | `o` | abrir enlace original (`xdg-open`; por SSH muestra la URL) |
+| `z` | ver la imagen en grande (`Esc` cierra) |
 | `n` | añadir enlace |
 | `/` | buscar |
 | `:` `Ctrl-p` | paleta de comandos |
@@ -64,7 +66,7 @@ estado los atajos de la sección actual (con tus atajos personalizados).
 
 | Sección | Contenido |
 |---|---|
-| Dashboard | Contadores, descubiertas por día (barras), likes/guardados (sparklines), distribución por categoría/fuente/modalidad, recomendaciones, próximas fechas, últimas noticias |
+| Dashboard | Métricas, descubiertas por día (barras), likes/guardados (sparklines), distribución por categoría/fuente/modalidad, recomendaciones, próximas fechas, últimas noticias y empleos (abiertos, remotos, con salario, alta coincidencia). Widgets, orden, métricas y diseño se configuran en `[dashboard]` |
 | Discover | Oportunidades (no noticias). Buscar desde aquí busca en todo |
 | Tech News | Noticias con naturaleza (Reported, Official, Unconfirmed, Opinion, Discussion), tema, medio y autor |
 | Jobs … Travel | Vistas por categoría |
@@ -76,22 +78,38 @@ estado los atajos de la sección actual (con tus atajos personalizados).
 
 ## Cards
 
-Todas las secciones (Discover, Jobs, Events, Communities, Courses, Tech News,
-Open Source, Call for Speakers…) usan la misma card:
+Todas las secciones comparten la misma estructura de card (rail, kicker,
+título, datos, estado), pero cada tipo ordena sus datos a su manera:
 
 ```text
-┃ HACKATHON   DP Devpost                          NEW ★ ●●●○○
-┃ AI Hackathon Cusco
-┃ ⏳ closes in 5d · GDG Cusco · Cusco · ⌂ in person · ✈ travel
+┃ JOB         GB Get on Board                                ●●●●○
+┃ Senior Rust Engineer · Acme
+┃ USD 3500–4000 / month · ◎ remote · Lima · posted 3d ago · rust sql
+
+│ MEETUP      PE Peruanos.dev                                ●●●○○
+│ Rust Lima #12
+│ ◷ Sat 28 Nov 18:30 · in 8d · Rust Lima · Miraflores · ⌂ in person
+
+│ COMMUNITY   PE Peruanos.dev                              ♥ ●●●○○
+│ GDG Huancayo
+│ ⌂ Huancayo · ↗ Website GitHub LinkedIn · cloud · android
 ```
+
+| Tipo | Datos |
+|---|---|
+| Empleos y prácticas | salario, modalidad, lugar, antigüedad, cierre de postulación, habilidades |
+| Eventos, meetups, talleres, conferencias | fecha y hora, organizador, lugar, modalidad, cierre de inscripción, costo |
+| Cursos | proveedor, costo (gratis / certificado pagado / precio), certificado, modalidad, inicio, cierre de inscripción |
+| Hackathons y concursos | cierre, premio (primera línea), viaje cubierto, modalidad, lugar, organizador |
+| Comunidades | ciudad, enlaces (web, GitHub, redes), temas, próximo evento |
+| Open source | organización, lenguajes/etiquetas, última actualización, enlaces |
+| Call for Speakers | cierre del CFP, fecha del evento, organizador, lugar, modalidad, viaje |
+| Tech News | tema, autor, fecha (el medio va en el kicker) |
 
 1. **Kicker**: tipo (categoría, o la clasificación de la noticia: Reported,
    Official, Unconfirmed, Opinion, Discussion) y plataforma.
 2. **Título**; en empleos va seguido de la empresa.
-3. **Datos** según el tipo: empleos con salario, modalidad (remote / hybrid /
-   on-site), lugar, antigüedad y etiquetas; eventos y comunidades con fecha y
-   hora, organizador, ciudad, modalidad y cierre de inscripción; Call for
-   Speakers con el cierre del CFP; noticias con tema, autor y fecha.
+3. **Datos** según la tabla anterior.
 4. **Estado** a la derecha: `NEW` (descubierto en 24 h y sin abrir), tus
    marcas (`♥` like, `★` guardado, `✓` postulado…), `closed` y el medidor de
    coincidencia `●●●○○` (cinco pasos de la puntuación de relevancia; en
@@ -104,7 +122,11 @@ alta coincidencia y `│` apagado lo vencido o descartado. En modo ASCII el rail
 pasa a `>` y `|`, así que la selección no depende del color.
 
 `v` alterna **compact** (1 línea, columnas alineadas), **comfortable** (3
-líneas) y **detailed** (más dos líneas de descripción). Las recomendaciones
+líneas) y **detailed** (dos líneas más: la descripción, o una línea de
+descripción y las habilidades en empleos y proyectos, o los enlaces en
+comunidades). Qué datos se ven, su orden, el formato de las fechas, el estilo
+de selección y la visibilidad de tipo, plataforma y medidor se configuran en
+`[cards]` ([configuration.md](configuration.md#cards)). Las recomendaciones
 del dashboard mezclan plataformas (máximo tres seguidas de la misma) para que
 una bolsa de empleo activa no ocupe toda la lista.
 
@@ -113,12 +135,23 @@ una bolsa de empleo activa no ocupe toda la lista.
 Cabecera con tipo, plataforma y tus marcas, título, organizador o autor (con
 avatar si la fuente lo declara). Debajo, **Key facts** (fechas con su
 distancia, lugar, modalidad, salario, costo, premios, lo que incluye, enlace),
-**Overview** (la descripción, conservando párrafos y listas), requisitos y
-elegibilidad, etiquetas y notas. En paneles anchos la imagen y la
+**Overview** (la descripción con sus párrafos, viñetas y listas numeradas),
+requisitos y elegibilidad, etiquetas y notas. Beneficios y premios de varias
+líneas se alinean en su propia columna. En paneles anchos la imagen y la
 recomendación de SENTRI van en una columna a la derecha; en estrechos, la
 imagen arriba con un tercio de la altura como máximo. Los datos desconocidos
 no ocupan filas. Se ven también campos editados frente a detectados e
-historial. `E` abre el editor ([editing.md](editing.md)).
+historial. `E` abre el editor ([editing.md](editing.md)); en él, `¶` separa
+párrafos y `↵` marca un salto de línea dentro del campo de una línea. La
+lista de atajos al pie de Details usa tus teclas personalizadas y solo ofrece
+`z` (ampliar imagen) cuando hay una imagen cargada.
+
+Las descripciones se convierten desde el HTML de cada fuente conservando su
+estructura (párrafos, `<br>`, listas con viñetas y numeradas) y se limpian de
+caracteres de control y secuencias de escape antes de guardarse; nunca se
+dibuja HTML. Al volver a recolectar, una descripción ya guardada solo se
+reemplaza si es el mismo texto con su estructura recuperada, y una edición
+manual nunca se sobrescribe.
 
 Las imágenes usan Kitty, Sixel o iTerm2 si la terminal lo soporta y medios
 bloques si no ([configuration.md](configuration.md#imágenes)).
@@ -127,8 +160,10 @@ bloques si no ([configuration.md](configuration.md#imágenes)).
 
 Con `[github] username`, la parte inferior de la barra lateral muestra una
 card de GitHub: avatar cuadrado (pedido a 460 px y remuestreado al tamaño
-real), nombre, usuario y repositorios. Sin imagen se ven tus iniciales. En
-terminales bajas la card se reduce a una fila.
+real), nombre, usuario, repositorios y seguidores (si caben), y tu ubicación,
+empresa o bio públicas. Sin imagen se ven tus iniciales. En terminales bajas
+la card se reduce a una fila, y en las de 60–79 columnas la barra estrecha no
+la muestra.
 
 ## Badges de fuentes
 
