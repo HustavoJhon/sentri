@@ -19,8 +19,9 @@ use crate::graphics::Fit;
 use crate::state::{ProfileState, State};
 use crate::theme::Theme;
 
-/// Avatar of 5 rows plus three lines of text, inside the border.
-pub const FULL_HEIGHT: u16 = 11;
+/// Avatar of 5 rows, a spacer and up to four lines of text, inside the
+/// border.
+pub const FULL_HEIGHT: u16 = 12;
 /// One row of avatar (3 rows) next to the text.
 pub const COMPACT_HEIGHT: u16 = 5;
 
@@ -61,9 +62,14 @@ pub fn render(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
     }
 }
 
-fn identity<'a>(theme: &Theme, profile: &GitHubProfile, width: usize) -> Vec<Line<'a>> {
+fn identity<'a>(
+    theme: &Theme,
+    profile: &'a GitHubProfile,
+    width: usize,
+    about: bool,
+) -> Vec<Line<'a>> {
     let name = profile.name.as_deref().unwrap_or(&profile.login);
-    vec![
+    let mut lines = vec![
         Line::from(Span::styled(
             fit(name, width),
             Style::new().fg(theme.p.fg).add_modifier(Modifier::BOLD),
@@ -72,23 +78,47 @@ fn identity<'a>(theme: &Theme, profile: &GitHubProfile, width: usize) -> Vec<Lin
             fit(&format!("@{}", profile.login), width),
             Style::new().fg(theme.p.aqua),
         )),
-        Line::from(Span::styled(
-            fit(&stats(profile, width), width),
-            theme.muted(),
-        )),
-    ]
+        stats(theme, profile, width),
+    ];
+    if about && let Some(text) = about_line(profile) {
+        lines.push(Line::from(Span::styled(fit(&text, width), theme.dim())));
+    }
+    lines
 }
 
-/// Repositories and followers, or just repositories when both do not fit.
-fn stats(profile: &GitHubProfile, width: usize) -> String {
+/// Where the person is, else where they work, else their bio.
+fn about_line(profile: &GitHubProfile) -> Option<String> {
+    profile
+        .location
+        .as_deref()
+        .map(|l| format!("⌂ {l}"))
+        .or_else(|| profile.company.as_deref().map(|c| format!("◫ {c}")))
+        .or_else(|| profile.bio.clone())
+}
+
+/// Repositories and followers (numbers accented), or just repositories
+/// when both do not fit.
+fn stats<'a>(theme: &Theme, profile: &GitHubProfile, width: usize) -> Line<'a> {
+    let number = |n: u64| {
+        Span::styled(
+            n.to_string(),
+            Style::new().fg(theme.p.yellow).add_modifier(Modifier::BOLD),
+        )
+    };
+    let label = |t: &str| Span::styled(t.to_owned(), theme.muted());
     let full = format!(
         "{} repos · {} followers",
         profile.public_repos, profile.followers
     );
     if full.chars().count() <= width {
-        full
+        Line::from(vec![
+            number(profile.public_repos),
+            label(" repos · "),
+            number(profile.followers),
+            label(" followers"),
+        ])
     } else {
-        format!("{} repos", profile.public_repos)
+        Line::from(vec![number(profile.public_repos), label(" repos")])
     }
 }
 
@@ -142,7 +172,7 @@ fn full(
     profile: &GitHubProfile,
     image: Option<&Thumbnail>,
 ) {
-    let rows = inner.height.saturating_sub(4).min(5);
+    let rows = inner.height.saturating_sub(5).min(5);
     let cols = (rows * 2).min(inner.width);
     let pic = Rect::new(inner.x + (inner.width - cols) / 2, inner.y, cols, rows);
     avatar(frame, pic, state, theme, profile, image);
@@ -152,7 +182,7 @@ fn full(
         ..inner
     };
     frame.render_widget(
-        Paragraph::new(identity(theme, profile, usize::from(text.width)))
+        Paragraph::new(identity(theme, profile, usize::from(text.width), true))
             .alignment(Alignment::Center),
         text,
     );
@@ -175,7 +205,7 @@ fn compact(
         ..inner
     };
     frame.render_widget(
-        Paragraph::new(identity(theme, profile, usize::from(text.width))),
+        Paragraph::new(identity(theme, profile, usize::from(text.width), false)),
         text,
     );
 }
@@ -196,6 +226,9 @@ mod tests {
             public_repos: 8,
             followers: 10,
             updated_at: None,
+            bio: Some("Building tools for developers everywhere".into()),
+            location: Some("San Francisco".into()),
+            company: None,
         }
     }
 
@@ -229,6 +262,10 @@ mod tests {
         assert!(rows.iter().any(|r| r.contains("@octocat")));
         assert!(rows.iter().any(|r| r.contains("8 repos")));
         assert!(rows.iter().all(|r| !r.contains("follo…")), "no cut words");
+        assert!(
+            rows.iter().any(|r| r.contains("⌂ San Francisco")),
+            "{rows:#?}"
+        );
     }
 
     #[test]

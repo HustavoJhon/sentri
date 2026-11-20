@@ -126,6 +126,9 @@ async fn avatar_keeps_its_resolution_and_refreshes_with_the_profile() {
         public_repos: 0,
         followers: 0,
         updated_at: Some("2026-01-01T00:00:00Z".into()),
+        bio: None,
+        location: None,
+        company: None,
     };
     let avatar = app.github_avatar(&profile).await.unwrap();
     assert_eq!(
