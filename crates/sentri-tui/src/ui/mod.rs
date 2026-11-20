@@ -718,6 +718,62 @@ mod tests {
         }
     }
 
+    /// Every dashboard arrangement fits every supported size: each widget
+    /// alone, all of them, compact and detailed, Unicode and ASCII.
+    #[test]
+    fn dashboard_layouts_fit_every_size() {
+        use crate::state::presentation::{DashboardPrefs, Widget};
+        let mut job = sample();
+        job.item.opportunity.category = sentri_core::Category::Job;
+        job.item.opportunity.perks.benefits = Some("USD 2000 / month".into());
+        let all = DashboardPrefs::default();
+        let titles = [
+            (Widget::Activity, "Discovered"),
+            (Widget::Interactions, "Likes"),
+            (Widget::Distribution, "Categories"),
+            (Widget::Recommendations, "Top recommendations"),
+            (Widget::Upcoming, "Upcoming dates"),
+            (Widget::News, "Latest tech news"),
+            (Widget::Jobs, "1 open"),
+            (Widget::Metrics, "found"),
+        ];
+        for ascii in [false, true] {
+            for (w, h) in [(60, 20), (80, 24), (100, 35), (170, 45)] {
+                for compact in [false, true] {
+                    let mut variants = vec![all.widgets.clone(), Vec::new()];
+                    variants.extend(titles.iter().map(|(widget, _)| vec![*widget]));
+                    for widgets in variants {
+                        let mut state = State {
+                            section: 0,
+                            dashboard: DashboardPrefs {
+                                compact,
+                                widgets: widgets.clone(),
+                                ..all.clone()
+                            },
+                            ..State::default()
+                        };
+                        state.ui.ascii_icons = ascii;
+                        state.on_msg(Msg::Loaded(vec![sample(), job.clone()]));
+                        let screen = render(w, h, &mut state);
+                        assert_eq!(screen.lines().count(), usize::from(h));
+                        if let [widget] = widgets.as_slice()
+                            && !(ascii && *widget == Widget::Interactions)
+                        {
+                            let title = titles.iter().find(|(x, _)| x == widget).unwrap().1;
+                            assert!(
+                                screen.contains(title),
+                                "{w}×{h} compact={compact} {widget:?}:\n{screen}"
+                            );
+                        }
+                        if widgets.is_empty() {
+                            assert!(screen.contains("widget is hidden"), "{screen}");
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     #[test]
     fn records_hit_areas_for_mouse() {
         let mut state = State::default();

@@ -1,37 +1,122 @@
-//! The dashboard: counters, time series, distributions and short lists.
+//! The dashboard: metrics, time series, distributions and short lists.
 //!
-//! Every number comes from persisted data (`Insights`, `Stats`).
+//! Every number comes from persisted data (`Insights`, `Stats`). Which
+//! widgets appear, their order, the metrics and the layout come from
+//! `[dashboard]` in the configuration (Settings → Dashboard).
 
 use chrono::{Local, Utc};
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
-use ratatui::style::{Modifier, Style};
+use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Bar, BarChart, BarGroup, Paragraph, Sparkline};
+use ratatui::widgets::{Bar, BarChart, BarGroup, Paragraph, Sparkline, Wrap};
 
+use super::card;
 use super::charts::{Scale, hbar_line, series};
 use super::widgets::{deadline_style, panel, relative, score_pill, source_badge};
 use sentri_app::Ranked;
 
 use crate::state::State;
+use crate::state::presentation::{DashboardPrefs, Widget};
 use crate::theme::Theme;
 
 const DAYS: i64 = 14;
 
+/// Draws the configured widgets in order: consecutive charts share a row,
+/// and so do consecutive lists. Rows hold as many widgets as the width
+/// allows and wrap.
 pub fn render(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
-    let compact = area.height < 34;
-    let [tiles, charts, lists] = Layout::vertical([
-        Constraint::Length(if area.width < 100 { 8 } else { 4 }),
-        Constraint::Length(if compact { 9 } else { 12 }),
-        Constraint::Min(6),
-    ])
-    .areas(area);
-    draw_tiles(frame, tiles, state, theme);
-    draw_charts(frame, charts, state, theme);
-    draw_lists(frame, lists, state, theme);
+    let prefs = &state.dashboard;
+    // Short terminals get the compact layout whatever the setting says.
+    let compact = prefs.compact || area.height < 24;
+    let rows = rows(&prefs.widgets, area.width);
+    if rows.is_empty() {
+        frame.render_widget(
+            Paragraph::new(Line::from(Span::styled(
+                "Every dashboard widget is hidden. Settings → Dashboard → Widgets brings them back.",
+                theme.muted(),
+            )))
+            .wrap(Wrap { trim: true })
+            .block(panel(theme, "Dashboard", false)),
+            area,
+        );
+        return;
+    }
+    let tall = area.height >= 34;
+    let constraints: Vec<Constraint> = rows
+        .iter()
+        .map(|row| match row.first() {
+            Some(Widget::Metrics) if compact => Constraint::Length(1),
+            Some(Widget::Metrics) => Constraint::Length(metric_rows(prefs, area.width) * 4),
+            Some(w) if w.is_chart() && compact => Constraint::Length(7),
+            Some(w) if w.is_chart() && tall => Constraint::Length(12),
+            Some(w) if w.is_chart() => Constraint::Length(9),
+            _ => Constraint::Min(4),
+        })
+        .collect();
+    let areas = Layout::vertical(constraints).split(area);
+    for (row, row_area) in rows.iter().zip(areas.iter()) {
+        if row.first() == Some(&Widget::Metrics) {
+            if compact {
+                metrics_strip(frame, *row_area, state, theme);
+            } else {
+                draw_tiles(frame, *row_area, state, theme);
+            }
+            continue;
+        }
+        let cells = Layout::horizontal(vec![Constraint::Fill(1); row.len()]).split(*row_area);
+        for (widget, cell) in row.iter().zip(cells.iter()) {
+            if cell.height < 3 {
+                continue;
+            }
+            match widget {
+                Widget::Activity => discovered_chart(frame, *cell, state, theme),
+                Widget::Interactions => interactions_chart(frame, *cell, state, theme),
+                Widget::Distribution => distribution(frame, *cell, state, theme),
+                Widget::Recommendations => recommendations(frame, *cell, state, theme),
+                Widget::Upcoming => upcoming(frame, *cell, state, theme),
+                Widget::News => news(frame, *cell, state, theme),
+                Widget::Jobs => jobs(frame, *cell, state, theme),
+                Widget::Metrics => {}
+            }
+        }
+    }
 }
 
-fn draw_tiles(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
+/// Widgets per row for a terminal `width` columns wide.
+const fn per_row(width: u16, chart: bool) -> usize {
+    match (chart, width) {
+        (_, 110..) => 3,
+        (true, 70..) | (false, 60..) => 2,
+        _ => 1,
+    }
+}
+
+/// Groups the configured widgets into rows (see [`render`]).
+pub(super) fn rows(widgets: &[Widget], width: u16) -> Vec<Vec<Widget>> {
+    let mut rows: Vec<Vec<Widget>> = Vec::new();
+    for &w in widgets {
+        let joins = rows.last().is_some_and(|row| {
+            let first = row[0];
+            first != Widget::Metrics
+                && w != Widget::Metrics
+                && first.is_chart() == w.is_chart()
+                && row.len() < per_row(width, w.is_chart())
+        });
+        match rows.last_mut() {
+            Some(row) if joins => row.push(w),
+            _ => rows.push(vec![w]),
+        }
+    }
+    rows
+}
+
+/// A metric's icon, label, value and color.
+fn metric(
+    state: &State,
+    theme: &Theme,
+    name: &str,
+) -> Option<(&'static str, &'static str, i64, Color)> {
     let s = &state.overview.stats;
     let i = &state.overview.insights;
     let p = theme.p;
@@ -43,28 +128,70 @@ fn draw_tiles(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
             .find(|(v, _)| *v == view)
             .map_or(0, |(_, n)| i64::try_from(*n).unwrap_or(i64::MAX))
     };
-    let tiles = [
-        ("✦", "found", s.total, p.fg),
-        ("●", "new 24h", s.new_since, p.green),
-        ("▤", "news new", i.news_new, p.aqua),
-        ("◷", "events", i.upcoming_events, p.blue),
-        (
+    Some(match name {
+        "found" => ("✦", "found", s.total, p.fg),
+        "new" => ("●", "new 24h", s.new_since, p.green),
+        "news" => ("▤", "news new", i.news_new, p.aqua),
+        "events" => ("◷", "events", i.upcoming_events, p.blue),
+        "courses" => (
             "✎",
             "courses",
             count(sentri_core::FeedView::Courses),
             p.green,
         ),
-        ("⚒", "jobs", count(sentri_core::FeedView::Jobs), p.blue),
-        ("★", "saved", s.saved, p.yellow),
-        ("♥", "liked", s.liked, p.red),
-        ("✓", "applied", i.applied, p.purple),
-        ("▦", "calendar", i.calendar_entries, p.orange),
-    ];
-    let rows: Vec<&[_]> = if area.width < 100 {
-        vec![&tiles[..5], &tiles[5..]]
-    } else {
-        vec![&tiles[..]]
-    };
+        "jobs" => ("⚒", "jobs", count(sentri_core::FeedView::Jobs), p.blue),
+        "saved" => ("★", "saved", s.saved, p.yellow),
+        "liked" => ("♥", "liked", s.liked, p.red),
+        "applied" => ("✓", "applied", i.applied, p.purple),
+        "calendar" => ("▦", "calendar", i.calendar_entries, p.orange),
+        _ => return None,
+    })
+}
+
+/// Tiles per row: at least ten columns each.
+fn tiles_per_row(width: u16) -> usize {
+    usize::from(width / 10).clamp(1, 10)
+}
+
+fn metric_rows(prefs: &DashboardPrefs, width: u16) -> u16 {
+    let n = prefs.metrics.len().max(1);
+    u16::try_from(n.div_ceil(tiles_per_row(width)))
+        .unwrap_or(1)
+        .min(3)
+}
+
+/// Compact metrics: one line, `✦ 120 found · ● 8 new 24h · …`.
+fn metrics_strip(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
+    let mut spans = Vec::new();
+    for name in &state.dashboard.metrics {
+        let Some((icon, label, value, color)) = metric(state, theme, name) else {
+            continue;
+        };
+        if !spans.is_empty() {
+            spans.push(Span::styled(" · ", Style::new().fg(theme.p.bg3)));
+        }
+        spans.push(Span::styled(format!("{icon} "), Style::new().fg(color)));
+        spans.push(Span::styled(
+            value.to_string(),
+            Style::new().fg(color).add_modifier(Modifier::BOLD),
+        ));
+        spans.push(Span::styled(format!(" {label}"), theme.muted()));
+    }
+    let width = usize::from(area.width);
+    frame.render_widget(
+        Paragraph::new(Line::from(card::truncate(spans, width))),
+        area,
+    );
+}
+
+fn draw_tiles(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
+    let tiles: Vec<_> = state
+        .dashboard
+        .metrics
+        .iter()
+        .filter_map(|name| metric(state, theme, name))
+        .collect();
+    let rows: Vec<&[_]> = tiles.chunks(tiles_per_row(area.width)).take(3).collect();
     let row_areas = Layout::vertical(vec![Constraint::Length(4); rows.len()]).split(area);
     for (row, row_area) in rows.iter().zip(row_areas.iter()) {
         let cells = Layout::horizontal(vec![Constraint::Fill(1); row.len()]).split(*row_area);
@@ -86,27 +213,6 @@ fn draw_tiles(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
                 *cell,
             );
         }
-    }
-}
-
-fn draw_charts(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
-    let wide = area.width >= 110;
-    let [left, middle, right] = if wide {
-        Layout::horizontal([
-            Constraint::Percentage(40),
-            Constraint::Percentage(30),
-            Constraint::Percentage(30),
-        ])
-        .areas(area)
-    } else {
-        let [l, r] = Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
-            .areas(area);
-        [l, r, Rect::default()]
-    };
-    discovered_chart(frame, left, state, theme);
-    interactions_chart(frame, middle, state, theme);
-    if wide {
-        distribution(frame, right, state, theme);
     }
 }
 
@@ -271,93 +377,169 @@ pub(super) fn diversified(items: &[Ranked], n: usize, per_source: usize) -> Vec<
     picked
 }
 
-fn draw_lists(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
-    let columns: Vec<Rect> = if area.width >= 110 {
-        Layout::horizontal(vec![Constraint::Fill(1); 3])
-            .split(area)
-            .to_vec()
-    } else {
-        Layout::horizontal(vec![Constraint::Fill(1); 2])
-            .split(area)
-            .to_vec()
-    };
-    let rows = |r: Rect| usize::from(r.height.saturating_sub(2));
-    let now = Utc::now();
+fn rows_in(area: Rect) -> usize {
+    usize::from(area.height.saturating_sub(2))
+}
 
-    let best: Vec<Line> = diversified(&state.items, rows(columns[0]), MAX_PER_SOURCE)
+/// One list row: a fixed lead, then the title cut to the panel.
+fn list_line<'a>(mut lead: Vec<Span<'a>>, title: &'a str, width: u16) -> Line<'a> {
+    lead.push(Span::raw(title));
+    Line::from(card::truncate(lead, usize::from(width.saturating_sub(2))))
+}
+
+fn recommendations(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
+    let n = rows_in(area).min(state.dashboard.recommendations);
+    let best: Vec<Line> = diversified(&state.items, n, MAX_PER_SOURCE)
         .into_iter()
         .map(|r| {
-            Line::from(vec![
-                score_pill(theme, r.relevance.score),
-                source_badge(theme, r.item.opportunity.source),
-                Span::raw(" "),
-                Span::raw(r.item.opportunity.title.as_str()),
-            ])
+            list_line(
+                vec![
+                    score_pill(theme, r.relevance.score),
+                    source_badge(theme, r.item.opportunity.source),
+                    Span::raw(" "),
+                ],
+                r.item.opportunity.title.as_str(),
+                area.width,
+            )
         })
         .collect();
-    list(
-        frame,
-        columns[0],
-        theme,
-        "Top recommendations",
-        best,
-        "Press n to add a link.",
-    );
+    let empty = if state.loading || state.collecting.is_some() {
+        "Collecting… recommendations appear as sources answer."
+    } else {
+        "Nothing yet. Press R to collect or n to add a link."
+    };
+    list(frame, area, theme, "Top recommendations", best, empty);
+}
 
+fn upcoming(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
+    let now = Utc::now();
     let mut dated: Vec<_> = state
         .items
         .iter()
-        .filter_map(|r| {
-            let d = r.item.opportunity.next_date(now)?;
-            Some((d, r))
-        })
+        .filter_map(|r| Some((r.item.opportunity.next_date(now)?, r)))
         .collect();
     dated.sort_by_key(|(d, _)| *d);
-    let upcoming: Vec<Line> = dated
+    let lines: Vec<Line> = dated
         .iter()
-        .take(rows(columns[1]))
+        .take(rows_in(area))
         .map(|(d, r)| {
-            Line::from(vec![
-                Span::styled(
+            list_line(
+                vec![Span::styled(
                     format!("{:<11}", relative(*d, now)),
                     deadline_style(theme, *d, now),
-                ),
-                Span::raw(r.item.opportunity.title.as_str()),
-            ])
+                )],
+                r.item.opportunity.title.as_str(),
+                area.width,
+            )
         })
         .collect();
     list(
         frame,
-        columns[1],
+        area,
         theme,
         "Upcoming dates",
-        upcoming,
+        lines,
         "No upcoming dates.",
     );
+}
 
-    if let Some(area) = columns.get(2) {
-        let news: Vec<Line> = state
-            .overview
-            .news
-            .iter()
-            .take(rows(*area))
-            .map(|r| {
-                Line::from(vec![
+fn news(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
+    let lines: Vec<Line> = state
+        .overview
+        .news
+        .iter()
+        .take(rows_in(area))
+        .map(|r| {
+            list_line(
+                vec![
                     source_badge(theme, r.item.opportunity.source),
                     Span::raw(" "),
-                    Span::raw(r.item.opportunity.title.as_str()),
-                ])
-            })
-            .collect();
-        list(
-            frame,
-            *area,
-            theme,
-            "Latest tech news",
-            news,
-            "Press R to collect news.",
-        );
+                ],
+                r.item.opportunity.title.as_str(),
+                area.width,
+            )
+        })
+        .collect();
+    list(
+        frame,
+        area,
+        theme,
+        "Latest tech news",
+        lines,
+        "No news yet. Press R to collect.",
+    );
+}
+
+/// Job statistics over the loaded feed.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(super) struct JobStats {
+    pub total: usize,
+    pub remote: usize,
+    pub with_salary: usize,
+    pub strong: usize,
+}
+
+pub(super) fn job_stats(items: &[Ranked]) -> JobStats {
+    let mut stats = JobStats::default();
+    for r in items
+        .iter()
+        .filter(|r| r.item.opportunity.category.is_job())
+    {
+        let o = &r.item.opportunity;
+        stats.total += 1;
+        stats.remote += usize::from(o.modality == sentri_core::Modality::Online);
+        stats.with_salary += usize::from(card::salary(o).is_some());
+        stats.strong += usize::from(card::is_strong_match(r));
     }
+    stats
+}
+
+fn jobs(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
+    let summary = job_stats(&state.items);
+    let mut lines = Vec::new();
+    if summary.total > 0 {
+        let sep = || Span::styled(" · ", Style::new().fg(theme.p.bg3));
+        lines.push(Line::from(card::truncate(
+            vec![
+                Span::styled(
+                    format!("{} open", summary.total),
+                    Style::new().fg(theme.p.blue),
+                ),
+                sep(),
+                Span::styled(format!("◎ {} remote", summary.remote), theme.dim()),
+                sep(),
+                Span::styled(format!("{} with salary", summary.with_salary), theme.good()),
+                sep(),
+                Span::styled(
+                    format!("{} strong match", summary.strong),
+                    Style::new().fg(theme.p.green),
+                ),
+            ],
+            usize::from(area.width.saturating_sub(2)),
+        )));
+        let room = rows_in(area).saturating_sub(1);
+        for r in state
+            .items
+            .iter()
+            .filter(|r| r.item.opportunity.category.is_job())
+            .take(room)
+        {
+            let o = &r.item.opportunity;
+            let mut lead = vec![score_pill(theme, r.relevance.score)];
+            if let Some(pay) = card::salary(o) {
+                lead.push(Span::styled(format!("{pay} · "), theme.good()));
+            }
+            lines.push(list_line(lead, o.title.as_str(), area.width));
+        }
+    }
+    list(
+        frame,
+        area,
+        theme,
+        "Jobs",
+        lines,
+        "No jobs in the feed yet.",
+    );
 }
 
 fn list(frame: &mut Frame, area: Rect, theme: &Theme, title: &str, lines: Vec<Line>, empty: &str) {
@@ -367,7 +549,53 @@ fn list(frame: &mut Frame, area: Rect, theme: &Theme, title: &str, lines: Vec<Li
         lines
     };
     frame.render_widget(
-        Paragraph::new(lines).block(panel(theme, title, false)),
+        Paragraph::new(lines)
+            .wrap(Wrap { trim: true })
+            .block(panel(theme, title, false)),
         area,
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use Widget::*;
+
+    #[test]
+    fn widgets_flow_into_rows_in_the_configured_order() {
+        let all = [
+            Metrics,
+            Activity,
+            Interactions,
+            Distribution,
+            Recommendations,
+            Upcoming,
+            News,
+            Jobs,
+        ];
+        assert_eq!(
+            rows(&all, 170),
+            vec![
+                vec![Metrics],
+                vec![Activity, Interactions, Distribution],
+                vec![Recommendations, Upcoming, News],
+                vec![Jobs],
+            ]
+        );
+        assert_eq!(
+            rows(&all, 80),
+            vec![
+                vec![Metrics],
+                vec![Activity, Interactions],
+                vec![Distribution],
+                vec![Recommendations, Upcoming],
+                vec![News, Jobs],
+            ]
+        );
+        assert_eq!(
+            rows(&[News, Activity, Metrics, Jobs], 60),
+            vec![vec![News], vec![Activity], vec![Metrics], vec![Jobs]]
+        );
+        assert_eq!(rows(&[], 100), Vec::<Vec<Widget>>::new());
+    }
 }
