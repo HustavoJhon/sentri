@@ -345,10 +345,8 @@ fn community(item: &Value, source_name: &str, now: DateTime<Utc>) -> Option<Oppo
 /// Description plus the contact links the directory publishes. Empty social
 /// fields are treated as absent.
 fn community_summary(item: &Value, contact: Option<&Value>) -> Option<String> {
+    let description = text(item, "description").map(str::to_owned);
     let mut parts: Vec<String> = Vec::new();
-    if let Some(description) = text(item, "description") {
-        parts.push(description.to_owned());
-    }
     if let Some(contact) = contact {
         for (label, key) in [
             ("Website", "website"),
@@ -374,7 +372,12 @@ fn community_summary(item: &Value, contact: Option<&Value>) -> Option<String> {
             }
         }
     }
-    (!parts.is_empty()).then(|| parts.join(" · "))
+    // The description is its own paragraph; each contact link its own line.
+    let links = (!parts.is_empty()).then(|| parts.join("\n"));
+    match (description, links) {
+        (Some(d), Some(l)) => Some(format!("{d}\n\n{l}")),
+        (d, l) => d.or(l),
+    }
 }
 
 fn call_for_speakers(item: &Value, source_name: &str, now: DateTime<Utc>) -> Option<Opportunity> {

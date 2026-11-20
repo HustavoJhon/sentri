@@ -2,8 +2,10 @@
 //! and schema.org JSON-LD). Only reads what the page declares; nothing is
 //! guessed here.
 
+use std::fmt::Write as _;
+
 use chrono::{DateTime, NaiveDate, Utc};
-use scraper::{Html, Selector};
+use scraper::{Html, Node, Selector};
 use sentri_core::{Author, Modality};
 use serde_json::Value;
 use url::Url;
@@ -159,30 +161,168 @@ fn json_ld_author(doc: &Html) -> Option<Author> {
         })
 }
 
-/// Visible text of an HTML fragment (tags removed, entities decoded).
-/// Scripts and styles are dropped; whitespace is normalized later by
-/// `sentri_core::text::clean`.
+/// Converts an HTML fragment to plain text that keeps its structure:
+/// paragraphs and headings become blank-line separated blocks, `<br>` a line
+/// break, and list items `• item` or `1. item` lines. Inline markup (bold,
+/// links) is reduced to its text; scripts and styles are dropped. The result
+/// still goes through `text::clean_block` before it is stored, which removes
+/// control characters and escape sequences.
 pub fn html_to_text(html: &str) -> String {
     if !html.contains('<') && !html.contains('&') {
         return html.to_owned();
     }
     let fragment = Html::parse_fragment(html);
-    let mut out = String::with_capacity(html.len());
-    for node in fragment.root_element().descendants() {
-        let Some(text) = node.value().as_text() else {
-            continue;
-        };
-        let hidden = node.ancestors().any(|a| {
-            a.value()
-                .as_element()
-                .is_some_and(|e| matches!(e.name(), "script" | "style"))
-        });
-        if !hidden {
-            out.push_str(text);
-            out.push(' ');
+    let mut out = Writer::default();
+    for child in fragment.root_element().children() {
+        walk(child, &mut out, 0, None);
+    }
+    sentri_core::text::clean_block(&out.text, out.text.len() + 1)
+}
+
+/// Deeper nesting than this is flattened: real descriptions never need it,
+/// and it bounds recursion on hostile input.
+const MAX_DEPTH: usize = 48;
+
+#[derive(Default)]
+struct Writer {
+    text: String,
+    /// Inside a list item, nested blocks stay on the item's line.
+    in_item: usize,
+}
+
+impl Writer {
+    fn push_text(&mut self, text: &str) {
+        let collapsed = text.split_whitespace().collect::<Vec<_>>().join(" ");
+        if collapsed.is_empty() {
+            if !text.is_empty() && !self.text.ends_with([' ', '\n']) && !self.text.is_empty() {
+                self.text.push(' ');
+            }
+            return;
+        }
+        if text.starts_with(char::is_whitespace) && !self.text.ends_with([' ', '\n']) {
+            self.text.push(' ');
+        }
+        self.text.push_str(&collapsed);
+        if text.ends_with(char::is_whitespace) {
+            self.text.push(' ');
         }
     }
-    out.split_whitespace().collect::<Vec<_>>().join(" ")
+
+    fn line_break(&mut self) {
+        let trimmed = self.text.trim_end_matches(' ').len();
+        self.text.truncate(trimmed);
+        if !self.text.is_empty() && !self.text.ends_with('\n') {
+            self.text.push('\n');
+        }
+    }
+
+    fn paragraph_break(&mut self) {
+        if self.in_item > 0 {
+            if !self.text.ends_with([' ', '\n']) {
+                self.text.push(' ');
+            }
+            return;
+        }
+        let trimmed = self.text.trim_end().len();
+        self.text.truncate(trimmed);
+        if !self.text.is_empty() {
+            self.text.push_str("\n\n");
+        }
+    }
+}
+
+fn walk(
+    node: ego_tree::NodeRef<'_, Node>,
+    out: &mut Writer,
+    depth: usize,
+    list: Option<&mut usize>,
+) {
+    match node.value() {
+        Node::Text(text) => out.push_text(text),
+        Node::Element(element) => {
+            let name = element.name();
+            if matches!(name, "script" | "style" | "template" | "noscript") {
+                return;
+            }
+            if depth >= MAX_DEPTH {
+                let text: String = node
+                    .descendants()
+                    .filter_map(|n| n.value().as_text().map(|t| t.to_string()))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                out.push_text(&text);
+                return;
+            }
+            match name {
+                "br" => out.line_break(),
+                "ul" | "ol" => {
+                    out.paragraph_break();
+                    let mut counter = usize::from(name == "ol");
+                    for child in node.children() {
+                        let numbered = (counter > 0).then_some(&mut counter);
+                        walk(child, out, depth + 1, numbered);
+                    }
+                    out.paragraph_break();
+                }
+                "li" => {
+                    out.line_break();
+                    match list {
+                        Some(n) => {
+                            let _ = write!(out.text, "{n}. ");
+                            *n += 1;
+                        }
+                        None => out.text.push_str("• "),
+                    }
+                    out.in_item += 1;
+                    for child in node.children() {
+                        walk(child, out, depth + 1, None);
+                    }
+                    out.in_item -= 1;
+                    out.line_break();
+                }
+                _ if is_block(name) => {
+                    out.paragraph_break();
+                    for child in node.children() {
+                        walk(child, out, depth + 1, None);
+                    }
+                    out.paragraph_break();
+                }
+                _ => {
+                    for child in node.children() {
+                        walk(child, out, depth + 1, None);
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+fn is_block(name: &str) -> bool {
+    matches!(
+        name,
+        "p" | "div"
+            | "section"
+            | "article"
+            | "header"
+            | "footer"
+            | "blockquote"
+            | "pre"
+            | "table"
+            | "tr"
+            | "h1"
+            | "h2"
+            | "h3"
+            | "h4"
+            | "h5"
+            | "h6"
+            | "hr"
+            | "dl"
+            | "dt"
+            | "dd"
+            | "figure"
+            | "figcaption"
+    )
 }
 
 /// Accepts RFC 3339 timestamps and plain `YYYY-MM-DD` dates.
@@ -399,6 +539,26 @@ mod tests {
             "Hola mundo & más"
         );
         assert_eq!(html_to_text("plain"), "plain");
+    }
+
+    #[test]
+    fn html_keeps_paragraphs_and_lists() {
+        let html = "<h3>About</h3><p>We build <b>tools</b>.<br>Remote friendly.</p>\
+            <ul><li>Rust &amp; SQL</li><li><p>Linux</p></li></ul>\
+            <ol><li>Apply</li><li>Interview</li></ol><div>Thanks</div>";
+        assert_eq!(
+            html_to_text(html),
+            "About\n\nWe build tools.\nRemote friendly.\n\n• Rust & SQL\n• Linux\n\n\
+             1. Apply\n2. Interview\n\nThanks"
+        );
+    }
+
+    #[test]
+    fn deep_nesting_is_flattened_not_recursed() {
+        let html = format!("{}deep{}", "<div>".repeat(5_000), "</div>".repeat(5_000));
+        assert_eq!(html_to_text(&html), "deep");
+        let escape = html_to_text("<p>a\u{1b}[2Jb</p>");
+        assert!(!escape.contains('\u{1b}'), "{escape:?}");
     }
 
     #[test]
