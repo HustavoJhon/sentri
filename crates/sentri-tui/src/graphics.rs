@@ -137,6 +137,35 @@ const fn wanted(mode: ImageMode) -> Option<ProtocolType> {
 }
 
 /// Whether a mode needs the terminal to be asked about graphics.
+/// Whether tmux forwards escape sequences to the outer terminal
+/// (`set -g allow-passthrough on`), which graphics protocols need.
+fn tmux_passthrough() -> bool {
+    std::process::Command::new("tmux")
+        .args(["show-options", "-pqv", "allow-passthrough"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .is_some_and(|o| passthrough_enabled(&String::from_utf8_lossy(&o.stdout)))
+}
+
+/// `on` and `all` forward sequences; empty or `off` do not.
+fn passthrough_enabled(value: &str) -> bool {
+    matches!(value.trim(), "on" | "all")
+}
+
+/// After a timed-out query, `ratatui-image` leaves a thread reading stdin
+/// until it sees a status report (and still returns a fallback picker); it would steal the first keys typed (tmux
+/// without `allow-passthrough` never forwards the query). A plain Device
+/// Status Report, answered by every terminal and by tmux itself, lets that
+/// thread finish before SENTRI starts reading keys.
+fn release_probe() {
+    use std::io::Write;
+    let mut out = std::io::stdout();
+    if out.write_all(b"\x1b[5n").and_then(|()| out.flush()).is_ok() {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+}
+
 pub const fn wants_probe(mode: ImageMode) -> bool {
     matches!(
         mode,
@@ -176,7 +205,17 @@ impl Graphics {
         if !wants_probe(mode) {
             return Self::text();
         }
-        let picker = match Picker::from_query_stdio() {
+        if std::env::var_os("TMUX").is_some() && !tmux_passthrough() {
+            // Graphics cannot reach the outer terminal, and the unanswered
+            // query would leave a thread reading the first keys typed.
+            tracing::debug!("tmux without allow-passthrough; using half blocks");
+            return Self::text();
+        }
+        let picker = Picker::from_query_stdio();
+        // A timed-out query also returns a (fallback) picker, so the reader
+        // thread is released either way; the runtime discards the reply.
+        release_probe();
+        let picker = match picker {
             Ok(picker) => picker,
             Err(error) => {
                 tracing::debug!(%error, "terminal graphics query failed; using half blocks");
@@ -355,6 +394,14 @@ fn encode(picker: &Picker, image: &Thumbnail, area: Rect, fit: Fit) -> Variant {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tmux_passthrough_values() {
+        assert!(passthrough_enabled("on\n"));
+        assert!(passthrough_enabled("all"));
+        assert!(!passthrough_enabled("off"));
+        assert!(!passthrough_enabled(""));
+    }
 
     fn stripes(width: u32, height: u32) -> Thumbnail {
         let pixels: Vec<[u8; 3]> = (0..width * height)
