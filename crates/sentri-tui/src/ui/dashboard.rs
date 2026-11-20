@@ -46,8 +46,10 @@ pub fn render(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
     let constraints: Vec<Constraint> = rows
         .iter()
         .map(|row| match row.first() {
-            Some(Widget::Metrics) if compact => Constraint::Length(1),
-            Some(Widget::Metrics) => Constraint::Length(metric_rows(prefs, area.width) * 4),
+            Some(Widget::Metrics) if compact || !tiles_fit(prefs, area.width) => {
+                Constraint::Length(strip_rows(state, theme, area.width))
+            }
+            Some(Widget::Metrics) => Constraint::Length(4),
             Some(w) if w.is_chart() && compact => Constraint::Length(7),
             Some(w) if w.is_chart() && tall => Constraint::Length(12),
             Some(w) if w.is_chart() => Constraint::Length(9),
@@ -57,7 +59,7 @@ pub fn render(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
     let areas = Layout::vertical(constraints).split(area);
     for (row, row_area) in rows.iter().zip(areas.iter()) {
         if row.first() == Some(&Widget::Metrics) {
-            if compact {
+            if compact || !tiles_fit(prefs, area.width) {
                 metrics_strip(frame, *row_area, state, theme);
             } else {
                 draw_tiles(frame, *row_area, state, theme);
@@ -148,27 +150,26 @@ fn metric(
     })
 }
 
-/// Tiles per row: at least ten columns each.
-fn tiles_per_row(width: u16) -> usize {
-    usize::from(width / 10).clamp(1, 10)
+/// Bordered tiles need ten columns each and all of them on one row;
+/// otherwise the metrics become a strip of text.
+fn tiles_fit(prefs: &DashboardPrefs, width: u16) -> bool {
+    prefs.metrics.len() * 10 <= usize::from(width)
 }
 
-fn metric_rows(prefs: &DashboardPrefs, width: u16) -> u16 {
-    let n = prefs.metrics.len().max(1);
-    u16::try_from(n.div_ceil(tiles_per_row(width)))
-        .unwrap_or(1)
-        .min(3)
+/// Rows the metrics strip needs at `width` (at most two).
+fn strip_rows(state: &State, theme: &Theme, width: u16) -> u16 {
+    let used: usize = strip(state, theme).iter().map(Span::width).sum();
+    if used <= usize::from(width) { 1 } else { 2 }
 }
 
-/// Compact metrics: one line, `✦ 120 found · ● 8 new 24h · …`.
-fn metrics_strip(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
+fn strip(state: &State, theme: &Theme) -> Vec<Span<'static>> {
     let mut spans = Vec::new();
     for name in &state.dashboard.metrics {
         let Some((icon, label, value, color)) = metric(state, theme, name) else {
             continue;
         };
         if !spans.is_empty() {
-            spans.push(Span::styled(" · ", Style::new().fg(theme.p.bg3)));
+            spans.push(Span::styled("  ", Style::new()));
         }
         spans.push(Span::styled(format!("{icon} "), Style::new().fg(color)));
         spans.push(Span::styled(
@@ -177,11 +178,44 @@ fn metrics_strip(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
         ));
         spans.push(Span::styled(format!(" {label}"), theme.muted()));
     }
+    spans
+}
+
+/// Metrics as text: `✦ 120 found  ● 8 new 24h  …`, wrapped to two lines
+/// when needed (items never split).
+fn metrics_strip(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
     let width = usize::from(area.width);
-    frame.render_widget(
-        Paragraph::new(Line::from(card::truncate(spans, width))),
-        area,
-    );
+    let mut lines: Vec<Vec<Span>> = vec![Vec::new()];
+    let spans = strip(state, theme);
+    // Each metric is four spans: gap (except the first), icon, value, label.
+    let mut item: Vec<Span> = Vec::new();
+    let mut items = Vec::new();
+    for span in spans {
+        if span.content == "  " {
+            items.push(std::mem::take(&mut item));
+        } else {
+            item.push(span);
+        }
+    }
+    items.push(item);
+    for item in items {
+        let item_width: usize = item.iter().map(Span::width).sum();
+        let line = lines.last_mut().expect("one line");
+        let used: usize = line.iter().map(Span::width).sum();
+        if used > 0 && used + 2 + item_width > width {
+            lines.push(item);
+        } else {
+            if used > 0 {
+                line.push(Span::raw("  "));
+            }
+            line.extend(item);
+        }
+    }
+    let lines: Vec<Line> = lines
+        .into_iter()
+        .map(|l| Line::from(card::truncate(l, width)))
+        .collect();
+    frame.render_widget(Paragraph::new(lines), area);
 }
 
 fn draw_tiles(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
@@ -191,11 +225,9 @@ fn draw_tiles(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
         .iter()
         .filter_map(|name| metric(state, theme, name))
         .collect();
-    let rows: Vec<&[_]> = tiles.chunks(tiles_per_row(area.width)).take(3).collect();
-    let row_areas = Layout::vertical(vec![Constraint::Length(4); rows.len()]).split(area);
-    for (row, row_area) in rows.iter().zip(row_areas.iter()) {
-        let cells = Layout::horizontal(vec![Constraint::Fill(1); row.len()]).split(*row_area);
-        for ((icon, label, value, color), cell) in row.iter().zip(cells.iter()) {
+    let cells = Layout::horizontal(vec![Constraint::Fill(1); tiles.len()]).split(area);
+    {
+        for ((icon, label, value, color), cell) in tiles.iter().zip(cells.iter()) {
             let line = vec![
                 Line::from(vec![
                     Span::styled(format!("{icon} "), Style::new().fg(*color)),
@@ -384,7 +416,7 @@ fn rows_in(area: Rect) -> usize {
 /// One list row: a fixed lead, then the title cut to the panel.
 fn list_line<'a>(mut lead: Vec<Span<'a>>, title: &'a str, width: u16) -> Line<'a> {
     lead.push(Span::raw(title));
-    Line::from(card::truncate(lead, usize::from(width.saturating_sub(2))))
+    Line::from(card::truncate(lead, usize::from(width.saturating_sub(4))))
 }
 
 fn recommendations(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
@@ -425,7 +457,7 @@ fn upcoming(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
         .map(|(d, r)| {
             list_line(
                 vec![Span::styled(
-                    format!("{:<11}", relative(*d, now)),
+                    format!("{:<14}", relative(*d, now)),
                     deadline_style(theme, *d, now),
                 )],
                 r.item.opportunity.title.as_str(),
@@ -506,16 +538,16 @@ fn jobs(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
                     Style::new().fg(theme.p.blue),
                 ),
                 sep(),
-                Span::styled(format!("◎ {} remote", summary.remote), theme.dim()),
+                Span::styled(format!("{} remote", summary.remote), theme.dim()),
                 sep(),
-                Span::styled(format!("{} with salary", summary.with_salary), theme.good()),
+                Span::styled(format!("{} salary", summary.with_salary), theme.good()),
                 sep(),
                 Span::styled(
-                    format!("{} strong match", summary.strong),
+                    format!("{} match", summary.strong),
                     Style::new().fg(theme.p.green),
                 ),
             ],
-            usize::from(area.width.saturating_sub(2)),
+            usize::from(area.width.saturating_sub(4)),
         )));
         let room = rows_in(area).saturating_sub(1);
         for r in state
@@ -543,15 +575,17 @@ fn jobs(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
 }
 
 fn list(frame: &mut Frame, area: Rect, theme: &Theme, title: &str, lines: Vec<Line>, empty: &str) {
-    let lines = if lines.is_empty() {
-        vec![Line::from(Span::styled(empty.to_owned(), theme.muted()))]
-    } else {
-        lines
-    };
+    if lines.is_empty() {
+        frame.render_widget(
+            Paragraph::new(Span::styled(empty.to_owned(), theme.muted()))
+                .wrap(Wrap { trim: true })
+                .block(panel(theme, title, false)),
+            area,
+        );
+        return;
+    }
     frame.render_widget(
-        Paragraph::new(lines)
-            .wrap(Wrap { trim: true })
-            .block(panel(theme, title, false)),
+        Paragraph::new(lines).block(panel(theme, title, false)),
         area,
     );
 }
