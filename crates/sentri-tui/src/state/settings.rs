@@ -124,7 +124,7 @@ impl SettingsState {
                     .clamp(min, max)
                     .to_string()
             }
-            SettingKind::Text => return,
+            SettingKind::Text | SettingKind::List(_) => return,
         };
     }
 
@@ -137,6 +137,9 @@ impl SettingsState {
                 } else {
                     Err(format!("between {min} and {max}"))
                 }
+            }
+            SettingKind::List(options) => {
+                sentri_app::settings::parse_list(text, options).map(|items| items.join(", "))
             }
             _ => Ok(text.trim().to_owned()),
         }
@@ -199,7 +202,10 @@ impl SettingsState {
             KeyCode::Right | KeyCode::Char('l') => self.step(true),
             KeyCode::Enter => {
                 let row = self.rows.get(self.selected)?;
-                if matches!(row.kind, SettingKind::Text | SettingKind::Int { .. }) {
+                if matches!(
+                    row.kind,
+                    SettingKind::Text | SettingKind::Int { .. } | SettingKind::List(_)
+                ) {
                     self.editing = Some(LineInput::with_value(&row.value));
                 } else {
                     self.step(true);
@@ -301,5 +307,19 @@ mod tests {
                 .iter()
                 .any(|r| r.key == "sources.hn-front-page.enabled")
         );
+    }
+
+    #[test]
+    fn lists_are_edited_as_text_and_validated() {
+        let mut s = state();
+        select(&mut s, "dashboard.widgets");
+        s.on_key(key(KeyCode::Enter));
+        s.editing = Some(LineInput::with_value("news,  metrics"));
+        s.on_key(key(KeyCode::Enter));
+        assert_eq!(s.rows[s.selected].value, "news, metrics");
+        s.on_key(key(KeyCode::Enter));
+        s.editing = Some(LineInput::with_value("news, pie"));
+        s.on_key(key(KeyCode::Enter));
+        assert!(s.error.as_deref().unwrap().contains("pie"));
     }
 }

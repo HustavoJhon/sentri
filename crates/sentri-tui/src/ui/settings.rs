@@ -37,8 +37,8 @@ fn rows<'a>(
                 }
             }
             SettingKind::Choice(_) | SettingKind::Int { .. } => format!("‹ {} ›", row.value),
-            SettingKind::Text if row.value.is_empty() => "—".to_owned(),
-            SettingKind::Text => row.value.clone(),
+            SettingKind::Text | SettingKind::List(_) if row.value.is_empty() => "—".to_owned(),
+            SettingKind::Text | SettingKind::List(_) => row.value.clone(),
         };
         let mut spans = vec![
             Span::styled(format!("  {:<34}", row.label), theme.muted()),
@@ -122,10 +122,16 @@ pub fn render(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
     frame.render_widget(
         Paragraph::new(vec![
             status,
-            Line::from(Span::styled(
-                "↑↓ move · Enter edit · ←/→ change · r default · u undo all · Ctrl-s save (backup) · D restore all defaults · shortcuts: ?",
-                theme.muted(),
-            )),
+            match row.map(|r| r.kind) {
+                Some(SettingKind::List(options)) => Line::from(vec![
+                    Span::styled("Options: ", theme.muted()),
+                    Span::styled(options.join(", "), Style::new().fg(theme.p.aqua)),
+                ]),
+                _ => Line::from(Span::styled(
+                    "↑↓ move · Enter edit · ←/→ change · r default · u undo all · Ctrl-s save (backup) · D restore all defaults · shortcuts: ?",
+                    theme.muted(),
+                )),
+            },
         ])
         .wrap(Wrap { trim: true }),
         foot,

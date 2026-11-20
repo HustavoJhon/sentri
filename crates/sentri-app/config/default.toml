@@ -86,6 +86,25 @@ show_details = true
 feed_width = 55           # % of the main area used by the feed
 collect_on_start = "auto" # auto (empty or stale data) | always | never
 
+# Dashboard. Widgets and metrics are drawn in the order listed; leave one out
+# to hide it.
+[dashboard]
+layout = "detailed"       # detailed | compact
+widgets = ["metrics", "activity", "interactions", "distribution", "recommendations", "upcoming", "news", "jobs"]
+metrics = ["found", "new", "news", "events", "courses", "jobs", "saved", "liked", "applied", "calendar"]
+recommendations = 10      # rows in the recommendations list (1-30)
+
+# Feed cards.
+[cards]
+show_source = true
+show_category = true
+show_meter = true
+# Facts under the title; leave one out to hide it.
+facts = ["when", "deadline", "pay", "organizer", "place", "modality", "cost", "perks", "topic", "skills", "links"]
+fact_order = "kind"       # kind (each card type's own order) | custom (order above)
+dates = "both"            # both | relative | absolute
+selection = "rail"        # rail | highlight
+
 # Sources. Each one is independent: if it fails, the others keep working.
 [[sources]]
 name = "freecodecamp-news"
