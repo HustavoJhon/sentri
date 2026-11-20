@@ -375,10 +375,7 @@ pub fn links(o: &Opportunity) -> Vec<&str> {
         "WhatsApp",
         "Meetup",
     ];
-    o.summary
-        .as_deref()
-        .unwrap_or("")
-        .lines()
+    segments(o)
         .filter_map(|line| {
             let (label, rest) = line.split_once(": ")?;
             let label = label.trim();
@@ -388,13 +385,20 @@ pub fn links(o: &Opportunity) -> Vec<&str> {
         .collect()
 }
 
-/// The description without the link lines [`links`] already shows.
-pub fn preview(o: &Opportunity) -> String {
-    let links = links(o);
+/// Description lines, also split on ` · ` (how older collections joined
+/// a description and its links on one line).
+fn segments(o: &Opportunity) -> impl Iterator<Item = &str> {
     o.summary
         .as_deref()
         .unwrap_or("")
         .lines()
+        .flat_map(|line| line.split(" · "))
+}
+
+/// The description without the link lines [`links`] already shows.
+pub fn preview(o: &Opportunity) -> String {
+    let links = links(o);
+    segments(o)
         .filter(|line| {
             line.split_once(": ")
                 .is_none_or(|(label, _)| !links.contains(&label.trim()))
@@ -1272,6 +1276,11 @@ mod tests {
             "⌂ Lima | rust · wasm | ↗ Website GitHub"
         );
         assert_eq!(preview(&community.item.opportunity), "Rustaceans in Lima. ");
+        // Collected before descriptions kept their lines.
+        community.item.opportunity.summary =
+            Some("Rustaceans in Lima · Website: https://r.pe · Discord: https://d.gg/r".into());
+        assert_eq!(links(&community.item.opportunity), ["Website", "Discord"]);
+        assert_eq!(preview(&community.item.opportunity), "Rustaceans in Lima");
 
         let mut contest = ranked("AI Hack", Category::Hackathon);
         let o = &mut contest.item.opportunity;
