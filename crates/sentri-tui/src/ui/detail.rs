@@ -511,6 +511,7 @@ pub fn side<'a>(
     r: &'a Ranked,
     detail: Option<&'a DetailData>,
     width: usize,
+    keys: String,
 ) -> Vec<Line<'a>> {
     let mut out = recommendation(theme, r, width);
     if let Some(d) = detail {
@@ -558,11 +559,33 @@ pub fn side<'a>(
         }
     }
     out.push(Line::default());
-    out.push(Line::from(Span::styled(
-        "E edit · l like · s save · d dismiss · p applied · a calendar · o open",
-        theme.muted(),
-    )));
+    out.push(Line::from(Span::styled(keys, theme.muted())));
     out
+}
+
+/// Item actions with their current keys (custom shortcuts included); the
+/// image viewer is offered only when there is an image to show.
+fn action_keys(state: &State, r: &Ranked) -> String {
+    use sentri_app::keys::KeyAction as A;
+    let o = &r.item.opportunity;
+    let mut actions = vec![
+        (A::Edit, "edit"),
+        (A::Like, "like"),
+        (A::Save, "save"),
+        (A::Dismiss, "dismiss"),
+        (A::Applied, "applied"),
+        (A::Schedule, "calendar"),
+        (A::Open, "open"),
+    ];
+    let image = o.image_url.as_deref().or(o.author.avatar_url.as_deref());
+    if state.ui.images != ImageMode::Off && state.image(image).is_some() {
+        actions.push((A::ViewImage, "enlarge image"));
+    }
+    actions
+        .into_iter()
+        .map(|(a, what)| format!("{} {what}", super::key_of(state, a)))
+        .collect::<Vec<_>>()
+        .join(" · ")
 }
 
 /// Draws the item's image (or a quiet loading line) at the top of `host`;
@@ -700,8 +723,14 @@ pub fn render(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
             main,
         );
         frame.render_widget(
-            Paragraph::new(side(theme, r, detail, usize::from(side_area.width)))
-                .wrap(Wrap { trim: false }),
+            Paragraph::new(side(
+                theme,
+                r,
+                detail,
+                usize::from(side_area.width),
+                action_keys(state, r),
+            ))
+            .wrap(Wrap { trim: false }),
             below(side_area, used),
         );
     } else {
@@ -716,7 +745,7 @@ pub fn render(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
         );
         let mut lines = body(theme, r, detail, now, width);
         lines.push(Line::default());
-        lines.extend(side(theme, r, detail, width));
+        lines.extend(side(theme, r, detail, width, action_keys(state, r)));
         frame.render_widget(
             Paragraph::new(lines)
                 .wrap(Wrap { trim: false })
