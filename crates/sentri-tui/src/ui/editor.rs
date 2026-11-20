@@ -8,7 +8,7 @@ use ratatui::widgets::{Clear, List, ListItem, ListState, Paragraph, Wrap};
 use sentri_core::FieldKind;
 
 use super::widgets::{centered, panel};
-use crate::state::editor::{EditorState, Row};
+use crate::state::editor::{EditorState, Row, inline};
 use crate::theme::Theme;
 
 fn row_line<'a>(theme: &Theme, e: &'a EditorState, row: Row) -> Line<'a> {
@@ -27,7 +27,7 @@ fn row_line<'a>(theme: &Theme, e: &'a EditorState, row: Row) -> Line<'a> {
             let shown = if matches!(field.kind(), FieldKind::Choice(_)) {
                 format!("‹ {shown} ›")
             } else {
-                shown.to_owned()
+                inline(shown)
             };
             (field.label().to_owned(), shown, marker)
         }
@@ -36,7 +36,7 @@ fn row_line<'a>(theme: &Theme, e: &'a EditorState, row: Row) -> Line<'a> {
             if e.notes.is_empty() {
                 "—".into()
             } else {
-                e.notes.clone()
+                inline(&e.notes)
             },
             Span::raw(""),
         ),
@@ -116,9 +116,9 @@ pub fn render(frame: &mut Frame, editor: &EditorState, theme: &Theme) {
             format!(
                 "Detected: {}",
                 if detected.is_empty() {
-                    "—"
+                    "—".to_owned()
                 } else {
-                    &detected
+                    inline(&detected)
                 }
             ),
             theme.muted(),
@@ -146,7 +146,11 @@ pub fn render(frame: &mut Frame, editor: &EditorState, theme: &Theme) {
     frame.render_widget(Paragraph::new(status).wrap(Wrap { trim: true }), input_area);
     frame.render_widget(
         Paragraph::new(Span::styled(
-            "Enter edit · ←/→ choose · r reset to detected · + custom field · x delete custom · Ctrl-s save · Esc cancel",
+            if editor.editing.is_some() {
+                "Enter apply · Esc cancel · ¶ separates paragraphs, ↵ breaks a line"
+            } else {
+                "Enter edit · ←/→ choose · r reset to detected · + custom field · x delete custom · Ctrl-s save · Esc cancel"
+            },
             theme.muted(),
         ))
         .wrap(Wrap { trim: true }),
