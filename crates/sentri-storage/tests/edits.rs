@@ -115,3 +115,39 @@ async fn annotations_round_trip() {
         vec![("mentor".to_owned(), "Rosa".to_owned())]
     );
 }
+
+#[tokio::test]
+async fn structured_descriptions_replace_flattened_ones_but_never_a_manual_one() {
+    let store = Store::in_memory().await.unwrap();
+    let mut first = opp("https://jobs.example/1", "Rust dev", Category::Job);
+    first.summary = Some("About us • Rust • SQL".into());
+    let id = store.upsert_opportunity(&first).await.unwrap().id();
+
+    // Same text, structure restored by a newer collector: upgraded.
+    let mut again = opp("https://jobs.example/1", "Rust dev", Category::Job);
+    again.summary = Some("About us\n\n• Rust\n• SQL".into());
+    store.upsert_opportunity(&again).await.unwrap();
+    assert_eq!(
+        store.get(id).await.unwrap().opportunity.summary.as_deref(),
+        Some("About us\n\n• Rust\n• SQL")
+    );
+
+    // Different text from another source: the known description stays.
+    let mut other = opp("https://jobs.example/1", "Rust dev", Category::Job);
+    other.summary = Some("Another text\n\n• Go".into());
+    store.upsert_opportunity(&other).await.unwrap();
+
+    // A manual description wins over anything collected later.
+    let mine = "My own notes\n\n1. Apply\n2. Follow up";
+    store
+        .set_overrides(id, &[(Field::Summary, mine.into())], now())
+        .await
+        .unwrap();
+    store.upsert_opportunity(&again).await.unwrap();
+    let state = store.edit_state(id).await.unwrap();
+    assert_eq!(state.effective.summary.as_deref(), Some(mine));
+    assert_eq!(
+        state.detected.summary.as_deref(),
+        Some("About us\n\n• Rust\n• SQL")
+    );
+}

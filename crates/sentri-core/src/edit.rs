@@ -413,6 +413,18 @@ pub fn apply_overrides<'a>(
     (effective.sanitized(), errors)
 }
 
+/// Equal once whitespace and list markers are ignored: `"a • b"` and
+/// `"a\n\n• b"` are the same description, one of them flattened.
+fn same_words(a: &str, b: &str) -> bool {
+    let words = |s: &str| -> Vec<String> {
+        s.split_whitespace()
+            .filter(|w| !matches!(*w, "•" | "-" | "*" | "·"))
+            .map(str::to_owned)
+            .collect()
+    };
+    words(a) == words(b)
+}
+
 /// Merges a new sighting into the detected snapshot: unknown fields are
 /// completed, known ones are kept, tags are united. Identity fields (URL,
 /// fingerprint, source, discovery date) never change.
@@ -422,11 +434,23 @@ pub fn merge_detected(base: &mut Opportunity, new: &Opportunity) {
             *slot = value.cloned();
         }
     }
-    fill(&mut base.summary, new.summary.as_ref());
+    // Long text: a known value is kept, unless the new sighting is the same
+    // text with its structure (paragraphs, list lines) restored.
+    fn fill_text(slot: &mut Option<String>, value: Option<&String>) {
+        let Some(value) = value else { return };
+        match slot {
+            None => *slot = Some(value.clone()),
+            Some(old) if !old.contains('\n') && value.contains('\n') && same_words(old, value) => {
+                *slot = Some(value.clone());
+            }
+            Some(_) => {}
+        }
+    }
+    fill_text(&mut base.summary, new.summary.as_ref());
     fill(&mut base.image_url, new.image_url.as_ref());
     fill(&mut base.location, new.location.as_ref());
     fill(&mut base.country, new.country.as_ref());
-    fill(&mut base.requirements, new.requirements.as_ref());
+    fill_text(&mut base.requirements, new.requirements.as_ref());
     fill(
         &mut base.dates.published_at,
         new.dates.published_at.as_ref(),
@@ -435,8 +459,8 @@ pub fn merge_detected(base: &mut Opportunity, new: &Opportunity) {
     fill(&mut base.dates.ends_at, new.dates.ends_at.as_ref());
     fill(&mut base.dates.deadline, new.dates.deadline.as_ref());
     fill(&mut base.perks.certificate, new.perks.certificate.as_ref());
-    fill(&mut base.perks.prizes, new.perks.prizes.as_ref());
-    fill(&mut base.perks.benefits, new.perks.benefits.as_ref());
+    fill_text(&mut base.perks.prizes, new.perks.prizes.as_ref());
+    fill_text(&mut base.perks.benefits, new.perks.benefits.as_ref());
     fill(
         &mut base.perks.travel_covered,
         new.perks.travel_covered.as_ref(),

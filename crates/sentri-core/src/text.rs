@@ -43,6 +43,42 @@ pub fn clean_opt(input: Option<&str>, max_chars: usize) -> Option<String> {
     input.map(|s| clean(s, max_chars)).filter(|s| !s.is_empty())
 }
 
+/// Like [`clean`], but keeps the structure of multi-line text: line breaks
+/// survive, runs of blank lines become one paragraph break, and spaces are
+/// collapsed only within each line. Used for descriptions, requirements and
+/// perks, where paragraphs and list items carry meaning.
+pub fn clean_block(input: &str, max_chars: usize) -> String {
+    let mut lines: Vec<String> = Vec::new();
+    let mut blank = false;
+    for raw in input.lines() {
+        let line = clean(raw, raw.len() + 1);
+        if line.is_empty() {
+            blank = !lines.is_empty();
+            continue;
+        }
+        if blank {
+            lines.push(String::new());
+            blank = false;
+        }
+        lines.push(line);
+    }
+    let joined = lines.join("\n");
+    if joined.chars().count() <= max_chars {
+        return joined;
+    }
+    let mut out: String = joined.chars().take(max_chars.saturating_sub(1)).collect();
+    out.truncate(out.trim_end().len());
+    out.push('…');
+    out
+}
+
+/// [`clean_block`] for optional fields; empty results become `None`.
+pub fn clean_block_opt(input: Option<&str>, max_chars: usize) -> Option<String> {
+    input
+        .map(|s| clean_block(s, max_chars))
+        .filter(|s| !s.is_empty())
+}
+
 /// Bidirectional overrides and zero-width characters can disguise text.
 fn is_invisible_format(ch: char) -> bool {
     matches!(ch, '\u{200B}'..='\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}' | '\u{FEFF}')
@@ -68,6 +104,22 @@ mod tests {
         assert_eq!(clean("abcdefgh", 5), "abcd…");
         assert_eq!(clean("abcde", 5), "abcde");
         assert_eq!(clean("ñandú ñandú", 7).chars().count(), 7);
+    }
+
+    #[test]
+    fn blocks_keep_paragraphs_and_lines() {
+        let input = "  Intro \t line \r\n\n\n\n• one\n•  two\u{1b}[2J\n\n  ";
+        assert_eq!(clean_block(input, 100), "Intro line\n\n• one\n• two[2J");
+        assert_eq!(clean_block("\n\n a \n", 100), "a");
+        assert_eq!(clean_block_opt(Some(" \n\n "), 10), None);
+    }
+
+    #[test]
+    fn blocks_truncate_by_characters() {
+        let out = clean_block("ñandú\n\nñandú ñandú", 9);
+        assert_eq!(out.chars().count(), 9, "{out:?}");
+        assert!(out.ends_with('…'));
+        assert_eq!(clean_block("ab\n\ncd", 4), "ab…");
     }
 
     #[test]

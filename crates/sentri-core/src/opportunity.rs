@@ -3,7 +3,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::text::{clean, clean_opt};
+use crate::text::{clean, clean_block_opt, clean_opt};
 use crate::{CanonicalUrl, Category, Modality, SourceKind};
 
 /// Maximum lengths applied to untrusted text fields.
@@ -309,15 +309,15 @@ impl Opportunity {
         }
         self.source_name = clean(&self.source_name, limits::SHORT);
         self.external_id = clean_opt(self.external_id.as_deref(), limits::SHORT);
-        self.summary = clean_opt(self.summary.as_deref(), limits::SUMMARY);
+        self.summary = clean_block_opt(self.summary.as_deref(), limits::SUMMARY);
         self.image_url = self
             .image_url
             .filter(|u| u.starts_with("https://") && u.len() < 2_048);
         self.location = clean_opt(self.location.as_deref(), limits::SHORT);
         self.country = clean_opt(self.country.as_deref(), limits::SHORT);
-        self.requirements = clean_opt(self.requirements.as_deref(), limits::LONG);
-        self.perks.prizes = clean_opt(self.perks.prizes.as_deref(), limits::LONG);
-        self.perks.benefits = clean_opt(self.perks.benefits.as_deref(), limits::LONG);
+        self.requirements = clean_block_opt(self.requirements.as_deref(), limits::LONG);
+        self.perks.prizes = clean_block_opt(self.perks.prizes.as_deref(), limits::LONG);
+        self.perks.benefits = clean_block_opt(self.perks.benefits.as_deref(), limits::LONG);
         if let Cost::Paid(price) = &mut self.cost {
             *price = clean_opt(price.as_deref(), limits::SHORT);
         }
