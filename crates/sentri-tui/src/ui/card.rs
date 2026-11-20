@@ -1284,7 +1284,7 @@ mod tests {
 
         let mut contest = ranked("AI Hack", Category::Hackathon);
         let o = &mut contest.item.opportunity;
-        o.dates.deadline = Some(now + Duration::days(5) + Duration::hours(1));
+        o.dates.deadline = Some(now + Duration::days(5));
         o.perks.prizes = Some("• USD 10,000 in cash for the three winning teams\n• Swag".into());
         o.modality = Modality::Online;
         let text = facts_text(&contest, &prefs);
@@ -1302,7 +1302,7 @@ mod tests {
         assert_eq!(facts_text(&course, &prefs), "Platzi | free | certificate");
 
         let mut cfp = ranked("Talks for PyCon", Category::CallForSpeakers);
-        cfp.item.opportunity.dates.deadline = Some(now + Duration::days(9) + Duration::hours(1));
+        cfp.item.opportunity.dates.deadline = Some(now + Duration::days(9));
         assert!(facts_text(&cfp, &prefs).starts_with("⏳ CFP closes in 9d"));
     }
 
@@ -1311,7 +1311,7 @@ mod tests {
         let now = Utc::now();
         let mut r = ranked("Meetup", Category::Meetup);
         let o = &mut r.item.opportunity;
-        o.dates.starts_at = Some(now + Duration::days(3) + Duration::hours(1));
+        o.dates.starts_at = Some(now + Duration::days(3));
         o.author.name = Some("GDG Lima".into());
         o.location = Some("Lima".into());
         let mut prefs = CardPrefs::default();

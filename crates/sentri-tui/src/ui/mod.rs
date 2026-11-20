@@ -432,7 +432,7 @@ mod tests {
         );
         o.category = Category::Hackathon;
         o.location = Some("Cusco".into());
-        o.dates.deadline = Some(Utc::now() + Duration::days(5) + Duration::hours(1));
+        o.dates.deadline = Some(Utc::now() + Duration::days(5));
         o.perks.travel_covered = Some(true);
         Ranked {
             item: FeedItem {

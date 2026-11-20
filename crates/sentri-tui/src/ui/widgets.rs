@@ -1,6 +1,6 @@
 //! Small rendering helpers shared by every view.
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Local, NaiveDate, Utc};
 use ratatui::layout::{Constraint, Flex, Layout, Rect};
 use ratatui::style::{Color, Style};
 use ratatui::text::Span;
@@ -38,14 +38,27 @@ pub fn score_pill(theme: &Theme, score: i32) -> Span<'static> {
     )
 }
 
-/// "today", "in 3d", "2d ago", or a date when far away.
+/// "today", "tomorrow", "in 3d", "2d ago", or a date when far away.
+/// Days are calendar days in local time (all-day dates keep their own day),
+/// so 08:00 tomorrow is "tomorrow" even when it is less than 24 hours away.
 pub fn relative(date: DateTime<Utc>, now: DateTime<Utc>) -> String {
-    let days = (date - now).num_days();
+    relative_in(date, now, |d| d.with_timezone(&Local).date_naive())
+}
+
+fn relative_in(
+    date: DateTime<Utc>,
+    now: DateTime<Utc>,
+    local: impl Fn(DateTime<Utc>) -> NaiveDate,
+) -> String {
+    let day = sentri_core::dates::calendar_date(date, &local);
+    let days = (day - local(now)).num_days();
     match days {
-        0 if date >= now => "today".into(),
+        0 if date >= now || sentri_core::dates::is_all_day(date) => "today".into(),
         0 => "earlier today".into(),
-        1..=60 => format!("in {days}d"),
-        -60..=-1 => format!("{}d ago", -days),
+        1 => "tomorrow".into(),
+        -1 => "yesterday".into(),
+        2..=60 => format!("in {days}d"),
+        -60..=-2 => format!("{}d ago", -days),
         _ => date.format("%Y-%m-%d").to_string(),
     }
 }
@@ -92,17 +105,24 @@ mod tests {
     use chrono::Duration;
 
     #[test]
-    fn relative_dates() {
-        let now = Utc::now();
-        assert_eq!(relative(now + Duration::hours(2), now), "today");
+    fn relative_dates_count_calendar_days() {
+        use chrono::TimeZone;
+        let utc = |d: DateTime<Utc>| d.date_naive();
+        let at = |d: u32, h: u32, m: u32| Utc.with_ymd_and_hms(2026, 11, d, h, m, 1).unwrap();
+        let now = at(20, 17, 0);
+        assert_eq!(relative_in(at(20, 20, 0), now, utc), "today");
+        assert_eq!(relative_in(at(20, 9, 0), now, utc), "earlier today");
         assert_eq!(
-            relative(now + Duration::days(3) + Duration::hours(1), now),
-            "in 3d"
+            relative_in(at(21, 8, 0), now, utc),
+            "tomorrow",
+            "15 hours away, but tomorrow"
         );
-        assert_eq!(
-            relative(now - Duration::days(2) - Duration::hours(1), now),
-            "2d ago"
-        );
+        assert_eq!(relative_in(at(19, 23, 0), now, utc), "yesterday");
+        assert_eq!(relative_in(at(23, 1, 0), now, utc), "in 3d");
+        assert_eq!(relative_in(at(18, 23, 0), now, utc), "2d ago");
+        // All-day dates (midnight UTC) are today all day long.
+        let all_day = Utc.with_ymd_and_hms(2026, 11, 20, 0, 0, 0).unwrap();
+        assert_eq!(relative_in(all_day, now, utc), "today");
     }
 
     #[test]
@@ -116,10 +136,7 @@ mod tests {
             distance(now + Duration::days(90) + Duration::hours(1), now),
             "in 90d"
         );
-        assert_eq!(
-            distance(now + Duration::days(3) + Duration::hours(1), now),
-            "in 3d"
-        );
+        assert_eq!(distance(now + Duration::days(3), now), "in 3d");
     }
 
     #[test]
