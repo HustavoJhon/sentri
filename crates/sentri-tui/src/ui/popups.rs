@@ -47,12 +47,77 @@ fn confirm_quit(frame: &mut Frame, area: ratatui::layout::Rect, theme: &Theme) {
     );
 }
 
+/// The selected item's image, as large as the screen allows, with an honest
+/// note on how it is drawn.
+fn image_viewer(
+    frame: &mut Frame,
+    area: Rect,
+    state: &State,
+    theme: &Theme,
+    url: &str,
+    title: &str,
+) {
+    use crate::graphics::{Backend, Fit};
+    frame.render_widget(Clear, area);
+    let block = panel(theme, title, true);
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+    let [picture, foot] =
+        Layout::vertical([Constraint::Min(1), Constraint::Length(1)]).areas(inner);
+    let Some(image) = state.image(Some(url)) else {
+        frame.render_widget(
+            Paragraph::new(Span::styled(
+                "The image is no longer in memory.",
+                theme.muted(),
+            )),
+            picture,
+        );
+        return;
+    };
+    let used = state.graphics.draw(
+        frame.buffer_mut(),
+        picture,
+        &format!("viewer:{url}"),
+        image,
+        Fit::Contain,
+        state.ui.images,
+        state.ui.indexed_colors,
+    );
+    let how = match state.graphics.renderer(state.ui.images) {
+        Backend::Text if state.ui.images == sentri_app::ImageMode::Ascii => {
+            "ASCII preview".to_owned()
+        }
+        Backend::Text => "half-block preview: this terminal has no graphics protocol".to_owned(),
+        backend => backend.label().to_owned(),
+    };
+    let mut spans = vec![
+        Span::styled(" Esc ", theme.key()),
+        Span::styled(" close  ", theme.muted()),
+        Span::styled(
+            format!("{}×{} px", image.width(), image.height()),
+            Style::new().fg(theme.p.fg4),
+        ),
+        Span::styled(format!(" · {how}"), theme.muted()),
+    ];
+    if used.height == 0 {
+        spans.push(Span::styled(" · too small to draw here", theme.warn()));
+    }
+    frame.render_widget(
+        Paragraph::new(Line::from(super::card::truncate(
+            spans,
+            usize::from(foot.width),
+        ))),
+        foot,
+    );
+}
+
 pub fn render(frame: &mut Frame, state: &State, theme: &Theme) {
     let area = frame.area();
     match &state.mode {
         Mode::Normal | Mode::Editor(_) => {}
         Mode::Help => help(frame, area, state, theme),
         Mode::ConfirmQuit => confirm_quit(frame, area, theme),
+        Mode::ImageViewer { url, title } => image_viewer(frame, area, state, theme, url, title),
         Mode::Palette { input, selected } => palette(frame, area, state, theme, input, *selected),
         Mode::Search(input) => prompt(
             frame,

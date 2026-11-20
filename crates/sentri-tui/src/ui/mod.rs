@@ -265,7 +265,7 @@ fn draw_sidebar(frame: &mut Frame, area: Rect, state: &mut State, theme: &Theme)
 }
 
 /// Key currently bound to `action` (custom shortcuts included).
-fn key_of(state: &State, action: KeyAction) -> String {
+pub(super) fn key_of(state: &State, action: KeyAction) -> String {
     state
         .keymap
         .iter()
@@ -715,6 +715,29 @@ mod tests {
                     }
                 }
             }
+        }
+    }
+
+    #[test]
+    fn image_viewer_says_how_it_draws() {
+        let thumb = sentri_app::Thumbnail::from_pixels(4, 2, &[[200, 120, 40]; 8]).unwrap();
+        for (w, h) in [(60, 20), (170, 45)] {
+            let mut state = State::default();
+            state.on_msg(Msg::Loaded(vec![sample()]));
+            let url = "https://img.example/a.png".to_owned();
+            state.on_msg(Msg::Image(url.clone(), Some(thumb.clone())));
+            state.mode = crate::state::Mode::ImageViewer {
+                url,
+                title: "Poster".into(),
+            };
+            let screen = render(w, h, &mut state);
+            assert!(screen.contains("Poster"), "{screen}");
+            assert!(screen.contains("Esc"), "{screen}");
+            assert!(screen.contains("4×2 px"), "{screen}");
+            if w > 100 {
+                assert!(screen.contains("no graphics protocol"), "{screen}");
+            }
+            assert!(screen.contains('▀'), "image drawn: {screen}");
         }
     }
 

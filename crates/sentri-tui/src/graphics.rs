@@ -214,6 +214,16 @@ impl Graphics {
         }
     }
 
+    /// What actually draws images in `mode` (half blocks and ASCII never use
+    /// a graphics protocol, even when the terminal has one).
+    pub fn renderer(&self, mode: ImageMode) -> Backend {
+        if self.picker_for(mode).is_some() {
+            self.backend()
+        } else {
+            Backend::Text
+        }
+    }
+
     /// The renderer used for `mode`: half blocks and ASCII always draw with
     /// characters, even in a terminal that supports graphics.
     fn picker_for(&self, mode: ImageMode) -> Option<&Picker> {

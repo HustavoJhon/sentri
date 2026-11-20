@@ -340,6 +340,11 @@ pub enum Mode {
     Editor(Box<EditorState>),
     /// Quitting with unsaved settings: asks before discarding them.
     ConfirmQuit,
+    /// The selected item's image, as large as the terminal allows.
+    ImageViewer {
+        url: String,
+        title: String,
+    },
 }
 
 /// Severity of a status-bar message.
@@ -931,6 +936,19 @@ impl State {
                 Vec::new()
             }
             Mode::ConfirmQuit => self.on_confirm_quit_key(key),
+            Mode::ImageViewer { .. } => {
+                // The viewer closes back to where it was opened; other keys
+                // are ignored so nothing changes behind it.
+                if matches!(
+                    key.code,
+                    KeyCode::Esc | KeyCode::Enter | KeyCode::Backspace | KeyCode::Char('q' | 'z')
+                ) || key_spec(key).and_then(|k| self.keymap.get(&k))
+                    == Some(&KeyAction::ViewImage)
+                {
+                    self.mode = Mode::Normal;
+                }
+                Vec::new()
+            }
             Mode::Search(input) => self.on_search_key(input, key),
             Mode::AddLink(input) => self.on_add_key(input, key),
             Mode::Palette { input, selected } => self.on_palette_key(input, selected, key),
@@ -1196,6 +1214,7 @@ impl State {
             KeyAction::Open => selected(self, |r| {
                 Effect::OpenUrl(r.item.opportunity.original_url.clone())
             }),
+            KeyAction::ViewImage => self.open_image_viewer(),
             KeyAction::AddLink => self.run_command(Command::AddLink),
             KeyAction::Search => self.run_command(Command::Search),
             KeyAction::Palette => {
@@ -1334,6 +1353,42 @@ impl State {
             }
         }
         effects
+    }
+
+    /// Opens the image viewer for the selected item, or says why it cannot.
+    fn open_image_viewer(&mut self) -> Vec<Effect> {
+        let Some(item) = self.selected_item() else {
+            return Vec::new();
+        };
+        let o = &item.item.opportunity;
+        let title = o.title.clone();
+        let Some(url) = o.image_url.clone().or_else(|| o.author.avatar_url.clone()) else {
+            self.info("This item has no image.", Level::Info);
+            return Vec::new();
+        };
+        if self.ui.images == ImageMode::Off {
+            self.info("Images are off (Settings → Images).", Level::Info);
+            return Vec::new();
+        }
+        match self.images.get(&url) {
+            Some(ImageSlot::Ready(_)) => {
+                self.mode = Mode::ImageViewer { url, title };
+                Vec::new()
+            }
+            Some(ImageSlot::Loading) => {
+                self.info("The image is still loading.", Level::Info);
+                Vec::new()
+            }
+            Some(ImageSlot::Failed) => {
+                self.info("This image could not be loaded.", Level::Error);
+                Vec::new()
+            }
+            None => {
+                self.images.insert(url.clone(), ImageSlot::Loading);
+                self.info("Loading image… press z again when it appears.", Level::Info);
+                vec![Effect::LoadImage(url)]
+            }
+        }
     }
 
     /// Details for the selected item, if already loaded.
@@ -1515,6 +1570,43 @@ mod tests {
         let mut state = State::default();
         state.on_msg(Msg::Loaded((1..=n).map(ranked).collect()));
         state
+    }
+
+    #[test]
+    fn image_viewer_opens_only_with_a_ready_image_and_closes_in_place() {
+        let mut s = loaded(3);
+        s.keymap = keymap(&std::collections::BTreeMap::new());
+        s.on_key(key(KeyCode::Down));
+        s.on_key(key(KeyCode::Char('z')));
+        assert_eq!(s.mode, Mode::Normal);
+        assert!(s.message.as_ref().unwrap().0.contains("no image"));
+
+        let url = "https://img.example/2.png".to_owned();
+        s.items[1].item.opportunity.image_url = Some(url.clone());
+        let effects = s.on_key(key(KeyCode::Char('z')));
+        assert_eq!(
+            effects,
+            vec![Effect::LoadImage(url.clone())],
+            "fetched on demand"
+        );
+        assert_eq!(s.mode, Mode::Normal);
+        s.on_key(key(KeyCode::Char('z')));
+        assert!(s.message.as_ref().unwrap().0.contains("still loading"));
+
+        let thumb = sentri_app::Thumbnail::from_pixels(2, 2, &[[9, 9, 9]; 4]).unwrap();
+        s.on_msg(Msg::Image(url.clone(), Some(thumb)));
+        s.on_key(key(KeyCode::Char('z')));
+        assert!(matches!(&s.mode, Mode::ImageViewer { url: u, .. } if *u == url));
+        s.on_key(key(KeyCode::Char('j')));
+        assert_eq!(s.selected, 1, "keys behind the viewer do nothing");
+        s.on_key(key(KeyCode::Esc));
+        assert_eq!(s.mode, Mode::Normal);
+        assert_eq!(s.selected, 1, "context preserved");
+
+        s.ui.images = ImageMode::Off;
+        s.on_key(key(KeyCode::Char('z')));
+        assert_eq!(s.mode, Mode::Normal);
+        assert!(s.message.as_ref().unwrap().0.contains("Images are off"));
     }
 
     #[test]
