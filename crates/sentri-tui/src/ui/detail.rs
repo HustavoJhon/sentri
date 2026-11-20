@@ -278,8 +278,11 @@ fn dates(out: &mut Vec<Line<'_>>, theme: &Theme, o: &Opportunity, now: DateTime<
 
 fn place<'a>(out: &mut Vec<Line<'a>>, theme: &Theme, o: &'a Opportunity) {
     let mut where_ = Vec::new();
-    if let Some(location) = &o.location {
-        where_.push(location.as_str());
+    // "Remote" as a place only repeats the modality line below.
+    let remote =
+        |l: &str| o.modality == Modality::Online && l.trim().eq_ignore_ascii_case("remote");
+    if let Some(location) = o.location.as_deref().filter(|l| !remote(l)) {
+        where_.push(location);
     }
     if let Some(country) = o
         .country
