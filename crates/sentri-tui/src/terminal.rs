@@ -47,6 +47,16 @@ impl Emulator {
         }
     }
 
+    /// The graphics protocol SENTRI has verified with this emulator, used
+    /// to suggest `images = "auto"` when the configuration turns it off.
+    pub const fn verified_graphics(self) -> Option<&'static str> {
+        match self {
+            Self::Kitty => Some("the Kitty graphics protocol"),
+            Self::Foot => Some("Sixel"),
+            _ => None,
+        }
+    }
+
     /// What this emulator is documented to support, when it is known for
     /// sure; `None` when it depends on the version or build.
     pub const fn known_graphics(self) -> Option<&'static str> {
@@ -228,8 +238,19 @@ impl Diagnosis {
         Some(match self.mode {
             ImageMode::Off => "images are turned off (images = \"off\")".into(),
             ImageMode::Halfblock | ImageMode::Ascii => {
-                "the configuration asks for character images (images = \"halfblock\" or \"ascii\")"
-                    .into()
+                let mode = if self.mode == ImageMode::Ascii {
+                    "ascii"
+                } else {
+                    "halfblock"
+                };
+                let mut text = format!(
+                    "the configuration asks for character images (images = \"{mode}\"), so the \
+                     terminal is not asked"
+                );
+                if let Some(native) = self.native_hint() {
+                    let _ = write!(text, "; {native}");
+                }
+                text
             }
             _ if self.tmux.is_some_and(|t| !t.passthrough) => {
                 "tmux does not forward graphics to the terminal; add `set -g allow-passthrough on` \
@@ -259,6 +280,20 @@ impl Diagnosis {
                 text
             }
         })
+    }
+
+    /// When the configuration forces character images in a terminal whose
+    /// real graphics SENTRI has verified: how to turn them on. Outside tmux
+    /// only (inside it, the terminal cannot be identified for sure).
+    pub fn native_hint(&self) -> Option<String> {
+        if !matches!(self.mode, ImageMode::Halfblock | ImageMode::Ascii) || self.tmux.is_some() {
+            return None;
+        }
+        let protocol = self.emulator.verified_graphics()?;
+        Some(format!(
+            "{} can show real images with {protocol}: set images = \"auto\" (Settings › Images) and restart",
+            self.emulator.name()
+        ))
     }
 
     /// What is drawn instead of real pixels.
@@ -355,6 +390,40 @@ mod tests {
         assert_eq!(emulator_named("gnome-terminal-"), Some(Emulator::Vte));
         assert_eq!(emulator_named("zsh"), None);
         assert_eq!(emulator_named("tmux: server"), None);
+    }
+
+    #[test]
+    fn forced_half_blocks_in_a_graphics_terminal_suggest_auto() {
+        let kitty = Diagnosis {
+            emulator: Emulator::Kitty,
+            mode: ImageMode::Halfblock,
+            ..Diagnosis::default()
+        };
+        let why = kitty.reason().unwrap();
+        assert!(why.contains("images = \"halfblock\""), "{why}");
+        assert!(why.contains("set images = \"auto\""), "{why}");
+        assert!(
+            kitty
+                .native_hint()
+                .unwrap()
+                .starts_with("kitty can show real images")
+        );
+        let alacritty = Diagnosis {
+            emulator: Emulator::Alacritty,
+            mode: ImageMode::Halfblock,
+            ..Diagnosis::default()
+        };
+        assert_eq!(alacritty.native_hint(), None, "nothing better to offer");
+        let in_tmux = Diagnosis {
+            tmux: Some(Tmux { passthrough: true }),
+            ..kitty.clone()
+        };
+        assert_eq!(in_tmux.native_hint(), None);
+        let auto = Diagnosis {
+            mode: ImageMode::Auto,
+            ..kitty
+        };
+        assert_eq!(auto.native_hint(), None);
     }
 
     #[test]
