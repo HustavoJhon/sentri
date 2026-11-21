@@ -47,8 +47,12 @@ Hecho:
 - `AI_USAGE.md`, README en inglés (`README.md`) y español (`README.es.md`).
 - La card de perfil oculta direcciones IP de los campos públicos de GitHub.
 
-Pendiente: probar Kitty en una terminal kitty real (y dentro de tmux), y el
-redibujado al cambiar el tamaño con imágenes Sixel o Kitty en pantalla.
+Validación posterior: protocolo de Kitty probado en kitty 0.49 directamente y
+dentro de tmux (imágenes, visor, navegación, cambio de tamaño, salida limpia).
+Las imágenes que se veían pixeladas en kitty venían de `images = "halfblock"`
+en una configuración antigua; ahora SENTRI lo avisa.
+
+Pendiente: cambiar el tamaño con imágenes Sixel en pantalla.
 
 ## Fase 10 de UX: dashboard, Details e identidad visual (2026-11-20)
 

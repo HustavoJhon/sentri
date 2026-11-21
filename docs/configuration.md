@@ -222,6 +222,11 @@ Images in this terminal
   Fallback      half blocks (▀): two colored pixels per cell
 ```
 
+Si `images` es `halfblock` o `ascii` (los archivos de configuración antiguos
+traían `halfblock`) y la terminal es kitty o foot, SENTRI avisa al abrir, en
+Settings y en `sentri terminal` de que puede mostrar imágenes reales con
+`images = "auto"`.
+
 Qué se probó en terminales reales y qué falta: ver la tabla de
 [README.md](../README.md#terminal-images).
 
