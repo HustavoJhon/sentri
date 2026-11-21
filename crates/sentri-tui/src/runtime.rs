@@ -71,6 +71,7 @@ async fn event_loop(
         },
         ..State::default()
     };
+    state.announce_graphics();
     execute(&app, &state, Effect::Load, &config_path, &msg_tx);
     execute(&app, &state, Effect::LoadProfile, &config_path, &msg_tx);
 

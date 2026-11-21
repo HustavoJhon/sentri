@@ -343,6 +343,15 @@ impl Graphics {
         graphics.diagnosis
     }
 
+    /// Character images with a given diagnosis (tests).
+    #[cfg(test)]
+    pub fn text_with(diagnosis: Diagnosis) -> Self {
+        Self {
+            diagnosis,
+            ..Self::text()
+        }
+    }
+
     /// How the renderer was chosen.
     pub const fn diagnosis(&self) -> &Diagnosis {
         &self.diagnosis
