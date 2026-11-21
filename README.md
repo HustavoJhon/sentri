@@ -265,17 +265,22 @@ is drawing with, and why.
 | Alacritty 0.17 | none (Alacritty supports neither Kitty graphics nor Sixel) | ✅ Detection and half-block fallback |
 | tmux 3.8 inside foot, `allow-passthrough on` | Sixel is detected but **not used**: tmux cannot place Sixel images reliably, so `auto` uses half blocks | ✅ Large images and the full-screen viewer drew correctly, but small ones landed in the wrong place; fallback, navigation and clean exit checked |
 | tmux without `allow-passthrough` | none: graphics cannot reach the terminal | ✅ Half blocks, no keys lost at startup |
-| kitty | Kitty graphics protocol (kitty has no Sixel) | ⏳ Not yet verified in a real kitty terminal |
+| kitty 0.49 | Kitty graphics protocol (kitty has no Sixel) | ✅ Detection, details image, avatar, full-screen viewer, navigation, redraw after resizing, `sentri terminal` |
+| tmux 3.8 inside kitty, `allow-passthrough on` | Kitty graphics protocol, through Unicode placeholders | ✅ Detection, images in the right place, navigation, full-screen viewer, clean exit with no images left behind |
 | WezTerm, Ghostty, iTerm2, Konsole, Windows Terminal | depends on the terminal | ⏳ Not tested; `ratatui-image` supports Kitty, Sixel and iTerm2 images |
 
 Notes:
 
-- Redrawing after a resize (170×45 → 60×20 → 120×30) was checked in tmux
-  with half blocks; resizing while Sixel or Kitty images are shown has not
-  been checked yet.
+- Resizing was checked in kitty with images on screen (129×66 → 68×39 →
+  150×76 columns: images are redrawn at the new size) and in tmux with half
+  blocks. Resizing while Sixel images are shown has not been checked.
 - Kitty images inside tmux use Unicode placeholders, which tmux keeps in
   place; they need `set -g allow-passthrough on` in `~/.tmux.conf`. SENTRI
   never changes your tmux settings.
+- **Seeing blocky images in kitty or foot?** Check `images` in your
+  `config.toml`: older configuration files set `images = "halfblock"`, which
+  never asks the terminal. SENTRI says so at startup, in Settings and in
+  `sentri terminal`; set `images = "auto"` and restart.
 - `images = "kitty"`, `"sixel"` or `"iterm2"` forces a protocol (for example
   Sixel inside tmux, at your own risk). `"halfblock"`, `"ascii"` and `"off"`
   never use one.
