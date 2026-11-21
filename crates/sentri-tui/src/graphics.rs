@@ -18,11 +18,13 @@ use image::imageops::FilterType;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Rect, Size};
 use ratatui::widgets::Widget;
+use ratatui_image::picker::cap_parser::QueryStdioOptions;
 use ratatui_image::picker::{Picker, ProtocolType};
 use ratatui_image::protocol::Protocol;
 use ratatui_image::{FontSize, Resize};
 use sentri_app::{ImageMode, Thumbnail};
 
+use crate::terminal::{self, Diagnosis};
 use crate::ui::image::{cell_pixels, fitted, paint};
 
 /// Drawn variants kept in memory (each one is a few hundred KB at most).
@@ -99,6 +101,8 @@ impl Cache {
 pub struct Graphics {
     picker: Option<Picker>,
     cache: RefCell<Cache>,
+    /// How the renderer was chosen, for Settings and `sentri terminal`.
+    diagnosis: Diagnosis,
 }
 
 impl std::fmt::Debug for Graphics {
@@ -122,6 +126,7 @@ impl Clone for Graphics {
         Self {
             picker: self.picker.clone(),
             cache: RefCell::default(),
+            diagnosis: self.diagnosis.clone(),
         }
     }
 }
@@ -137,20 +142,17 @@ const fn wanted(mode: ImageMode) -> Option<ProtocolType> {
 }
 
 /// Whether a mode needs the terminal to be asked about graphics.
-/// Whether tmux forwards escape sequences to the outer terminal
-/// (`set -g allow-passthrough on`), which graphics protocols need.
-fn tmux_passthrough() -> bool {
-    std::process::Command::new("tmux")
-        .args(["show-options", "-pqv", "allow-passthrough"])
-        .output()
-        .ok()
-        .filter(|o| o.status.success())
-        .is_some_and(|o| passthrough_enabled(&String::from_utf8_lossy(&o.stdout)))
-}
+/// Long enough for a reply over a slow SSH link; terminals that answer do
+/// so in a few milliseconds, and the wait only matters when none does.
+const PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(800);
 
-/// `on` and `all` forward sequences; empty or `off` do not.
-fn passthrough_enabled(value: &str) -> bool {
-    matches!(value.trim(), "on" | "all")
+const fn backend_of(protocol: ProtocolType) -> Backend {
+    match protocol {
+        ProtocolType::Kitty => Backend::Kitty,
+        ProtocolType::Sixel => Backend::Sixel,
+        ProtocolType::Iterm2 => Backend::Iterm2,
+        ProtocolType::Halfblocks => Backend::Text,
+    }
 }
 
 /// After a timed-out query, `ratatui-image` leaves a thread reading stdin
@@ -179,6 +181,7 @@ impl Graphics {
         Self {
             picker: None,
             cache: RefCell::default(),
+            diagnosis: Diagnosis::default(),
         }
     }
 
@@ -191,10 +194,13 @@ impl Graphics {
         #[allow(deprecated)] // the documented way to build a picker without a terminal
         let mut picker = Picker::from_fontsize(FontSize::from(cell));
         picker.set_protocol_type(protocol);
-        Self {
+        let mut graphics = Self {
             picker: Some(picker),
             cache: RefCell::default(),
-        }
+            diagnosis: Diagnosis::default(),
+        };
+        graphics.diagnosis.active = graphics.backend();
+        graphics
     }
 
     /// Asks the terminal what it supports. Must run after entering the
@@ -202,16 +208,35 @@ impl Graphics {
     /// protocol (`kitty`, `sixel`, `iterm2`) is used even when the terminal
     /// does not announce it, which helps inside tmux or over SSH.
     pub fn detect(mode: ImageMode) -> Self {
+        let mut diagnosis = Diagnosis {
+            emulator: terminal::emulator(),
+            term: std::env::var("TERM").unwrap_or_default(),
+            tmux: terminal::tmux(),
+            mode,
+            ..Diagnosis::default()
+        };
+        let quiet = |diagnosis: Diagnosis| Self {
+            diagnosis,
+            ..Self::text()
+        };
         if !wants_probe(mode) {
-            return Self::text();
+            return quiet(diagnosis);
         }
-        if std::env::var_os("TMUX").is_some() && !tmux_passthrough() {
+        if diagnosis.tmux.is_some_and(|t| !t.passthrough) {
             // Graphics cannot reach the outer terminal, and the unanswered
             // query would leave a thread reading the first keys typed.
             tracing::debug!("tmux without allow-passthrough; using half blocks");
-            return Self::text();
+            return quiet(diagnosis);
         }
-        let picker = Picker::from_query_stdio();
+        if !std::io::IsTerminal::is_terminal(&std::io::stdout()) {
+            return quiet(diagnosis);
+        }
+        diagnosis.probed = true;
+        let options = QueryStdioOptions {
+            timeout: PROBE_TIMEOUT,
+            ..QueryStdioOptions::default()
+        };
+        let picker = Picker::from_query_stdio_with_options(options);
         // A timed-out query also returns a (fallback) picker, so the reader
         // thread is released either way; the runtime discards the reply.
         release_probe();
@@ -219,13 +244,16 @@ impl Graphics {
             Ok(picker) => picker,
             Err(error) => {
                 tracing::debug!(%error, "terminal graphics query failed; using half blocks");
-                return Self::text();
+                return quiet(diagnosis);
             }
         };
-        Self::from_picker(picker, mode)
+        diagnosis.detected = Some(backend_of(picker.protocol_type()));
+        let font = picker.font_size();
+        diagnosis.cell = Some((font.width, font.height));
+        Self::from_picker(picker, mode, diagnosis)
     }
 
-    fn from_picker(mut picker: Picker, mode: ImageMode) -> Self {
+    fn from_picker(mut picker: Picker, mode: ImageMode, mut diagnosis: Diagnosis) -> Self {
         if let Some(protocol) = wanted(mode) {
             picker.set_protocol_type(protocol);
         }
@@ -235,22 +263,29 @@ impl Graphics {
             tmux = picker.tmux_detected(),
             "terminal graphics"
         );
+        diagnosis.active = backend_of(picker.protocol_type());
         if picker.protocol_type() == ProtocolType::Halfblocks {
-            return Self::text();
+            return Self {
+                diagnosis,
+                ..Self::text()
+            };
         }
         Self {
             picker: Some(picker),
             cache: RefCell::default(),
+            diagnosis,
         }
     }
 
+    /// How the renderer was chosen.
+    pub const fn diagnosis(&self) -> &Diagnosis {
+        &self.diagnosis
+    }
+
     pub fn backend(&self) -> Backend {
-        match self.picker.as_ref().map(Picker::protocol_type) {
-            Some(ProtocolType::Kitty) => Backend::Kitty,
-            Some(ProtocolType::Sixel) => Backend::Sixel,
-            Some(ProtocolType::Iterm2) => Backend::Iterm2,
-            Some(ProtocolType::Halfblocks) | None => Backend::Text,
-        }
+        self.picker
+            .as_ref()
+            .map_or(Backend::Text, |p| backend_of(p.protocol_type()))
     }
 
     /// What actually draws images in `mode` (half blocks and ASCII never use
@@ -395,14 +430,6 @@ fn encode(picker: &Picker, image: &Thumbnail, area: Rect, fit: Fit) -> Variant {
 mod tests {
     use super::*;
 
-    #[test]
-    fn tmux_passthrough_values() {
-        assert!(passthrough_enabled("on\n"));
-        assert!(passthrough_enabled("all"));
-        assert!(!passthrough_enabled("off"));
-        assert!(!passthrough_enabled(""));
-    }
-
     fn stripes(width: u32, height: u32) -> Thumbnail {
         let pixels: Vec<[u8; 3]> = (0..width * height)
             .map(|i| {
@@ -440,11 +467,11 @@ mod tests {
         #[allow(deprecated)]
         let picker = Picker::from_fontsize(FontSize::new(8, 16));
         assert_eq!(
-            Graphics::from_picker(picker.clone(), ImageMode::Sixel).backend(),
+            Graphics::from_picker(picker.clone(), ImageMode::Sixel, Diagnosis::default()).backend(),
             Backend::Sixel
         );
         assert_eq!(
-            Graphics::from_picker(picker, ImageMode::Auto).backend(),
+            Graphics::from_picker(picker, ImageMode::Auto, Diagnosis::default()).backend(),
             Backend::Text,
             "no protocol announced: half blocks"
         );
