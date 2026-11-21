@@ -175,18 +175,60 @@ protocolo gráfico entiende y el tamaño de cada celda en píxeles:
 
 | Protocolo | Terminales | Calidad |
 |---|---|---|
-| Kitty | kitty, Ghostty, WezTerm | píxeles reales |
-| Sixel | foot, Windows Terminal, xterm (`-ti vt340`), Konsole, tmux ≥ 3.4 con sixel | píxeles reales |
-| iTerm2 | iTerm2, WezTerm | píxeles reales |
+| Kitty | kitty, Ghostty | píxeles reales |
+| Sixel | foot, Windows Terminal, xterm (`-ti vt340`) | píxeles reales |
+| iTerm2 | iTerm2, WezTerm y Konsole (`ratatui-image` prefiere este protocolo en las dos últimas) | píxeles reales |
 | Medios bloques | cualquier terminal truecolor o de 256 colores, SSH, consola | 2 píxeles por celda |
 
+La tabla resume lo que cada terminal declara soportar; kitty no tiene Sixel y
+Alacritty no tiene ninguno de los dos. Lo que se probó con SENTRI en
+terminales reales está en el [README](../README.md#terminal-images).
+
 Si la terminal no responde o no anuncia ninguno, se usan medios bloques (`▀`).
-Dentro de tmux sin `allow-passthrough` la consulta no llega a la terminal
-exterior, así que se usan medios bloques sin preguntar.
-`kitty`, `sixel` o `iterm2` fuerzan un protocolo aunque no se anuncie (útil
-dentro de tmux con `set -g allow-passthrough on`). `halfblock` y `ascii`
-dibujan siempre con caracteres. Cambiar a un protocolo desde Settings requiere
-reiniciar la TUI si se abrió con `halfblock`, `ascii` u `off`.
+La consulta espera como máximo 0,8 s; después, SENTRI descarta las respuestas
+tardías para que nunca se confundan con teclas.
+
+**tmux.** Los gráficos solo llegan a la terminal exterior con
+`set -g allow-passthrough on` (también se respeta si está en la ventana o el
+panel). Sin él, SENTRI no pregunta y usa medios bloques. SENTRI nunca cambia
+esa opción por ti. Con passthrough, `auto` usa Kitty (sus imágenes usan
+marcadores Unicode que tmux mueve con el texto), pero **no Sixel ni iTerm2**:
+tmux no sabe dónde quedan esas imágenes y aparecen en el lugar equivocado
+(comprobado en foot + tmux 3.8). Para usarlas igualmente, fuérzalas con
+`images = "sixel"` o `"iterm2"`.
+
+`kitty`, `sixel` o `iterm2` fuerzan un protocolo aunque no se anuncie.
+`halfblock` y `ascii` dibujan siempre con caracteres. Cambiar a un protocolo
+desde Settings requiere reiniciar la TUI si se abrió con `halfblock`, `ascii` u
+`off`.
+
+### Diagnóstico
+
+`sentri terminal` explica, en lenguaje normal, qué terminal se detectó (por
+el proceso de la terminal y, si no se encuentra, por sus variables de
+entorno), si hay tmux y su `allow-passthrough`, qué protocolo anunció la
+terminal, con qué se dibuja ahora y, sin gráficos, por qué y cuál es el
+respaldo. Settings muestra el resumen en su cabecera.
+
+```text
+Images in this terminal
+  Terminal      Alacritty · TERM=xterm-256color
+  tmux          no
+  Configured    images = "auto"
+  Detected      none
+  Drawing with  half blocks
+  Why           the terminal did not announce a graphics protocol; Alacritty
+                supports neither the Kitty graphics protocol nor Sixel
+  Fallback      half blocks (▀): two colored pixels per cell
+```
+
+Si `images` es `halfblock` o `ascii` (los archivos de configuración antiguos
+traían `halfblock`) y la terminal es kitty o foot, SENTRI avisa al abrir, en
+Settings y en `sentri terminal` de que puede mostrar imágenes reales con
+`images = "auto"`.
+
+Qué se probó en terminales reales y qué falta: ver la tabla de
+[README.md](../README.md#terminal-images).
 
 De cada imagen se descarga la mejor variante conocida (el original de
 WordPress en vez del recorte `-500x500`, `highres_` de Meetup, el avatar de

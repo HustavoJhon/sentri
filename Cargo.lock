@@ -3132,6 +3132,7 @@ dependencies = [
  "image",
  "ratatui",
  "ratatui-image",
+ "rustix 1.1.6",
  "sentri-app",
  "sentri-core",
  "thiserror 2.0.21",

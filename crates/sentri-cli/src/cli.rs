@@ -57,6 +57,9 @@ pub enum Command {
     Sync,
     /// Check the Google Calendar setup (never sends anything to Google).
     CalendarDoctor,
+    /// Explain how this terminal draws images: emulator, tmux, detected
+    /// graphics protocol, active renderer and why.
+    Terminal,
     /// Re-apply the current news stance rules to stored news (dry run by
     /// default). Manual edits, likes, saves and notes are never changed.
     ReclassifyNews {

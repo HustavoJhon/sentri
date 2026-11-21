@@ -56,6 +56,33 @@ fn rows<'a>(
     (items, index_map)
 }
 
+/// How images are drawn here and, without graphics, why (details:
+/// `sentri terminal`).
+fn images_line<'a>(state: &State, theme: &Theme) -> Line<'a> {
+    let d = state.graphics.diagnosis();
+    let mut spans = vec![
+        Span::styled("Images   ", theme.muted()),
+        Span::styled(
+            d.active.label().to_owned(),
+            Style::new().fg(theme.p.aqua).add_modifier(Modifier::BOLD),
+        ),
+    ];
+    if d.emulator != crate::terminal::Emulator::Unknown {
+        spans.push(Span::styled(
+            format!(" · {}", d.emulator.name()),
+            theme.dim(),
+        ));
+    }
+    if d.tmux.is_some() {
+        spans.push(Span::styled(" · tmux", theme.dim()));
+    }
+    spans.push(Span::styled(" · details: sentri terminal", theme.muted()));
+    if let Some(reason) = d.reason() {
+        spans.push(Span::styled(format!(" · {reason}"), theme.muted()));
+    }
+    Line::from(spans)
+}
+
 pub fn render(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
     let s = &state.settings;
     let o = &state.overview;
@@ -68,7 +95,7 @@ pub fn render(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
     let inner = block.inner(area);
     frame.render_widget(block, area);
     let [head, list_area, foot] = Layout::vertical([
-        Constraint::Length(2),
+        Constraint::Length(3),
         Constraint::Min(3),
         Constraint::Length(3),
     ])
@@ -83,6 +110,7 @@ pub fn render(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
                 Span::styled("Database ", theme.muted()),
                 Span::raw(o.database_path.as_str()),
             ]),
+            images_line(state, theme),
         ]),
         head,
     );

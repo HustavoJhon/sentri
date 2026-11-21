@@ -637,6 +637,14 @@ impl State {
         query
     }
 
+    /// Says once, at startup, that the configuration keeps a graphics-capable
+    /// terminal on character images (see `Diagnosis::native_hint`).
+    pub fn announce_graphics(&mut self) {
+        if let Some(hint) = self.graphics.diagnosis().native_hint() {
+            self.info(format!("Images: {hint}"), Level::Info);
+        }
+    }
+
     fn info(&mut self, text: impl Into<String>, level: Level) {
         self.message = Some((text.into(), level));
     }
@@ -1607,6 +1615,21 @@ mod tests {
         s.on_key(key(KeyCode::Char('z')));
         assert_eq!(s.mode, Mode::Normal);
         assert!(s.message.as_ref().unwrap().0.contains("Images are off"));
+    }
+
+    #[test]
+    fn startup_says_when_graphics_are_turned_off() {
+        let mut s = State::default();
+        s.announce_graphics();
+        assert_eq!(s.message, None, "nothing to say by default");
+        s.graphics = crate::graphics::Graphics::text_with(crate::terminal::Diagnosis {
+            emulator: crate::terminal::Emulator::Kitty,
+            mode: ImageMode::Halfblock,
+            ..crate::terminal::Diagnosis::default()
+        });
+        s.announce_graphics();
+        let (text, _) = s.message.clone().unwrap();
+        assert!(text.contains("kitty can show real images"), "{text}");
     }
 
     #[test]

@@ -46,3 +46,10 @@ y limita longitudes. Las URLs de imagen solo se aceptan con `https://`.
 
 Sin scraping de LinkedIn ni X, sin cookies de sesión de cuentas personales
 (ver [ADR-0004](adr/0004-no-scraping-of-restricted-platforms.md)).
+
+## Perfil de GitHub e IA
+
+- La card de perfil nunca muestra direcciones IP: si la ubicación, la empresa
+  o la bio públicas de GitHub contienen una, ese campo no se muestra.
+- SENTRI no usa IA al ejecutarse y no envía datos a servicios de IA
+  ([AI_USAGE.md](../AI_USAGE.md)).

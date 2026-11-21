@@ -52,9 +52,6 @@ async fn event_loop(
     let theme = Theme::new(palette);
     // Ask about graphics before the reader thread starts consuming stdin.
     let graphics = crate::graphics::Graphics::detect(ui.images);
-    if crate::graphics::wants_probe(ui.images) {
-        drain_terminal_replies();
-    }
     let (event_tx, mut events) = mpsc::unbounded_channel();
     spawn_terminal_reader(event_tx);
     let (msg_tx, mut msgs) = mpsc::unbounded_channel();
@@ -74,6 +71,7 @@ async fn event_loop(
         },
         ..State::default()
     };
+    state.announce_graphics();
     execute(&app, &state, Effect::Load, &config_path, &msg_tx);
     execute(&app, &state, Effect::LoadProfile, &config_path, &msg_tx);
 
@@ -94,22 +92,6 @@ async fn event_loop(
         }
     }
     Ok(())
-}
-
-/// Some terminals (and tmux) answer the graphics query with more than the
-/// probe reads; the rest would be parsed together with the first key press
-/// and swallow it. Whatever arrives right after the probe is a reply, not
-/// typing, so it is discarded.
-fn drain_terminal_replies() {
-    let deadline = std::time::Instant::now() + Duration::from_millis(150);
-    while std::time::Instant::now() < deadline {
-        match event::poll(Duration::from_millis(30)) {
-            Ok(true) => {
-                let _ = event::read();
-            }
-            Ok(false) | Err(_) => break,
-        }
-    }
 }
 
 fn spawn_terminal_reader(tx: UnboundedSender<Event>) {

@@ -84,13 +84,29 @@ fn parse(body: &[u8]) -> Result<GitHubProfile, AppError> {
         v.map(|t| sentri_core::text::clean(&t, max))
             .filter(|t| !t.is_empty())
     };
-    profile.bio = line(profile.bio.take(), 160);
-    profile.location = line(profile.location.take(), 60);
-    profile.company = line(profile.company.take(), 60);
+    profile.bio = line(profile.bio.take(), 160).filter(|b| !mentions_ip(b));
+    // An IP address in these fields is never shown: the card is
+    // often on screen in demos, screenshots and screen shares.
+    profile.location = line(profile.location.take(), 60).filter(|l| !mentions_ip(l));
+    profile.company = line(profile.company.take(), 60).filter(|c| !mentions_ip(c));
     if !profile.avatar_url.starts_with("https://") || !profile.html_url.starts_with("https://") {
         return Err(AppError::Profile("GitHub returned non-https URLs".into()));
     }
     Ok(profile)
+}
+
+/// Whether `text` contains something that parses as an IP address
+/// (`203.0.113.7`, `2001:db8::1`, `[::1]:80`, `10.0.0.1:8080`).
+pub fn mentions_ip(text: &str) -> bool {
+    text.split(|c: char| c.is_whitespace() || matches!(c, ',' | ';' | '/' | '(' | ')'))
+        .map(|word| word.trim_matches(|c: char| matches!(c, '[' | ']' | '.' | '"' | '\'')))
+        .any(|word| {
+            word.parse::<std::net::IpAddr>().is_ok()
+                || word.parse::<std::net::SocketAddr>().is_ok()
+                || word
+                    .rsplit_once(':')
+                    .is_some_and(|(host, _)| host.parse::<std::net::Ipv4Addr>().is_ok())
+        })
 }
 
 impl Sentri {
@@ -175,6 +191,24 @@ mod tests {
         let unsafe_urls =
             br#"{"login":"x","name":null,"html_url":"http://x","avatar_url":"javascript:1"}"#;
         assert!(parse(unsafe_urls).is_err());
+    }
+
+    #[test]
+    fn ip_addresses_are_not_shown_as_a_location() {
+        for text in [
+            "203.0.113.7",
+            "Lima 10.0.0.1:8080",
+            "[2001:db8::1]",
+            "at 2001:db8::1",
+        ] {
+            assert!(mentions_ip(text), "{text}");
+        }
+        for text in ["Lima, Peru", "Cusco 2026", "v1.2.3", "Room 4:30"] {
+            assert!(!mentions_ip(text), "{text}");
+        }
+        let body = br#"{"login":"octocat","html_url":"https://github.com/octocat",
+            "avatar_url":"https://avatars.githubusercontent.com/u/1","location":"203.0.113.7"}"#;
+        assert_eq!(parse(body).unwrap().location, None);
     }
 
     #[test]

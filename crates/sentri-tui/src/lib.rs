@@ -9,6 +9,7 @@ pub mod graphics;
 pub mod input;
 mod runtime;
 pub mod state;
+pub mod terminal;
 pub mod theme;
 pub mod ui;
 
