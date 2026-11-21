@@ -300,6 +300,19 @@ impl Graphics {
             tmux = picker.tmux_detected(),
             "terminal graphics"
         );
+        // Kitty images use Unicode placeholders that tmux moves with the
+        // text; Sixel and iTerm2 images are drawn wherever tmux last left the
+        // outer cursor, which lands them in the wrong place. Only a forced
+        // mode uses them inside tmux.
+        if mode == ImageMode::Auto
+            && diagnosis.tmux.is_some()
+            && matches!(
+                picker.protocol_type(),
+                ProtocolType::Sixel | ProtocolType::Iterm2
+            )
+        {
+            picker.set_protocol_type(ProtocolType::Halfblocks);
+        }
         diagnosis.active = backend_of(picker.protocol_type());
         if picker.protocol_type() == ProtocolType::Halfblocks {
             return Self {
@@ -509,6 +522,33 @@ mod tests {
             Backend::Text,
             "ratatui-image's half blocks are replaced by SENTRI's own"
         );
+    }
+
+    #[test]
+    fn sixel_is_not_used_inside_tmux_unless_forced() {
+        use crate::terminal::Tmux;
+        let in_tmux = || Diagnosis {
+            tmux: Some(Tmux { passthrough: true }),
+            probed: true,
+            detected: Some(Backend::Sixel),
+            ..Diagnosis::default()
+        };
+        #[allow(deprecated)]
+        let sixel = || {
+            let mut p = Picker::from_fontsize(FontSize::new(8, 16));
+            p.set_protocol_type(ProtocolType::Sixel);
+            p
+        };
+        let auto = Graphics::from_picker(sixel(), ImageMode::Auto, in_tmux());
+        assert_eq!(auto.backend(), Backend::Text);
+        assert!(auto.diagnosis().reason().unwrap().contains("wrong place"));
+        let forced = Graphics::from_picker(sixel(), ImageMode::Sixel, in_tmux());
+        assert_eq!(forced.backend(), Backend::Sixel);
+        #[allow(deprecated)]
+        let mut kitty = Picker::from_fontsize(FontSize::new(8, 16));
+        kitty.set_protocol_type(ProtocolType::Kitty);
+        let kitty = Graphics::from_picker(kitty, ImageMode::Auto, in_tmux());
+        assert_eq!(kitty.backend(), Backend::Kitty, "placeholders work in tmux");
     }
 
     #[test]

@@ -178,6 +178,20 @@ impl Diagnosis {
                     .into()
             }
             _ if !self.probed => "the terminal was not asked (output is not a terminal)".into(),
+            _ if self.tmux.is_some()
+                && matches!(self.detected, Some(Backend::Sixel | Backend::Iterm2)) =>
+            {
+                format!(
+                    "the terminal supports {}, but inside tmux those images are drawn in the \
+                     wrong place; run SENTRI outside tmux, or force it with images = \"{}\"",
+                    self.detected.map_or("", Backend::label),
+                    if self.detected == Some(Backend::Sixel) {
+                        "sixel"
+                    } else {
+                        "iterm2"
+                    }
+                )
+            }
             _ => {
                 let mut text = String::from("the terminal did not announce a graphics protocol");
                 if let Some(known) = self.emulator.known_graphics() {
