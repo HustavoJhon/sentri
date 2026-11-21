@@ -277,6 +277,25 @@ impl Graphics {
         }
     }
 
+    /// Probes the terminal outside the interface (for `sentri terminal`):
+    /// raw mode keeps the terminal's replies from being echoed or left for
+    /// the shell, and whatever arrives after the probe is discarded.
+    pub fn diagnose(mode: ImageMode) -> Diagnosis {
+        let raw = ratatui::crossterm::terminal::enable_raw_mode().is_ok();
+        let graphics = Self::detect(mode);
+        if raw {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_millis(150);
+            while std::time::Instant::now() < deadline
+                && ratatui::crossterm::event::poll(std::time::Duration::from_millis(30))
+                    .unwrap_or(false)
+            {
+                let _ = ratatui::crossterm::event::read();
+            }
+            let _ = ratatui::crossterm::terminal::disable_raw_mode();
+        }
+        graphics.diagnosis
+    }
+
     /// How the renderer was chosen.
     pub const fn diagnosis(&self) -> &Diagnosis {
         &self.diagnosis

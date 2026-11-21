@@ -23,6 +23,11 @@ async fn main() -> Result<()> {
             init_logging(LogTarget::Stderr);
             config_command(&cmd, &config_path)
         }
+        Some(Command::Terminal) => {
+            init_logging(LogTarget::Stderr);
+            terminal(&Config::load(&config_path)?);
+            Ok(())
+        }
         Some(command) => {
             init_logging(LogTarget::Stderr);
             let app = open(&config_path).await?;
@@ -194,7 +199,9 @@ async fn run(app: &Sentri, command: Command) -> Result<()> {
                 .await?;
         }
         Command::Backup { target } => backup(app, target).await?,
-        Command::Config(_) => unreachable!("handled before opening the database"),
+        Command::Config(_) | Command::Terminal => {
+            unreachable!("handled before opening the database")
+        }
     }
     Ok(())
 }
@@ -326,6 +333,17 @@ async fn reclassify(app: &Sentri, apply: bool, undo: Option<String>) -> Result<(
         ),
     }
     Ok(())
+}
+
+fn terminal(config: &Config) {
+    let d = sentri_tui::graphics::Graphics::diagnose(config.ui.images);
+    println!("Images in this terminal");
+    for (label, value) in d.rows() {
+        println!("  {label:<13} {value}");
+    }
+    if d.mode != sentri_app::ImageMode::Auto {
+        println!("Tip: images = \"auto\" (the default) picks the best protocol by itself.");
+    }
 }
 
 fn calendar_doctor(app: &Sentri) {
