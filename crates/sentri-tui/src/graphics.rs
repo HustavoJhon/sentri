@@ -171,7 +171,8 @@ fn release_probe() {
     drain_stdin(std::time::Duration::from_millis(150));
 }
 
-/// Reads and drops what is already waiting on stdin, for at most `window`.
+/// Reads and drops what is waiting on stdin, until it is quiet for 50 ms or
+/// `window` ends.
 /// Never blocks: each read only happens after `poll` says data is there
 /// (crossterm's `event::read` would swallow a reply and then wait for a
 /// key, freezing startup until one is pressed).
@@ -182,7 +183,10 @@ fn drain_stdin(window: std::time::Duration) {
     let deadline = std::time::Instant::now() + window;
     let mut buf = [0_u8; 256];
     loop {
-        let left = deadline.saturating_duration_since(std::time::Instant::now());
+        // Stop as soon as stdin stays quiet for a moment.
+        let left = deadline
+            .saturating_duration_since(std::time::Instant::now())
+            .min(std::time::Duration::from_millis(50));
         if left.is_zero() {
             break;
         }
