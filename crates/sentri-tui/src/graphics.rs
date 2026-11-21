@@ -156,17 +156,54 @@ const fn backend_of(protocol: ProtocolType) -> Backend {
 }
 
 /// After a timed-out query, `ratatui-image` leaves a thread reading stdin
-/// until it sees a status report (and still returns a fallback picker); it would steal the first keys typed (tmux
-/// without `allow-passthrough` never forwards the query). A plain Device
-/// Status Report, answered by every terminal and by tmux itself, lets that
-/// thread finish before SENTRI starts reading keys.
+/// until it sees a status report (and still returns a fallback picker); it
+/// would steal the first keys typed. A plain Device Status Report, answered
+/// by every terminal and by tmux itself, lets that thread finish. Whatever
+/// is left (that reply, or late answers to the probe) is then read and
+/// discarded, so it is never mistaken for keys.
 fn release_probe() {
     use std::io::Write;
     let mut out = std::io::stdout();
     if out.write_all(b"\x1b[5n").and_then(|()| out.flush()).is_ok() {
+        // Let a stuck probe thread take the reply first.
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
+    drain_stdin(std::time::Duration::from_millis(150));
 }
+
+/// Reads and drops what is already waiting on stdin, for at most `window`.
+/// Never blocks: each read only happens after `poll` says data is there
+/// (crossterm's `event::read` would swallow a reply and then wait for a
+/// key, freezing startup until one is pressed).
+#[cfg(unix)]
+fn drain_stdin(window: std::time::Duration) {
+    use rustix::event::{PollFd, PollFlags, Timespec, poll};
+    let stdin = rustix::stdio::stdin();
+    let deadline = std::time::Instant::now() + window;
+    let mut buf = [0_u8; 256];
+    loop {
+        let left = deadline.saturating_duration_since(std::time::Instant::now());
+        if left.is_zero() {
+            break;
+        }
+        let timeout = Timespec {
+            tv_sec: 0,
+            tv_nsec: i64::try_from(left.as_nanos()).unwrap_or(0).min(999_999_999),
+        };
+        let mut fds = [PollFd::new(&stdin, PollFlags::IN)];
+        match poll(&mut fds, Some(&timeout)) {
+            Ok(n) if n > 0 => {
+                if rustix::io::read(stdin, &mut buf).is_ok_and(|read| read == 0) {
+                    break;
+                }
+            }
+            _ => break,
+        }
+    }
+}
+
+#[cfg(not(unix))]
+fn drain_stdin(_window: std::time::Duration) {}
 
 pub const fn wants_probe(mode: ImageMode) -> bool {
     matches!(
@@ -284,13 +321,6 @@ impl Graphics {
         let raw = ratatui::crossterm::terminal::enable_raw_mode().is_ok();
         let graphics = Self::detect(mode);
         if raw {
-            let deadline = std::time::Instant::now() + std::time::Duration::from_millis(150);
-            while std::time::Instant::now() < deadline
-                && ratatui::crossterm::event::poll(std::time::Duration::from_millis(30))
-                    .unwrap_or(false)
-            {
-                let _ = ratatui::crossterm::event::read();
-            }
             let _ = ratatui::crossterm::terminal::disable_raw_mode();
         }
         graphics.diagnosis
