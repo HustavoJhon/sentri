@@ -843,6 +843,17 @@ mod tests {
     }
 
     #[test]
+    fn settings_say_how_images_are_drawn() {
+        let mut state = State {
+            section: Section::ALL.len() - 1,
+            ..State::default()
+        };
+        let screen = render(120, 30, &mut state);
+        assert!(screen.contains("Images   half blocks"), "{screen}");
+        assert!(screen.contains("sentri terminal"), "{screen}");
+    }
+
+    #[test]
     fn narrow_terminals_keep_a_section_rail() {
         let mut state = State::default();
         state.on_msg(Msg::Loaded(vec![sample()]));
