@@ -272,17 +272,23 @@ está dibujando y por qué.
 | Alacritty 0.17 | ninguno (Alacritty no soporta ni gráficos Kitty ni Sixel) | ✅ Detección y respaldo con medios bloques |
 | tmux 3.8 dentro de foot, `allow-passthrough on` | Sixel se detecta pero **no se usa**: tmux no puede colocar bien las imágenes Sixel, así que `auto` usa medios bloques | ✅ Las imágenes grandes y el visor a pantalla completa se dibujaron bien, pero las pequeñas aparecieron en el lugar equivocado; se comprobaron el respaldo, la navegación y la salida limpia |
 | tmux sin `allow-passthrough` | ninguno: los gráficos no llegan a la terminal | ✅ Medios bloques, sin teclas perdidas al arrancar |
-| kitty | protocolo gráfico de Kitty (kitty no tiene Sixel) | ⏳ Aún no verificado en una terminal kitty real |
+| kitty 0.49 | protocolo gráfico de Kitty (kitty no tiene Sixel) | ✅ Detección, imagen de detalles, avatar, visor a pantalla completa, navegación, redibujado al cambiar el tamaño, `sentri terminal` |
+| tmux 3.8 dentro de kitty, `allow-passthrough on` | protocolo gráfico de Kitty, con marcadores Unicode | ✅ Detección, imágenes en su sitio, navegación, visor a pantalla completa, salida limpia sin imágenes residuales |
 | WezTerm, Ghostty, iTerm2, Konsole, Windows Terminal | depende de la terminal | ⏳ Sin probar; `ratatui-image` soporta imágenes Kitty, Sixel e iTerm2 |
 
 Notas:
 
-- El redibujado tras cambiar el tamaño (170×45 → 60×20 → 120×30) se comprobó
-  en tmux con medios bloques; cambiar el tamaño mientras se muestran imágenes
-  Sixel o Kitty aún no se ha comprobado.
+- El cambio de tamaño se comprobó en kitty con imágenes en pantalla (129×66 →
+  68×39 → 150×76 columnas: las imágenes se redibujan al nuevo tamaño) y en tmux
+  con medios bloques. Cambiar el tamaño con imágenes Sixel en pantalla aún no
+  se ha comprobado.
 - Dentro de tmux, las imágenes Kitty usan marcadores Unicode que tmux mantiene
   en su sitio; necesitan `set -g allow-passthrough on` en `~/.tmux.conf`.
   SENTRI nunca cambia tu configuración de tmux.
+- **¿Ves imágenes pixeladas en kitty o foot?** Revisa `images` en tu
+  `config.toml`: los archivos de configuración antiguos tienen
+  `images = "halfblock"`, que nunca pregunta a la terminal. SENTRI lo avisa al
+  abrir, en Settings y en `sentri terminal`; pon `images = "auto"` y reinicia.
 - `images = "kitty"`, `"sixel"` o `"iterm2"` fuerza un protocolo (por ejemplo
   Sixel dentro de tmux, bajo tu responsabilidad). `"halfblock"`, `"ascii"` y
   `"off"` nunca usan uno.
