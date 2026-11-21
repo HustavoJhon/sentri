@@ -92,8 +92,67 @@ pub fn emulator_from(var: impl Fn(&str) -> Option<String>) -> Emulator {
     }
 }
 
+/// The emulator: the terminal process SENTRI runs under when it can be
+/// found (Linux), else what the environment says. The process is more
+/// reliable: `TERM` is often overridden (foot set to `xterm-256color`) and
+/// variables leak into terminals started from another terminal.
 pub fn emulator() -> Emulator {
-    emulator_from(|name| std::env::var(name).ok())
+    match emulator_from_processes() {
+        Some(found) => found,
+        None => emulator_from(|name| std::env::var(name).ok()),
+    }
+}
+
+/// Emulator named by a process (its `comm`), if it is one.
+pub fn emulator_named(comm: &str) -> Option<Emulator> {
+    Some(match comm.trim() {
+        "kitty" => Emulator::Kitty,
+        "foot" | "footclient" => Emulator::Foot,
+        "alacritty" => Emulator::Alacritty,
+        "ghostty" => Emulator::Ghostty,
+        "wezterm-gui" | "wezterm" => Emulator::WezTerm,
+        "konsole" => Emulator::Konsole,
+        "xterm" => Emulator::Xterm,
+        name if name.starts_with("gnome-terminal") || name == "tilix" || name == "terminator" => {
+            Emulator::Vte
+        }
+        _ => return None,
+    })
+}
+
+/// Walks up the process tree to the terminal. Stops (returns `None`) at
+/// tmux, screen or an SSH server: past them the terminal is elsewhere.
+#[cfg(target_os = "linux")]
+fn emulator_from_processes() -> Option<Emulator> {
+    let mut current = std::process::id();
+    for _ in 0..16 {
+        let stat = std::fs::read_to_string(format!("/proc/{current}/stat")).ok()?;
+        // `pid (comm) state parent …`; comm may contain spaces or parens.
+        let (_, after) = stat.rsplit_once(')')?;
+        let parent: u32 = after.split_whitespace().nth(1)?.parse().ok()?;
+        if parent <= 1 {
+            return None;
+        }
+        let comm = std::fs::read_to_string(format!("/proc/{parent}/comm")).ok()?;
+        let comm = comm.trim();
+        if comm.starts_with("tmux")
+            || comm == "screen"
+            || comm == "sshd"
+            || comm.starts_with("sshd")
+        {
+            return None;
+        }
+        if let Some(found) = emulator_named(comm) {
+            return Some(found);
+        }
+        current = parent;
+    }
+    None
+}
+
+#[cfg(not(target_os = "linux"))]
+fn emulator_from_processes() -> Option<Emulator> {
+    None
 }
 
 /// tmux, when SENTRI runs inside it.
@@ -286,6 +345,16 @@ mod tests {
         for (vars, expected) in cases {
             assert_eq!(emulator_from(env(vars)), *expected, "{vars:?}");
         }
+    }
+
+    #[test]
+    fn recognizes_emulator_processes() {
+        assert_eq!(emulator_named("foot\n"), Some(Emulator::Foot));
+        assert_eq!(emulator_named("kitty"), Some(Emulator::Kitty));
+        assert_eq!(emulator_named("alacritty"), Some(Emulator::Alacritty));
+        assert_eq!(emulator_named("gnome-terminal-"), Some(Emulator::Vte));
+        assert_eq!(emulator_named("zsh"), None);
+        assert_eq!(emulator_named("tmux: server"), None);
     }
 
     #[test]
