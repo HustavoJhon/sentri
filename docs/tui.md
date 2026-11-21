@@ -74,7 +74,7 @@ estado los atajos de la sección actual (con tus atajos personalizados).
 | Calendar | Mes, semana, día y agenda ([calendar.md](calendar.md)) |
 | History | Mapa de actividad anual, rachas y resumen por día (`h`/`l` día, `H`/`L` semana, `t` hoy) |
 | Sources | Gestor: añadir/editar/activar/borrar/refrescar fuentes, último éxito y último error ([sources.md](sources.md)) |
-| Settings | Formulario editable ([configuration.md](configuration.md)). Los cambios sin guardar se marcan con `●` en la barra lateral y salir con `q` pide confirmación (`s` vuelve a Settings, `y` sale sin guardar) |
+| Settings | Formulario editable ([configuration.md](configuration.md)); la cabecera indica cómo se dibujan las imágenes en esta terminal y por qué (`sentri terminal` da el detalle). Los cambios sin guardar se marcan con `●` en la barra lateral y salir con `q` pide confirmación (`s` vuelve a Settings, `y` sale sin guardar) |
 
 ## Cards
 
