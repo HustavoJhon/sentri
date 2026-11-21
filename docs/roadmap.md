@@ -32,6 +32,24 @@ un orden desde el primer día; la fase 6 lo amplía con personalización.
    se dejará documentado sin inventar credenciales).
 5. Afinidad: excluir la propia oportunidad al explicar "similar a lo que guardaste".
 
+## Fase 11: comentarios de la comunidad, transparencia sobre IA y documentación (2026-11-21)
+
+Hecho:
+
+- Imágenes en terminales reales: Sixel en foot 1.28, respaldo en Alacritty
+  0.17 y tmux 3.8 con y sin `allow-passthrough`. Dentro de tmux, `auto` ya no
+  usa Sixel (las imágenes quedaban fuera de lugar) y se respeta el
+  `allow-passthrough` global.
+- Corregido: con la detección gráfica de la fase 10, la TUI no se dibujaba en
+  terminales que responden a la consulta (foot) hasta pulsar una tecla.
+- `sentri terminal` y la cabecera de Settings explican la terminal, el
+  protocolo, el respaldo y el motivo; la terminal se identifica por su proceso.
+- `AI_USAGE.md`, README en inglés (`README.md`) y español (`README.es.md`).
+- La card de perfil oculta direcciones IP de los campos públicos de GitHub.
+
+Pendiente: probar Kitty en una terminal kitty real (y dentro de tmux), y el
+redibujado al cambiar el tamaño con imágenes Sixel o Kitty en pantalla.
+
 ## Fase 10 de UX: dashboard, Details e identidad visual (2026-11-20)
 
 Hecho:
