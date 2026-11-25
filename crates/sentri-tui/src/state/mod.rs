@@ -26,6 +26,7 @@ pub mod history;
 pub mod presentation;
 pub mod settings;
 pub mod sources;
+pub mod startup;
 
 use crate::input::LineInput;
 use calendar::{CalEffect, CalendarState};
@@ -563,6 +564,8 @@ pub struct State {
     pub start: collect::StartCheck,
     /// Sort to restore when leaving a section that set its own order.
     pub auto_sort: Option<SortOrder>,
+    /// The Observer awakening shown while SENTRI starts.
+    pub startup: Option<startup::Startup>,
     pub quit: bool,
 }
 
@@ -599,6 +602,7 @@ impl Default for State {
             collecting: None,
             start: collect::StartCheck::Pending,
             auto_sort: None,
+            startup: None,
             quit: false,
         }
     }
@@ -935,6 +939,13 @@ impl State {
         self.message = None;
         if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
             self.quit = true;
+            return Vec::new();
+        }
+        if self.splash_visible() {
+            // Skipping the splash never cancels the work behind it.
+            if let Some(startup) = &mut self.startup {
+                startup.dismiss();
+            }
             return Vec::new();
         }
         match self.mode.clone() {
@@ -1460,7 +1471,64 @@ impl State {
         self.info(text, Level::Success);
     }
 
+    /// Whether the Observer awakening covers the screen right now.
+    pub fn splash_visible(&self) -> bool {
+        self.startup
+            .as_ref()
+            .is_some_and(|s| s.visible(std::time::Instant::now()))
+    }
+
+    /// Splash timer: animation frames and grace periods.
+    pub fn on_timer(&mut self) {
+        if let Some(startup) = &mut self.startup {
+            startup.on_timer(std::time::Instant::now());
+        }
+    }
+
+    /// Marks startup steps from the messages that complete them.
+    fn observe_startup(&mut self, msg: &Msg) {
+        use startup::{Status, Step};
+        let Some(s) = &mut self.startup else {
+            return;
+        };
+        let now = std::time::Instant::now();
+        match msg {
+            Msg::Overview(o) => {
+                let enabled = o.config.sources.iter().filter(|s| s.enabled).count();
+                let total = o.config.sources.len();
+                s.resolve(
+                    Step::Sources,
+                    Status::Done(format!("{enabled} of {total} sources enabled")),
+                    now,
+                );
+            }
+            Msg::Profile(p) => {
+                let status = match p {
+                    ProfileState::Ready(profile, _) => Status::Done(format!("@{}", profile.login)),
+                    ProfileState::NotConfigured => {
+                        Status::Done("local profile · no GitHub user".into())
+                    }
+                    ProfileState::Unavailable(_) => {
+                        Status::Background("GitHub unavailable · using local profile".into())
+                    }
+                    ProfileState::Loading => return,
+                };
+                s.resolve(Step::Profile, status, now);
+            }
+            Msg::Loaded(items) => s.resolve(
+                Step::Dashboard,
+                Status::Done(format!("{} opportunities ranked", items.len())),
+                now,
+            ),
+            Msg::Failed(text) if s.status(Step::Dashboard).is_pending() => {
+                s.resolve(Step::Dashboard, Status::Failed(text.clone()), now);
+            }
+            _ => {}
+        }
+    }
+
     pub fn on_msg(&mut self, msg: Msg) -> Vec<Effect> {
+        self.observe_startup(&msg);
         match msg {
             Msg::Loaded(items) => {
                 self.loading = false;

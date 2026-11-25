@@ -71,13 +71,22 @@ async fn event_loop(
         },
         ..State::default()
     };
+    state.startup = Some(startup_screen(&app, &state, palette));
     state.announce_graphics();
     execute(&app, &state, Effect::Load, &config_path, &msg_tx);
     execute(&app, &state, Effect::LoadProfile, &config_path, &msg_tx);
 
     while !state.quit {
         terminal.draw(|frame| ui::draw(frame, &mut state, &theme))?;
+        let timer = state
+            .startup
+            .as_ref()
+            .and_then(|s| s.timer(std::time::Instant::now()));
         let effects = tokio::select! {
+            () = wait(timer) => {
+                state.on_timer();
+                Vec::new()
+            }
             Some(event) = events.recv() => match event {
                 Event::Key(key) if key.kind == KeyEventKind::Press => state.on_key(key),
                 Event::Mouse(mouse) => state.on_mouse(mouse),
@@ -92,6 +101,47 @@ async fn event_loop(
         }
     }
     Ok(())
+}
+
+/// Sleeps for `timer`, or forever when there is none.
+async fn wait(timer: Option<Duration>) {
+    match timer {
+        Some(d) => tokio::time::sleep(d).await,
+        None => std::future::pending().await,
+    }
+}
+
+/// The Observer awakening, with the steps that already finished before the
+/// event loop starts (theme and terminal detection run synchronously).
+fn startup_screen(app: &Sentri, state: &State, palette: Palette) -> crate::state::startup::Startup {
+    use crate::observer::SplashEnv;
+    use crate::state::startup::{Startup, Status, Step};
+    let env = SplashEnv::detect();
+    let config = app.config();
+    let mode = env.mode(config.onboarding.startup_animation);
+    let now = std::time::Instant::now();
+    let mut startup = Startup::new(mode, env.unicode(config.ui.ascii_icons), now);
+    let colors = if palette == Palette::INDEXED {
+        "256 colors"
+    } else {
+        "truecolor"
+    };
+    startup.resolve(
+        Step::Observer,
+        Status::Done(format!("Gruvbox Dark · {colors}")),
+        now,
+    );
+    let d = state.graphics.diagnosis();
+    let mut environment = format!(
+        "{} · images: {}",
+        d.emulator.name(),
+        state.graphics.renderer(config.ui.images).label()
+    );
+    if d.tmux.is_some() {
+        environment.push_str(" · tmux");
+    }
+    startup.resolve(Step::Environment, Status::Done(environment), now);
+    startup
 }
 
 fn spawn_terminal_reader(tx: UnboundedSender<Event>) {
