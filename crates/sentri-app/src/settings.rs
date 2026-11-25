@@ -163,6 +163,14 @@ pub const SETTINGS: &[Setting] = &[
         true,
     ),
     s(
+        "onboarding.startup_animation",
+        "Appearance",
+        "Startup animation",
+        SettingKind::Bool,
+        "The Observer awakening while SENTRI starts",
+        false,
+    ),
+    s(
         "dashboard.layout",
         "Dashboard",
         "Layout",
@@ -267,11 +275,75 @@ pub const SETTINGS: &[Setting] = &[
         true,
     ),
     s(
+        "profile.country_code",
+        "Profile",
+        "Country code",
+        SettingKind::Text,
+        "ISO 3166-1 alpha-2 (PE, MX, ES…); adds its names to matching",
+        true,
+    ),
+    s(
+        "profile.region",
+        "Profile",
+        "Region / state",
+        SettingKind::Text,
+        "Optional",
+        true,
+    ),
+    s(
+        "profile.timezone",
+        "Profile",
+        "Time zone",
+        SettingKind::Text,
+        "IANA name such as America/Lima; empty uses the system zone",
+        true,
+    ),
+    s(
         "github.username",
         "Profile",
         "GitHub username",
         SettingKind::Text,
-        "Public profile and avatar; no token",
+        "Public profile, avatar and languages; no token",
+        true,
+    ),
+    s(
+        "profile.preferred_modalities",
+        "Discovery",
+        "Modalities",
+        SettingKind::List(MODALITIES),
+        "online (remote), hybrid, in_person; matching ones rank higher",
+        true,
+    ),
+    s(
+        "discovery.local",
+        "Discovery",
+        "Local",
+        SettingKind::Bool,
+        "Boost opportunities in your city",
+        true,
+    ),
+    s(
+        "discovery.national",
+        "Discovery",
+        "National",
+        SettingKind::Bool,
+        "Boost opportunities in your country",
+        true,
+    ),
+    s(
+        "discovery.international",
+        "Discovery",
+        "International",
+        SettingKind::Bool,
+        "Boost opportunities abroad that are open to you",
+        true,
+    ),
+    s(
+        "discovery.topics",
+        "Discovery",
+        "Interests",
+        SettingKind::List(TOPICS),
+        "Comma-separated; matching items rank higher, nothing is hidden",
         true,
     ),
     s(
@@ -344,6 +416,37 @@ pub const SETTINGS: &[Setting] = &[
     ),
 ];
 
+/// Values of `profile.preferred_modalities` offered in Settings.
+pub const MODALITIES: &[&str] = &["online", "hybrid", "in_person"];
+
+/// Values of `discovery.topics`.
+pub const TOPICS: &[&str] = &[
+    "events",
+    "courses",
+    "hackathons",
+    "scholarships",
+    "competitions",
+    "communities",
+    "open_source",
+    "cfps",
+    "news",
+    "jobs",
+];
+
+/// Keys written by onboarding that Settings does not list.
+const INTERNAL: &[(&str, SettingKind)] = &[
+    ("onboarding.completed", SettingKind::Bool),
+    (
+        "onboarding.step",
+        SettingKind::Int {
+            min: 0,
+            max: crate::config::ONBOARDING_LAST_STEP as i64,
+        },
+    ),
+    ("profile.home_city", SettingKind::Text),
+    ("profile.country", SettingKind::Text),
+];
+
 /// One setting per remappable shortcut (`keys.<action>`).
 pub fn key_settings() -> Vec<(String, String, SettingKind)> {
     crate::keys::KeyAction::ALL
@@ -406,6 +509,29 @@ pub fn current(config: &Config, key: &str) -> Option<String> {
         "cards.selection" => config.cards.selection.clone(),
         "profile.home_city" => text(&config.profile.home_city),
         "profile.country" => text(&config.profile.country),
+        "profile.country_code" => text(&config.profile.country_code),
+        "profile.region" => text(&config.profile.region),
+        "profile.timezone" => text(&config.profile.timezone),
+        "profile.preferred_modalities" => config
+            .profile
+            .preferred_modalities
+            .iter()
+            .map(|m| m.as_str())
+            .collect::<Vec<_>>()
+            .join(", "),
+        "discovery.local" => config.discovery.local.to_string(),
+        "discovery.national" => config.discovery.national.to_string(),
+        "discovery.international" => config.discovery.international.to_string(),
+        "discovery.topics" => config
+            .discovery
+            .topics
+            .iter()
+            .map(|t| t.as_str())
+            .collect::<Vec<_>>()
+            .join(", "),
+        "onboarding.startup_animation" => config.onboarding.startup_animation.to_string(),
+        "onboarding.completed" => config.onboarding.completed.to_string(),
+        "onboarding.step" => config.onboarding.step.unwrap_or(0).to_string(),
         "github.username" => text(&config.github.username),
         "daemon.interval_minutes" => config.daemon.interval_minutes.to_string(),
         "calendar.week_start" => config.calendar.week_start.clone(),
@@ -442,6 +568,12 @@ fn kind_of(config: &Config, key: &str) -> Option<SettingKind> {
         .iter()
         .find(|s| s.key == key)
         .map(|s| s.kind)
+        .or_else(|| {
+            INTERNAL
+                .iter()
+                .find(|(k, _)| *k == key)
+                .map(|(_, kind)| *kind)
+        })
         .or_else(|| {
             source_settings(config)
                 .into_iter()
@@ -487,6 +619,7 @@ fn to_item(key: &str, kind: SettingKind, text: &str) -> Result<Option<Item>, Set
             value(array)
         }
         SettingKind::Text if text.is_empty() => return Ok(None),
+        SettingKind::Text if key == "profile.country_code" => value(text.to_ascii_uppercase()),
         SettingKind::Text => value(text),
     }))
 }
@@ -543,6 +676,19 @@ fn backup(path: &Path) -> Result<Option<PathBuf>, SettingsError> {
     Ok(Some(target))
 }
 
+/// Writes through a temporary file and a rename, so an interrupted write
+/// never leaves a half-written configuration behind.
+fn write_atomic(path: &Path, text: &str) -> std::io::Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let tmp = path.with_extension("toml.tmp");
+    std::fs::write(&tmp, text)?;
+    std::fs::rename(&tmp, path).inspect_err(|_| {
+        let _ = std::fs::remove_file(&tmp);
+    })
+}
+
 /// Outcome of a save.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Saved {
@@ -553,6 +699,16 @@ pub struct Saved {
 /// Applies `changes` (key, text) to the file at `path`. Nothing is written
 /// unless every value is valid and the resulting configuration loads.
 pub fn save(path: &Path, changes: &[(String, String)]) -> Result<Saved, SettingsError> {
+    save_with(path, changes, true)
+}
+
+/// [`save`], optionally without a backup (used between onboarding steps,
+/// which back up once before the first change).
+pub fn save_with(
+    path: &Path,
+    changes: &[(String, String)],
+    keep_backup: bool,
+) -> Result<Saved, SettingsError> {
     let original = match std::fs::read_to_string(path) {
         Ok(text) => text,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => DEFAULT_CONFIG.to_owned(),
@@ -568,21 +724,27 @@ pub fn save(path: &Path, changes: &[(String, String)]) -> Result<Saved, Settings
     }
     let updated = doc.to_string();
     let config = Config::parse(&updated, path)?;
-    let backup = backup(path)?;
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    std::fs::write(path, updated)?;
+    let backup = if keep_backup { backup(path)? } else { None };
+    write_atomic(path, &updated)?;
     Ok(Saved { config, backup })
+}
+
+/// Marks onboarding as not done, so the wizard opens on the next start
+/// (or right away in the TUI). Every answer already saved is kept.
+pub fn restart_onboarding(path: &Path) -> Result<Saved, SettingsError> {
+    save(
+        path,
+        &[
+            ("onboarding.completed".into(), "false".into()),
+            ("onboarding.step".into(), "0".into()),
+        ],
+    )
 }
 
 /// Replaces the file with the commented default template (after a backup).
 pub fn restore_defaults(path: &Path) -> Result<Saved, SettingsError> {
     let backup = backup(path)?;
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    std::fs::write(path, DEFAULT_CONFIG)?;
+    write_atomic(path, DEFAULT_CONFIG)?;
     Ok(Saved {
         config: Config::parse(DEFAULT_CONFIG, path)?,
         backup,
@@ -667,10 +829,7 @@ fn edit_sources(
     let updated = doc.to_string();
     let config = Config::parse(&updated, path)?;
     let backup = backup(path)?;
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    std::fs::write(path, updated)?;
+    write_atomic(path, &updated)?;
     Ok(Saved { config, backup })
 }
 
@@ -901,6 +1060,82 @@ mod tests {
         assert!(saved.config.source("my-cal").is_none());
         assert!(saved.config.source("feed").is_some(), "others untouched");
         assert!(remove_source(&path, "nope").is_err());
+    }
+
+    #[test]
+    fn profile_discovery_and_onboarding_keys_round_trip() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, USER).unwrap();
+        let saved = save_with(
+            &path,
+            &[
+                ("profile.country_code".into(), "co".into()),
+                ("profile.region".into(), "Antioquia".into()),
+                ("profile.timezone".into(), "America/Bogota".into()),
+                (
+                    "profile.preferred_modalities".into(),
+                    "online, in_person".into(),
+                ),
+                ("discovery.international".into(), "false".into()),
+                ("discovery.topics".into(), "jobs, news".into()),
+                ("onboarding.startup_animation".into(), "false".into()),
+                ("onboarding.step".into(), "3".into()),
+            ],
+            false,
+        )
+        .unwrap();
+        assert_eq!(saved.backup, None);
+        let c = &saved.config;
+        assert_eq!(
+            c.profile.country_code.as_deref(),
+            Some("CO"),
+            "stored uppercase"
+        );
+        assert_eq!(
+            current(c, "profile.preferred_modalities").unwrap(),
+            "online, in_person"
+        );
+        assert_eq!(current(c, "discovery.topics").unwrap(), "jobs, news");
+        assert_eq!(current(c, "discovery.international").unwrap(), "false");
+        assert_eq!(c.onboarding.step, Some(3));
+        assert!(!c.onboarding.startup_animation);
+        assert!(
+            std::fs::read_to_string(&path)
+                .unwrap()
+                .contains("# my notes stay")
+        );
+        assert_eq!(
+            std::fs::read_dir(dir.path()).unwrap().count(),
+            1,
+            "no backup, no temp file"
+        );
+
+        for (key, text) in [
+            ("profile.country_code", "Peru"),
+            ("profile.timezone", "Lima"),
+            ("discovery.topics", "cooking"),
+            ("onboarding.step", "9"),
+        ] {
+            assert!(save(&path, &[(key.into(), text.into())]).is_err(), "{key}");
+        }
+        let cleared = save(&path, &[("profile.region".into(), String::new())]).unwrap();
+        assert_eq!(
+            cleared.config.profile.region, None,
+            "optional fields can be emptied"
+        );
+    }
+
+    #[test]
+    fn onboarding_can_be_restarted_without_losing_answers() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, "[profile]\nhome_city = \"Lima\"\n").unwrap();
+        let saved = restart_onboarding(&path).unwrap();
+        assert!(saved.config.needs_onboarding());
+        assert_eq!(saved.config.onboarding.step, Some(0));
+        assert_eq!(saved.config.profile.home_city.as_deref(), Some("Lima"));
+        assert!(saved.backup.is_some());
     }
 
     #[test]
