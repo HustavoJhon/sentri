@@ -7,9 +7,19 @@
 [storage]
 # database = "/custom/path/sentri.db"   # default: ~/.local/share/sentri/sentri.db
 
+# First-run setup. New configurations start with `completed = false`, which
+# opens the onboarding wizard once; files without this section skip it.
+# Rerun it any time with `sentri onboarding` or from Settings.
+[onboarding]
+completed = false
+startup_animation = true  # the Observer awakening shown while SENTRI starts
+
 [profile]
 home_city = "Cusco"
 country = "Peru"
+country_code = "PE"       # ISO 3166-1 alpha-2; adds "Peru" and "Perú" to matching
+# region = "Cusco"
+# timezone = "America/Lima"   # default: your system time zone
 location_aliases = ["Perú", "Cusco, Peru", "Lima", "Latin America", "LATAM", "Latinoamérica"]
 preferred_modalities = ["online", "hybrid"]
 avoid_keywords = ["senior", "10+ years", "unpaid"]
@@ -49,6 +59,17 @@ name = "Developer communities"
 keywords = ["gdg", "meetup", "community", "comunidad", "devfest", "conference"]
 categories = ["meetup", "conference", "workshop"]
 priority = "medium"
+
+# How far from home opportunities may be. Turning one off only withholds
+# its bonus; nothing is hidden. Remote, hybrid and in-person preferences are
+# `profile.preferred_modalities` above.
+[discovery]
+local = true
+national = true
+international = true
+# Topics that matter most: events, courses, hackathons, scholarships,
+# competitions, communities, open_source, cfps, news, jobs
+topics = []
 
 # Rule weights (see docs/configuration.md). Omitted values use defaults.
 [scoring]

@@ -261,6 +261,34 @@ pub struct GitHubConfig {
     pub username: Option<String>,
 }
 
+/// First-run setup and the startup animation.
+///
+/// A file without this section belongs to someone who used SENTRI before
+/// onboarding existed, so `completed` defaults to `true` and they are never
+/// sent through it. The template written for new users sets it to `false`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct OnboardingConfig {
+    pub completed: bool,
+    /// Show the Observer awakening while SENTRI starts.
+    pub startup_animation: bool,
+    /// Step to resume an interrupted onboarding from (absent when done).
+    pub step: Option<u8>,
+}
+
+impl Default for OnboardingConfig {
+    fn default() -> Self {
+        Self {
+            completed: true,
+            startup_animation: true,
+            step: None,
+        }
+    }
+}
+
+/// Last onboarding step index (the review screen).
+pub const ONBOARDING_LAST_STEP: u8 = 5;
+
 /// Background collection settings.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -326,6 +354,7 @@ const fn default_max_items() -> usize {
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
     pub storage: StorageConfig,
+    pub onboarding: OnboardingConfig,
     pub profile: Profile,
     pub discovery: Discovery,
     pub scoring: Weights,
@@ -384,6 +413,11 @@ impl Config {
         })
     }
 
+    /// Whether the first-run wizard still has to run.
+    pub const fn needs_onboarding(&self) -> bool {
+        !self.onboarding.completed
+    }
+
     /// Database path from the configuration or the default location.
     pub fn database_path(&self) -> PathBuf {
         self.storage
@@ -439,6 +473,41 @@ impl Config {
         Ok(())
     }
 
+    fn validate_profile(&self) -> Result<(), ConfigError> {
+        let p = &self.profile;
+        if let Some(code) = p.country_code.as_deref().filter(|c| !c.is_empty())
+            && sentri_core::country::normalize_code(code).is_none()
+        {
+            return Err(ConfigError::Invalid(format!(
+                "profile.country_code {code:?} is not an ISO 3166-1 alpha-2 code (e.g. PE, MX, ES)"
+            )));
+        }
+        if let Some(zone) = p.timezone.as_deref().filter(|z| !z.is_empty())
+            && !crate::timezone::valid(zone)
+        {
+            return Err(ConfigError::Invalid(format!(
+                "profile.timezone {zone:?} is not a time zone name like America/Lima"
+            )));
+        }
+        for (key, value) in [("home_city", &p.home_city), ("region", &p.region)] {
+            if value.as_deref().is_some_and(|v| v.chars().count() > 80) {
+                return Err(ConfigError::Invalid(format!(
+                    "profile.{key} is longer than 80 characters"
+                )));
+            }
+        }
+        if self
+            .onboarding
+            .step
+            .is_some_and(|s| s > ONBOARDING_LAST_STEP)
+        {
+            return Err(ConfigError::Invalid(format!(
+                "onboarding.step must be between 0 and {ONBOARDING_LAST_STEP}"
+            )));
+        }
+        Ok(())
+    }
+
     fn validate(&self) -> Result<(), ConfigError> {
         let mut names = HashSet::new();
         for source in &self.sources {
@@ -490,6 +559,7 @@ impl Config {
                 "github.username {user:?} is not a valid GitHub username"
             )));
         }
+        self.validate_profile()?;
         if let Err(errors) = crate::keys::effective(&self.keys) {
             return Err(ConfigError::Invalid(format!("keys: {}", errors.join("; "))));
         }
@@ -583,6 +653,12 @@ mod tests {
             "[daemon]\ninterval_minutes = 1",
             "[keys]\nlike = \"s\"",
             "[keys]\nsave = \"j\"",
+            "[profile]\ncountry_code = \"XX\"",
+            "[profile]\ncountry_code = \"PER\"",
+            "[profile]\ntimezone = \"Lima\"",
+            "[onboarding]\nstep = 9",
+            "[onboarding]\nnope = true",
+            "[discovery]\ntopics = [\"cooking\"]",
         ];
         for text in bad {
             assert!(
@@ -590,6 +666,57 @@ mod tests {
                 "accepted: {text}"
             );
         }
+    }
+
+    #[test]
+    fn new_users_onboard_and_existing_files_do_not() {
+        let fresh = Config::parse(DEFAULT_CONFIG, Path::new("default")).unwrap();
+        assert!(fresh.needs_onboarding(), "the template starts onboarding");
+        assert!(fresh.onboarding.startup_animation);
+        let missing = tempfile::tempdir().unwrap();
+        let first_run = Config::load(&missing.path().join("config.toml")).unwrap();
+        assert!(
+            first_run.needs_onboarding(),
+            "no file at all is a first run"
+        );
+
+        // A configuration written before onboarding existed.
+        let existing = "[profile]\nhome_city = \"Arequipa\"\n[ui]\ndensity = \"compact\"\n";
+        let config = Config::parse(existing, Path::new("x")).unwrap();
+        assert!(!config.needs_onboarding());
+        assert!(config.onboarding.startup_animation);
+        assert_eq!(config.discovery, Discovery::default());
+        assert_eq!(config.profile.country_code, None);
+        assert_eq!(config.profile.home_city.as_deref(), Some("Arequipa"));
+    }
+
+    #[test]
+    fn profile_location_and_discovery_parse() {
+        let text = "[onboarding]\ncompleted = false\nstartup_animation = false\nstep = 2\n\
+            [profile]\ncountry_code = \"mx\"\nregion = \"\"\ntimezone = \"America/Mexico_City\"\n\
+            [discovery]\ninternational = false\ntopics = [\"hackathons\", \"open_source\"]\n";
+        let config = Config::parse(text, Path::new("x")).unwrap();
+        assert_eq!(config.onboarding.step, Some(2));
+        assert!(!config.onboarding.startup_animation);
+        assert!(!config.discovery.international && config.discovery.local);
+        assert_eq!(
+            config.discovery.topics,
+            [
+                sentri_core::Topic::Hackathons,
+                sentri_core::Topic::OpenSource
+            ]
+        );
+        assert_eq!(
+            config.profile.region.as_deref(),
+            Some(""),
+            "optional fields may stay empty"
+        );
+        assert!(
+            config
+                .profile
+                .location_terms()
+                .contains(&"méxico".to_owned())
+        );
     }
 
     #[test]
