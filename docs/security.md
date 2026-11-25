@@ -39,6 +39,11 @@ y limita longitudes. Las URLs de imagen solo se aceptan con `https://`.
 
 - Base de datos y backups con permisos `0600` desde su creación; directorio `0700`.
 - El perfil reutilizable para inscripciones (fase 10) es opcional campo a campo.
+- Las respuestas del onboarding (GitHub, ubicación, ámbitos, intereses) viven
+  solo en `config.toml`; únicamente el usuario de GitHub sale del equipo, hacia
+  la API pública de GitHub y sin token. Detalle en [privacy.md](privacy.md).
+- `config.toml` se escribe en un fichero temporal que luego se renombra, tras
+  validar el documento completo: una interrupción nunca lo deja a medias.
 - Ninguna acción externa (inscribirse, postular, aceptar términos, pagar,
   adjuntar documentos, publicar) se ejecuta sin confirmación explícita.
 
