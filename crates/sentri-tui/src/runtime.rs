@@ -72,6 +72,12 @@ async fn event_loop(
         ..State::default()
     };
     state.startup = Some(startup_screen(&app, &state, palette));
+    if app.config().needs_onboarding() {
+        state.onboarding = Some(crate::state::onboarding::Onboarding::from_config(
+            &app.config(),
+            sentri_app::timezone::detect(),
+        ));
+    }
     state.announce_graphics();
     execute(&app, &state, Effect::Load, &config_path, &msg_tx);
     execute(&app, &state, Effect::LoadProfile, &config_path, &msg_tx);
@@ -262,6 +268,48 @@ fn execute(
         Effect::OpenUrl(url) => {
             let _ = tx.send(open_url(&url));
         }
+        onboarding @ (Effect::SaveOnboarding { .. }
+        | Effect::CheckGitHub(_)
+        | Effect::RestartOnboarding) => execute_onboarding(app, config_path, onboarding, tx),
+    }
+}
+
+/// Onboarding writes go through the same validated settings writer as
+/// Settings; the GitHub check runs in the background.
+fn execute_onboarding(app: Sentri, config_path: &str, effect: Effect, tx: UnboundedSender<Msg>) {
+    let path = std::path::PathBuf::from(config_path);
+    match effect {
+        Effect::SaveOnboarding {
+            changes,
+            backup,
+            finish,
+        } => {
+            let msg = match sentri_app::settings::save_with(&path, &changes, backup) {
+                Ok(saved) => {
+                    app.reload_config(saved.config.clone());
+                    Msg::OnboardingSaved(Box::new(saved), finish)
+                }
+                Err(e) => Msg::OnboardingFailed(format!("Setup not saved: {e}")),
+            };
+            let _ = tx.send(msg);
+        }
+        Effect::CheckGitHub(name) => {
+            tokio::spawn(async move {
+                let lookup = app.lookup_github(&name).await;
+                let _ = tx.send(Msg::GitHubChecked(name, lookup));
+            });
+        }
+        Effect::RestartOnboarding => {
+            let msg = match sentri_app::settings::restart_onboarding(&path) {
+                Ok(saved) => {
+                    app.reload_config(saved.config.clone());
+                    Msg::OnboardingRestarted(Box::new(saved), sentri_app::timezone::detect())
+                }
+                Err(e) => Msg::Failed(format!("Could not restart setup: {e}")),
+            };
+            let _ = tx.send(msg);
+        }
+        _ => {}
     }
 }
 
@@ -382,6 +430,17 @@ fn load_profile(app: Sentri, tx: UnboundedSender<Msg>) {
             Err(e) => ProfileState::Unavailable(e.to_string()),
         };
         let _ = tx.send(Msg::Profile(profile));
+        // Public repository languages refine open-source ranking; the feed
+        // reloads only when they actually changed.
+        let before = app.cached_github_signals();
+        match app.refresh_github_signals().await {
+            Ok(Some(after)) if before.as_ref() != Some(&after) => {
+                let _ = tx.send(Msg::PersonalizationChanged);
+            }
+            Ok(_) => {}
+            // The error names the user's profile URL; keep it out of logs.
+            Err(_) => tracing::debug!("GitHub languages unavailable"),
+        }
     });
 }
 

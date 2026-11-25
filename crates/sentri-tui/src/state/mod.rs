@@ -389,6 +389,16 @@ pub enum Effect {
     ToggleSource(String, bool),
     RefreshSource(String),
     RestoreDefaults,
+    /// Write onboarding answers; `finish` completes it.
+    SaveOnboarding {
+        changes: Vec<(String, String)>,
+        backup: bool,
+        finish: bool,
+    },
+    /// Look up a GitHub username typed during onboarding.
+    CheckGitHub(String),
+    /// Mark onboarding as not done and open the wizard.
+    RestartOnboarding,
     SaveEdit {
         id: OpportunityId,
         values: Vec<(sentri_core::Field, String)>,
@@ -513,6 +523,15 @@ pub enum Msg {
     /// Sources changed; the text says what happened.
     SourcesSaved(Box<sentri_app::settings::Saved>, String),
     Saved(OpportunityId),
+    /// Onboarding answers written; `true` when onboarding finished.
+    OnboardingSaved(Box<sentri_app::settings::Saved>, bool),
+    /// Onboarding was reset from Settings; the wizard opens.
+    OnboardingRestarted(Box<sentri_app::settings::Saved>, Option<String>),
+    GitHubChecked(String, sentri_app::Lookup),
+    /// Public GitHub languages changed: rankings should be refreshed.
+    PersonalizationChanged,
+    /// An onboarding step could not be written; the wizard shows why.
+    OnboardingFailed(String),
     Failed(String),
 }
 
@@ -567,6 +586,8 @@ pub struct State {
     pub auto_sort: Option<SortOrder>,
     /// The Observer awakening shown while SENTRI starts.
     pub startup: Option<startup::Startup>,
+    /// First-run (or rerun) setup wizard, drawn over everything else.
+    pub onboarding: Option<onboarding::Onboarding>,
     pub quit: bool,
 }
 
@@ -604,6 +625,7 @@ impl Default for State {
             start: collect::StartCheck::Pending,
             auto_sort: None,
             startup: None,
+            onboarding: None,
             quit: false,
         }
     }
@@ -949,6 +971,10 @@ impl State {
             }
             return Vec::new();
         }
+        if let Some(wizard) = &mut self.onboarding {
+            let requests = wizard.on_key(key);
+            return self.onboarding_requests(requests);
+        }
         match self.mode.clone() {
             Mode::Normal => self.on_normal_key(key),
             Mode::Help => {
@@ -1167,6 +1193,7 @@ impl State {
                     .filter_map(|e| match e {
                         SettingsEffect::Save(changes) => Some(Effect::SaveSettings(changes)),
                         SettingsEffect::RestoreDefaults => Some(Effect::RestoreDefaults),
+                        SettingsEffect::RestartOnboarding => Some(Effect::RestartOnboarding),
                         SettingsEffect::Message(text) => {
                             self.info(text, Level::Info);
                             None
@@ -1528,8 +1555,92 @@ impl State {
         }
     }
 
+    fn onboarding_requests(&mut self, requests: Vec<onboarding::Request>) -> Vec<Effect> {
+        let mut effects = Vec::new();
+        for request in requests {
+            match request {
+                onboarding::Request::Save {
+                    changes,
+                    backup,
+                    finish,
+                } => effects.push(Effect::SaveOnboarding {
+                    changes,
+                    backup,
+                    finish,
+                }),
+                onboarding::Request::CheckGitHub(name) => effects.push(Effect::CheckGitHub(name)),
+                onboarding::Request::Close => {
+                    self.onboarding = None;
+                    self.info(
+                        "Setup skipped for now: it opens again next start (or O in Settings)",
+                        Level::Info,
+                    );
+                }
+            }
+        }
+        effects
+    }
+
+    /// Applies a configuration written by onboarding.
+    fn on_onboarding_saved(
+        &mut self,
+        saved: sentri_app::settings::Saved,
+        finished: bool,
+    ) -> Vec<Effect> {
+        if !self.settings.is_dirty() {
+            self.settings = SettingsState::from_config(&saved.config);
+        }
+        self.overview.profile = saved.config.profile.clone();
+        self.overview.config = saved.config;
+        if !finished {
+            return Vec::new();
+        }
+        self.onboarding = None;
+        self.info(
+            "Profile saved · your dashboard is now personalized (edit it any time in Settings)",
+            Level::Success,
+        );
+        self.profile = ProfileState::Loading;
+        self.loading = true;
+        vec![Effect::Load, Effect::LoadProfile]
+    }
+
+    /// Onboarding messages; anything else is handed back.
+    fn on_setup_msg(&mut self, msg: Msg) -> Result<Vec<Effect>, Msg> {
+        match msg {
+            Msg::OnboardingSaved(saved, finished) => {
+                return Ok(self.on_onboarding_saved(*saved, finished));
+            }
+            Msg::OnboardingRestarted(saved, zone) => {
+                self.onboarding = Some(onboarding::Onboarding::from_config(&saved.config, zone));
+                self.on_onboarding_saved(*saved, false);
+            }
+            Msg::GitHubChecked(name, lookup) => {
+                if let Some(w) = &mut self.onboarding
+                    && w.check == onboarding::GitHubCheck::Checking(name.clone())
+                {
+                    w.check = onboarding::GitHubCheck::Checked(name, lookup);
+                }
+            }
+            Msg::PersonalizationChanged => return Ok(self.reload()),
+            Msg::OnboardingFailed(text) => match &mut self.onboarding {
+                Some(w) => {
+                    w.save_failed();
+                    w.error = Some(text);
+                }
+                None => self.info(text, Level::Error),
+            },
+            other => return Err(other),
+        }
+        Ok(Vec::new())
+    }
+
     pub fn on_msg(&mut self, msg: Msg) -> Vec<Effect> {
         self.observe_startup(&msg);
+        let msg = match self.on_setup_msg(msg) {
+            Ok(effects) => return effects,
+            Err(msg) => msg,
+        };
         match msg {
             Msg::Loaded(items) => {
                 self.loading = false;
@@ -1605,6 +1716,12 @@ impl State {
                 self.info(text, Level::Success);
                 return self.reload();
             }
+            // Handled by `on_setup_msg`.
+            Msg::OnboardingSaved(..)
+            | Msg::OnboardingRestarted(..)
+            | Msg::GitHubChecked(..)
+            | Msg::PersonalizationChanged
+            | Msg::OnboardingFailed(_) => {}
             Msg::Failed(text) => {
                 self.loading = false;
                 self.info(text, Level::Error);

@@ -606,4 +606,94 @@ mod tests {
         w.on_key(key(KeyCode::Char('a')));
         assert_eq!(w.chosen_topics(), Vec::<Topic>::new());
     }
+
+    mod flow {
+        use super::*;
+        use crate::state::{Effect, Msg, State};
+
+        fn state_with_wizard() -> State {
+            State {
+                onboarding: Some(fresh()),
+                ..State::default()
+            }
+        }
+
+        fn saved_config(text: &str) -> Box<sentri_app::settings::Saved> {
+            Box::new(sentri_app::settings::Saved {
+                config: Config::parse(text, Path::new("x")).unwrap(),
+                backup: None,
+            })
+        }
+
+        #[test]
+        fn wizard_takes_the_keys_and_finishing_opens_the_dashboard() {
+            let mut state = state_with_wizard();
+            let effects = state.on_key(key(KeyCode::Enter));
+            assert!(matches!(
+                effects.as_slice(),
+                [Effect::SaveOnboarding {
+                    finish: false,
+                    backup: true,
+                    ..
+                }]
+            ));
+            // `q` is text here, not quit.
+            state.on_key(key(KeyCode::Char('q')));
+            assert!(!state.quit);
+            assert_eq!(state.onboarding.as_ref().unwrap().github.value(), "q");
+
+            let partial = state.on_msg(Msg::OnboardingSaved(saved_config(""), false));
+            assert_eq!(partial, Vec::new());
+            assert!(state.onboarding.is_some());
+
+            let done = state.on_msg(Msg::OnboardingSaved(
+                saved_config("[discovery]\ntopics = [\"jobs\"]\n"),
+                true,
+            ));
+            assert_eq!(done, vec![Effect::Load, Effect::LoadProfile]);
+            assert!(state.onboarding.is_none());
+            assert_eq!(
+                state.overview.config.discovery.topics,
+                [Topic::Jobs],
+                "settings reflect the new profile"
+            );
+        }
+
+        #[test]
+        fn esc_on_welcome_skips_without_writing_and_failures_show_inline() {
+            let mut state = state_with_wizard();
+            state.onboarding.as_mut().unwrap().page = Page::Review;
+            state.on_key(key(KeyCode::Enter));
+            state.on_msg(Msg::OnboardingFailed("Setup not saved: disk full".into()));
+            let w = state.onboarding.as_ref().unwrap();
+            assert_eq!(w.error.as_deref(), Some("Setup not saved: disk full"));
+            assert!(!w.finishing, "can retry");
+
+            let mut state = state_with_wizard();
+            assert_eq!(state.on_key(key(KeyCode::Esc)), Vec::new());
+            assert!(state.onboarding.is_none());
+        }
+
+        #[test]
+        fn settings_can_rerun_onboarding_with_saved_answers() {
+            let mut state = State::default();
+            state.section = crate::state::Section::ALL
+                .iter()
+                .position(|s| *s == crate::state::Section::Settings)
+                .unwrap();
+            assert_eq!(
+                state.on_key(KeyEvent::new(KeyCode::Char('O'), KeyModifiers::SHIFT)),
+                vec![Effect::RestartOnboarding]
+            );
+            state.on_msg(Msg::OnboardingRestarted(
+                saved_config(
+                    "[onboarding]\ncompleted = false\nstep = 0\n[github]\nusername = \"octocat\"\n",
+                ),
+                None,
+            ));
+            let w = state.onboarding.as_ref().unwrap();
+            assert_eq!(w.page, Page::Welcome);
+            assert_eq!(w.github.value(), "octocat");
+        }
+    }
 }

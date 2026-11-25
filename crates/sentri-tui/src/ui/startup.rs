@@ -144,6 +144,9 @@ pub fn render(frame: &mut Frame, startup: &Startup, theme: &Theme) {
         Paragraph::new(hint).centered(),
         centered(parts[i + 3], area.width),
     );
+    if !startup.unicode {
+        super::ascii::asciify(frame.buffer_mut());
+    }
 }
 
 #[cfg(test)]

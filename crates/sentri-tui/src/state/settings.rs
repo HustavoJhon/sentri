@@ -30,6 +30,8 @@ impl SettingRow {
 pub enum SettingsEffect {
     Save(Vec<(String, String)>),
     RestoreDefaults,
+    /// Open the onboarding wizard again (answers are kept).
+    RestartOnboarding,
     Message(String),
 }
 
@@ -221,6 +223,7 @@ impl SettingsState {
                 }
             }
             KeyCode::Char('D') => self.confirm_restore = true,
+            KeyCode::Char('O') => return Some(vec![SettingsEffect::RestartOnboarding]),
             _ => return None,
         }
         Some(Vec::new())

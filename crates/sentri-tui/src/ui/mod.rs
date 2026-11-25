@@ -14,6 +14,7 @@ mod editor;
 mod feed;
 mod history;
 pub mod image;
+mod onboarding;
 mod popups;
 mod profile;
 mod settings;
@@ -48,6 +49,14 @@ pub fn draw(frame: &mut Frame, state: &mut State, theme: &Theme) {
         && let Some(s) = &state.startup
     {
         startup::render(frame, s, theme);
+        return;
+    }
+    if let Some(wizard) = &state.onboarding {
+        let unicode = state
+            .startup
+            .as_ref()
+            .map_or(!state.ui.ascii_icons, |s| s.unicode);
+        onboarding::render(frame, wizard, unicode, theme);
         return;
     }
     let area = frame.area();
