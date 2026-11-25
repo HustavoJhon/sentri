@@ -4,6 +4,14 @@
 sentri            # abre la TUI
 ```
 
+## Arranque y onboarding
+
+Mientras SENTRI se inicia, el Observer despierta y muestra los pasos reales
+de inicialización; cualquier tecla lo salta. En la primera ejecución se abre
+después un asistente de seis páginas (GitHub, ubicación, ámbitos e intereses)
+que guarda cada página al continuar y retoma donde lo dejaste. `O` en Settings
+lo repite. Detalle en [onboarding.md](onboarding.md).
+
 ## Primer arranque y recolección
 
 Al abrir la TUI con la base vacía, SENTRI recolecta enseguida en segundo plano
@@ -74,7 +82,7 @@ estado los atajos de la sección actual (con tus atajos personalizados).
 | Calendar | Mes, semana, día y agenda ([calendar.md](calendar.md)) |
 | History | Mapa de actividad anual, rachas y resumen por día (`h`/`l` día, `H`/`L` semana, `t` hoy) |
 | Sources | Gestor: añadir/editar/activar/borrar/refrescar fuentes, último éxito y último error ([sources.md](sources.md)) |
-| Settings | Formulario editable ([configuration.md](configuration.md)); la cabecera indica cómo se dibujan las imágenes en esta terminal y por qué (`sentri terminal` da el detalle). Los cambios sin guardar se marcan con `●` en la barra lateral y salir con `q` pide confirmación (`s` vuelve a Settings, `y` sale sin guardar) |
+| Settings | Formulario editable ([configuration.md](configuration.md)); la cabecera indica cómo se dibujan las imágenes en esta terminal y por qué (`sentri terminal` da el detalle). Los cambios sin guardar se marcan con `●` en la barra lateral y salir con `q` pide confirmación (`s` vuelve a Settings, `y` sale sin guardar). `O` repite el onboarding con tus respuestas precargadas |
 
 ## Cards
 
