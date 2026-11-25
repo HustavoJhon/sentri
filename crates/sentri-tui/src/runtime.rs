@@ -71,13 +71,28 @@ async fn event_loop(
         },
         ..State::default()
     };
+    state.startup = Some(startup_screen(&app, &state, palette));
+    if app.config().needs_onboarding() {
+        state.onboarding = Some(crate::state::onboarding::Onboarding::from_config(
+            &app.config(),
+            sentri_app::timezone::detect(),
+        ));
+    }
     state.announce_graphics();
     execute(&app, &state, Effect::Load, &config_path, &msg_tx);
     execute(&app, &state, Effect::LoadProfile, &config_path, &msg_tx);
 
     while !state.quit {
         terminal.draw(|frame| ui::draw(frame, &mut state, &theme))?;
+        let timer = state
+            .startup
+            .as_ref()
+            .and_then(|s| s.timer(std::time::Instant::now()));
         let effects = tokio::select! {
+            () = wait(timer) => {
+                state.on_timer();
+                Vec::new()
+            }
             Some(event) = events.recv() => match event {
                 Event::Key(key) if key.kind == KeyEventKind::Press => state.on_key(key),
                 Event::Mouse(mouse) => state.on_mouse(mouse),
@@ -92,6 +107,47 @@ async fn event_loop(
         }
     }
     Ok(())
+}
+
+/// Sleeps for `timer`, or forever when there is none.
+async fn wait(timer: Option<Duration>) {
+    match timer {
+        Some(d) => tokio::time::sleep(d).await,
+        None => std::future::pending().await,
+    }
+}
+
+/// The Observer awakening, with the steps that already finished before the
+/// event loop starts (theme and terminal detection run synchronously).
+fn startup_screen(app: &Sentri, state: &State, palette: Palette) -> crate::state::startup::Startup {
+    use crate::observer::SplashEnv;
+    use crate::state::startup::{Startup, Status, Step};
+    let env = SplashEnv::detect();
+    let config = app.config();
+    let mode = env.mode(config.onboarding.startup_animation);
+    let now = std::time::Instant::now();
+    let mut startup = Startup::new(mode, env.unicode(config.ui.ascii_icons), now);
+    let colors = if palette == Palette::INDEXED {
+        "256 colors"
+    } else {
+        "truecolor"
+    };
+    startup.resolve(
+        Step::Observer,
+        Status::Done(format!("Gruvbox Dark · {colors}")),
+        now,
+    );
+    let d = state.graphics.diagnosis();
+    let mut environment = format!(
+        "{} · images: {}",
+        d.emulator.name(),
+        state.graphics.renderer(config.ui.images).label()
+    );
+    if d.tmux.is_some() {
+        environment.push_str(" · tmux");
+    }
+    startup.resolve(Step::Environment, Status::Done(environment), now);
+    startup
 }
 
 fn spawn_terminal_reader(tx: UnboundedSender<Event>) {
@@ -212,6 +268,48 @@ fn execute(
         Effect::OpenUrl(url) => {
             let _ = tx.send(open_url(&url));
         }
+        onboarding @ (Effect::SaveOnboarding { .. }
+        | Effect::CheckGitHub(_)
+        | Effect::RestartOnboarding) => execute_onboarding(app, config_path, onboarding, tx),
+    }
+}
+
+/// Onboarding writes go through the same validated settings writer as
+/// Settings; the GitHub check runs in the background.
+fn execute_onboarding(app: Sentri, config_path: &str, effect: Effect, tx: UnboundedSender<Msg>) {
+    let path = std::path::PathBuf::from(config_path);
+    match effect {
+        Effect::SaveOnboarding {
+            changes,
+            backup,
+            finish,
+        } => {
+            let msg = match sentri_app::settings::save_with(&path, &changes, backup) {
+                Ok(saved) => {
+                    app.reload_config(saved.config.clone());
+                    Msg::OnboardingSaved(Box::new(saved), finish)
+                }
+                Err(e) => Msg::OnboardingFailed(format!("Setup not saved: {e}")),
+            };
+            let _ = tx.send(msg);
+        }
+        Effect::CheckGitHub(name) => {
+            tokio::spawn(async move {
+                let lookup = app.lookup_github(&name).await;
+                let _ = tx.send(Msg::GitHubChecked(name, lookup));
+            });
+        }
+        Effect::RestartOnboarding => {
+            let msg = match sentri_app::settings::restart_onboarding(&path) {
+                Ok(saved) => {
+                    app.reload_config(saved.config.clone());
+                    Msg::OnboardingRestarted(Box::new(saved), sentri_app::timezone::detect())
+                }
+                Err(e) => Msg::Failed(format!("Could not restart setup: {e}")),
+            };
+            let _ = tx.send(msg);
+        }
+        _ => {}
     }
 }
 
@@ -332,6 +430,17 @@ fn load_profile(app: Sentri, tx: UnboundedSender<Msg>) {
             Err(e) => ProfileState::Unavailable(e.to_string()),
         };
         let _ = tx.send(Msg::Profile(profile));
+        // Public repository languages refine open-source ranking; the feed
+        // reloads only when they actually changed.
+        let before = app.cached_github_signals();
+        match app.refresh_github_signals().await {
+            Ok(Some(after)) if before.as_ref() != Some(&after) => {
+                let _ = tx.send(Msg::PersonalizationChanged);
+            }
+            Ok(_) => {}
+            // The error names the user's profile URL; keep it out of logs.
+            Err(_) => tracing::debug!("GitHub languages unavailable"),
+        }
     });
 }
 

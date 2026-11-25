@@ -92,6 +92,7 @@ personal para decidir **qué oportunidad merece tu tiempo**.
 | | |
 |---|---|
 | **Feed unificado** | Oportunidades y noticias en un solo lugar, con filtros, búsqueda y orden por relevancia, fecha o deadline. |
+| **Onboarding personalizado** | En la primera ejecución, el ward Observer despierta mientras SENTRI se inicia y un breve asistente pregunta tu usuario de GitHub (opcional), país, ciudad, zona horaria, dónde buscar y qué te interesa. Todo es opcional, se guarda al avanzar y se edita después. |
 | **Scoring por reglas** | Intereses, categorías, ciudad, país, modalidad, elegibilidad, cursos gratuitos, certificados, premios, viaje y deadlines. Sin cajas negras. |
 | **Afinidad aprendida** | Likes, guardados, descartes y postulaciones ajustan las recomendaciones por categoría, etiqueta y tipo de oportunidad. |
 | **Interacciones claras** | Like, guardado, descarte, interesante, postulado, inscrito y completado, con historial append-only. |
@@ -132,13 +133,34 @@ cargo run -p sentri-cli -- --help   # lista los comandos
 ### Primer arranque
 
 ```sh
-sentri config init   # escribe la configuración comentada (nunca sobrescribe)
-sentri               # abre la TUI y recopila de las fuentes habilitadas
+sentri               # primera vez: despierta el Observer y luego un asistente
 ```
+
+Mientras SENTRI se inicia, un ward Observer en ASCII abre el ojo a medida que
+terminan pasos reales (detección de la terminal, fuentes, perfil, dashboard);
+cualquier tecla lo salta y nunca espera más de unos segundos por trabajo
+opcional como GitHub. En la primera ejecución, un asistente de seis páginas
+pregunta:
+
+1. tu **usuario de GitHub** (opcional; solo perfil público, nunca un token);
+2. tu **ubicación**: código de país ISO, ciudad, región y zona horaria
+   (detectada del sistema);
+3. **dónde buscar**: local, nacional, internacional, remoto, híbrido o
+   presencial;
+4. tus **intereses**: eventos, cursos, hackathons, becas, competencias,
+   comunidades, open source, CFPs, noticias tech, empleos.
+
+Cada página se guarda al continuar, así que si sales a mitad retomas ahí la
+próxima vez. Las configuraciones existentes nunca pasan por el asistente;
+repítelo con `O` en Settings o con `sentri onboarding`. La animación se
+desactiva con `[onboarding] startup_animation = false`, se vuelve estática con
+`SENTRI_NO_ANIMATION` y usa ASCII si la terminal no tiene Unicode. Detalle en
+[docs/onboarding.md](docs/onboarding.md).
 
 Con la base vacía, la TUI empieza a recopilar enseguida y llena cada sección a
 medida que responden las fuentes. `sentri collect` hace lo mismo desde la línea
-de comandos.
+de comandos, y `sentri config init` escribe la configuración comentada (nunca
+sobrescribe).
 
 ## Uso
 
@@ -159,6 +181,7 @@ sentri collect --source hn-front-page
 sentri sources
 sentri status
 sentri terminal                         # explica cómo dibuja imágenes esta terminal
+sentri onboarding                       # repite el asistente en el próximo arranque
 sentri daemon --interval 120            # recopilación continua
 sentri backup ~/backups/sentri.db
 ```
@@ -182,6 +205,7 @@ sentri backup ~/backups/sentri.db
 | `sentri collect` | Recopila ahora de las fuentes habilitadas. |
 | `sentri daemon` | Recopila en segundo plano (pensado para systemd). |
 | `sentri terminal` | Muestra la terminal detectada, el protocolo gráfico, cómo se dibujan las imágenes y por qué. |
+| `sentri onboarding` | Vuelve a abrir el asistente en el próximo arranque de la TUI (conserva tus respuestas). |
 | `sentri config init/path/check` | Gestiona y valida la configuración. |
 | `sentri backup FILE` | Copia consistente de la base de datos. |
 
@@ -235,16 +259,31 @@ categories = ["hackathon", "fellowship"]
 priority = "high"          # low ×1 · medium ×2 · high ×3
 ```
 
-Indica tu ciudad, tu país y tu usuario de GitHub (todo opcional):
+El asistente rellena tu perfil; también puedes editarlo a mano (todo es
+opcional):
 
 ```toml
 [profile]
+country_code = "PE"            # ISO 3166-1 alfa-2; añade "Peru" y "Perú" a la comparación
 home_city = "Tu ciudad"
-country = "Tu país"
+region = "Tu región"
+timezone = "America/Lima"      # vacío: la zona del sistema
+preferred_modalities = ["online", "hybrid", "in_person"]
+
+[discovery]
+local = true                   # bonificación para tu ciudad
+national = true                # bonificación para tu país
+international = true           # bonificación para lo de fuera abierto a ti
+topics = ["hackathons", "open_source", "jobs"]
 
 [github]
-username = "tu-usuario-de-github"   # solo perfil público y avatar, sin token
+username = "tu-usuario-de-github"  # perfil público, avatar y lenguajes; sin token
 ```
+
+La personalización solo reordena el feed: nada se oculta, lo internacional y
+lo remoto siguen visibles y cada bonificación muestra su razón ("Takes place
+in your city", "Matches your interest in Hackathons", "Matches interest 'your
+GitHub languages: rust, go'").
 
 Los pesos del scoring (`home_city`, `travel`, `deadline_soon`,
 `not_eligible`, `avoid_keyword`…) son configurables y cada recomendación se
@@ -358,6 +397,10 @@ ejecuta. Ver [docs/architecture.md](docs/architecture.md) y las
   personales.
 - **Perfil en pantalla:** las direcciones IP que aparezcan en los campos de tu
   perfil público de GitHub nunca se muestran.
+- **Los datos del onboarding se quedan en tu equipo:** ubicación, zona
+  horaria, ámbitos e intereses viven solo en `config.toml`. Solo el usuario de
+  GitHub sale del equipo, en peticiones anónimas a la API pública de GitHub;
+  los logs nunca incluyen tu perfil. Ver [docs/privacy.md](docs/privacy.md).
 
 Ver [docs/security.md](docs/security.md).
 
@@ -376,7 +419,7 @@ de reglas explícitas y explicables. Declaración completa (en inglés):
 |---|---|---|
 | 0–4 | Workspace, modelos, SQLite, búsqueda, interacciones, TUI | Hecho |
 | 5 | Conectores (RSS/Atom, GitHub, Hacker News, iCalendar, ecosistema peruano, Get on Board…) | En curso |
-| 6 | Intereses, scoring, explicaciones y personalización | En curso |
+| 6 | Intereses, scoring, explicaciones y personalización | Perfil del onboarding, ámbitos y lenguajes de GitHub hechos |
 | 7 | Eventos y Google Calendar (OAuth2) | Calendario local hecho; Google sin conectar |
 | 8–10 | Cursos, empleos, perfil profesional y ayuda con inscripciones | Pendiente |
 | 11 | Daemon, systemd, reintentos y supervisión | Base hecha |

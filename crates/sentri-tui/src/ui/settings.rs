@@ -156,7 +156,7 @@ pub fn render(frame: &mut Frame, area: Rect, state: &State, theme: &Theme) {
                     Span::styled(options.join(", "), Style::new().fg(theme.p.aqua)),
                 ]),
                 _ => Line::from(Span::styled(
-                    "↑↓ move · Enter edit · ←/→ change · r default · u undo all · Ctrl-s save (backup) · D restore all defaults · shortcuts: ?",
+                    "↑↓ move · Enter edit · ←/→ change · r default · u undo all · Ctrl-s save (backup) · D restore all defaults · O rerun onboarding · shortcuts: ?",
                     theme.muted(),
                 )),
             },

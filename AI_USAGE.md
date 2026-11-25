@@ -78,11 +78,14 @@ It only contacts:
 - the sources you enable in `config.toml` (feeds, public APIs and pages);
 - the links you add yourself with `sentri add` or `n` in the interface;
 - image hosts, to download pictures for items you view;
-- GitHub's public API, only if you set `[github] username`, to read your
-  public profile and avatar (no token).
+- GitHub's public API, only if you set `[github] username` (during
+  onboarding or later), to read your public profile, avatar and the
+  languages of your public repositories (no token).
 
-Your profile, interests, likes, notes and history stay in the local SQLite
-database (see [docs/security.md](docs/security.md)).
+Your profile, location, interests, likes, notes and history stay on your
+computer, in `config.toml` and the local SQLite database: your country, city,
+time zone and interests are never sent anywhere (see
+[docs/privacy.md](docs/privacy.md) and [docs/security.md](docs/security.md)).
 
 ## Questions
 

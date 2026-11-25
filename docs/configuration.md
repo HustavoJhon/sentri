@@ -12,12 +12,26 @@ sentri config check   # valida el fichero
 
 Las claves desconocidas son un error (para detectar erratas).
 
+## `[onboarding]`
+
+| Clave | Descripción |
+|---|---|
+| `completed` | `false` abre el asistente de configuración al iniciar la TUI. La plantilla nueva trae `false`; un fichero **sin** esta sección (usuarios anteriores) cuenta como `true`. |
+| `startup_animation` | `true` (por defecto) muestra el despertar del Observer al iniciar. |
+| `step` | Página en la que continuar un onboarding interrumpido (0–5). Se borra al terminar. |
+
+`sentri onboarding` (o `O` en Settings) vuelve a poner `completed = false`
+sin tocar tus respuestas. Detalle en [onboarding.md](onboarding.md).
+
 ## `[profile]`
 
 | Clave | Descripción |
 |---|---|
 | `home_city` | Ciudad donde asistir en persona es fácil (Cusco). |
-| `country` | País de participación (elegibilidad). |
+| `country` | País de participación (elegibilidad). El onboarding lo rellena a partir de `country_code`. |
+| `country_code` | Código ISO 3166-1 alfa-2 (`PE`, `MX`, `ES`…). Añade el nombre en inglés y el local del país a la comparación de lugares. |
+| `region` | Región o estado (opcional); cuenta como tu país. |
+| `timezone` | Zona IANA (`America/Lima`). Vacío: la del sistema. Hoy se guarda y se muestra; las fechas siguen la hora local del sistema. |
 | `location_aliases` | Otros nombres que cuentan como "tu país/región". |
 | `preferred_modalities` | `online`, `in_person`, `hybrid`. |
 | `avoid_keywords` | Términos que restan relevancia (nunca ocultan). |
@@ -33,6 +47,19 @@ Las claves desconocidas son un error (para detectar erratas).
 
 Añadir un interés nuevo no requiere tocar código: basta un bloque más.
 
+## `[discovery]`
+
+| Clave | Descripción |
+|---|---|
+| `local` | Suma `scoring.home_city` a lo que ocurre en tu ciudad. |
+| `national` | Suma `scoring.home_country` a lo que ocurre en tu país (o región). |
+| `international` | Suma `scoring.international` a lo que ocurre en otro país y no te excluye. |
+| `topics` | Intereses elegidos: `events`, `courses`, `hackathons`, `scholarships`, `competitions`, `communities`, `open_source`, `cfps`, `news`, `jobs`. Cada uno agrupa categorías existentes y suma `scoring.topic`. |
+
+Todo vale `true` (y `topics = []`) por defecto. Desactivar un ámbito solo
+retira su bonificación: **nada se oculta**. Remoto, híbrido y presencial son
+`profile.preferred_modalities` (`online`, `hybrid`, `in_person`).
+
 ## `[scoring]`
 
 Pesos de cada regla (valores por defecto entre paréntesis):
@@ -41,7 +68,8 @@ Pesos de cada regla (valores por defecto entre paréntesis):
 `preferred_modality` (5), `eligible` (8), `not_eligible` (-30), `free` (4),
 `certificate` (4), `prizes` (5), `travel` (12), `deadline_soon` (10),
 `deadline_passed` (-40), `avoid_keyword` (-20), `affinity_unit` (3),
-`affinity_cap` (24), `deadline_soon_days` (14).
+`affinity_cap` (24), `deadline_soon_days` (14), `topic` (8, interés elegido
+en `[discovery]`), `international` (4).
 
 La afinidad aprendida suma señales de tus interacciones por categoría,
 etiqueta y "ofrece viaje": like +2, guardado +3, interesante +1,
@@ -120,8 +148,10 @@ repetidos.
 
 ## `[github]`
 
-`username`: tu usuario público. Solo se lee `GET /users/<usuario>` (sin token,
-60 peticiones/hora); se guarda en caché 24 h. Se muestran avatar, nombre,
+`username`: tu usuario público. Se leen `GET /users/<usuario>` y los lenguajes
+y *topics* de `GET /users/<usuario>/repos` (sin token, 60 peticiones/hora);
+ambos se guardan en caché 24 h. Los lenguajes favorecen proyectos open source
+de tu stack ([onboarding.md](onboarding.md#personalización)). Se muestran avatar, nombre,
 usuario, repositorios, seguidores y, si caben, ubicación, empresa o bio
 públicas. Si falla, se muestran tus iniciales.
 

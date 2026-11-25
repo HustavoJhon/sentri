@@ -60,6 +60,9 @@ pub enum Command {
     /// Explain how this terminal draws images: emulator, tmux, detected
     /// graphics protocol, active renderer and why.
     Terminal,
+    /// Open the setup wizard again the next time the interface starts.
+    /// Saved answers are kept and prefilled.
+    Onboarding,
     /// Re-apply the current news stance rules to stored news (dry run by
     /// default). Manual edits, likes, saves and notes are never changed.
     ReclassifyNews {

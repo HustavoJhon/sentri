@@ -14,10 +14,12 @@ mod editor;
 mod feed;
 mod history;
 pub mod image;
+mod onboarding;
 mod popups;
 mod profile;
 mod settings;
 mod sources;
+mod startup;
 mod widgets;
 
 use ratatui::Frame;
@@ -43,6 +45,20 @@ const RAIL_WIDTH: u16 = 7;
 
 /// Draws the whole interface.
 pub fn draw(frame: &mut Frame, state: &mut State, theme: &Theme) {
+    if state.splash_visible()
+        && let Some(s) = &state.startup
+    {
+        startup::render(frame, s, theme);
+        return;
+    }
+    if let Some(wizard) = &state.onboarding {
+        let unicode = state
+            .startup
+            .as_ref()
+            .map_or(!state.ui.ascii_icons, |s| s.unicode);
+        onboarding::render(frame, wizard, unicode, theme);
+        return;
+    }
     let area = frame.area();
     frame.render_widget(Block::new().style(theme.base()), area);
     let [header, body, status] = Layout::vertical([

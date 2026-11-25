@@ -1,5 +1,7 @@
 //! Public GitHub profile used for SENTRI's personal identity (avatar,
-//! name, link). Only public data from `GET /users/{username}`; no token.
+//! name, link) and for open-source recommendations (the languages and
+//! topics of public repositories). Only public data from
+//! `GET /users/{username}` and `GET /users/{username}/repos`; no token.
 
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
@@ -7,9 +9,12 @@ use std::time::{Duration, SystemTime};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
+use sentri_core::{Category, Interest, Priority};
+use sentri_sources::FetchError;
+
 use crate::{AppError, Sentri, Thumbnail};
 
-const API: &str = "https://api.github.com/users/";
+const API: &str = "https://api.github.com/";
 const TTL: Duration = Duration::from_secs(24 * 3600);
 
 /// The public fields SENTRI shows.
@@ -109,6 +114,122 @@ pub fn mentions_ip(text: &str) -> bool {
         })
 }
 
+/// Result of checking a username typed during onboarding.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Lookup {
+    Found(Box<GitHubProfile>),
+    /// GitHub answered that the user does not exist.
+    NotFound,
+    /// Not a valid GitHub username (nothing was requested).
+    Invalid,
+    /// Offline, rate limited or another error; the name can still be saved.
+    Unavailable(String),
+}
+
+/// What public repositories say about the user's stack.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct GitHubSignals {
+    /// Most used languages first.
+    pub languages: Vec<String>,
+    /// Most repeated repository topics first.
+    pub topics: Vec<String>,
+}
+
+#[derive(Deserialize)]
+struct Repo {
+    #[serde(default)]
+    language: Option<String>,
+    #[serde(default)]
+    topics: Vec<String>,
+    #[serde(default)]
+    fork: bool,
+}
+
+impl GitHubSignals {
+    const LANGUAGES: usize = 5;
+    const TOPICS: usize = 8;
+
+    /// Counts languages and topics of the user's own (non-fork) repos.
+    pub fn from_repos(body: &[u8]) -> Result<Self, AppError> {
+        let repos: Vec<Repo> = serde_json::from_slice(body)
+            .map_err(|e| AppError::Profile(format!("unexpected GitHub response: {e}")))?;
+        let mut languages: Vec<(String, usize)> = Vec::new();
+        let mut topics: Vec<(String, usize)> = Vec::new();
+        let bump = |list: &mut Vec<(String, usize)>, raw: &str| {
+            let term = sentri_core::text::clean(raw, 40).to_lowercase();
+            let safe = !term.is_empty()
+                && term
+                    .chars()
+                    .all(|c| c.is_alphanumeric() || matches!(c, ' ' | '-' | '+' | '#' | '.'));
+            if !safe {
+                return;
+            }
+            match list.iter_mut().find(|(t, _)| *t == term) {
+                Some((_, n)) => *n += 1,
+                None => list.push((term, 1)),
+            }
+        };
+        for repo in repos.iter().filter(|r| !r.fork) {
+            if let Some(language) = &repo.language {
+                bump(&mut languages, language);
+            }
+            for topic in &repo.topics {
+                bump(&mut topics, topic);
+            }
+        }
+        let top = |mut list: Vec<(String, usize)>, n: usize| {
+            // Stable: ties keep the most recently pushed first.
+            list.sort_by_key(|(_, count)| std::cmp::Reverse(*count));
+            list.into_iter().take(n).map(|(t, _)| t).collect()
+        };
+        Ok(Self {
+            languages: top(languages, Self::LANGUAGES),
+            topics: top(topics, Self::TOPICS),
+        })
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.languages.is_empty() && self.topics.is_empty()
+    }
+
+    /// An interest used only for ranking (never written to the config):
+    /// open-source items mentioning your languages or topics rank higher.
+    pub fn interest(&self) -> Option<Interest> {
+        if self.is_empty() {
+            return None;
+        }
+        let shown: Vec<&str> = self.languages.iter().take(3).map(String::as_str).collect();
+        let name = if shown.is_empty() {
+            "your GitHub topics".to_owned()
+        } else {
+            format!("your GitHub languages: {}", shown.join(", "))
+        };
+        Some(Interest {
+            name,
+            keywords: self.languages.iter().chain(&self.topics).cloned().collect(),
+            categories: vec![Category::OpenSource],
+            priority: Priority::Medium,
+        })
+    }
+}
+
+fn is_fresh(path: &std::path::Path) -> bool {
+    std::fs::metadata(path)
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| SystemTime::now().duration_since(t).ok())
+        .is_some_and(|age| age < TTL)
+}
+
+fn write_cache(path: &std::path::Path, bytes: &[u8]) {
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if let Err(error) = std::fs::write(path, bytes) {
+        tracing::debug!(%error, "could not cache GitHub data");
+    }
+}
+
 impl Sentri {
     fn profile_cache(&self, username: &str) -> PathBuf {
         self.cache_dir()
@@ -122,35 +243,119 @@ impl Sentri {
         let Some(username) = config.github.username.as_deref().filter(|u| !u.is_empty()) else {
             return Ok(None);
         };
+        self.github_profile_for(username).await.map(Some)
+    }
+
+    /// The public profile of any username (onboarding checks one before it
+    /// is saved), sharing the same cache.
+    pub async fn github_profile_for(&self, username: &str) -> Result<GitHubProfile, AppError> {
+        self.github_profile_at(API, username).await
+    }
+
+    async fn github_profile_at(
+        &self,
+        api: &str,
+        username: &str,
+    ) -> Result<GitHubProfile, AppError> {
         if !valid_username(username) {
             return Err(AppError::Profile(format!(
                 "{username:?} is not a valid GitHub username"
             )));
         }
         let cache = self.profile_cache(username);
-        let fresh = std::fs::metadata(&cache)
-            .and_then(|m| m.modified())
-            .ok()
-            .and_then(|t| SystemTime::now().duration_since(t).ok())
-            .is_some_and(|age| age < TTL);
-        if fresh
+        if is_fresh(&cache)
             && let Ok(bytes) = std::fs::read(&cache)
             && let Ok(profile) = parse(&bytes)
         {
-            return Ok(Some(profile));
+            return Ok(profile);
         }
-        let url = Url::parse(&format!("{API}{username}"))
+        let body = self.github_get(api, &format!("users/{username}")).await?;
+        let profile = parse(&body)?;
+        write_cache(&cache, &body);
+        Ok(profile)
+    }
+
+    /// Checks a username typed during onboarding. Never fails: a missing
+    /// profile and an unreachable API are both answers the wizard shows.
+    pub async fn lookup_github(&self, username: &str) -> Lookup {
+        self.lookup_github_at(API, username).await
+    }
+
+    async fn lookup_github_at(&self, api: &str, username: &str) -> Lookup {
+        if !valid_username(username) {
+            return Lookup::Invalid;
+        }
+        match self.github_profile_at(api, username).await {
+            Ok(profile) => Lookup::Found(Box::new(profile)),
+            Err(AppError::Http(FetchError::Status(404))) => Lookup::NotFound,
+            Err(e) => Lookup::Unavailable(e.to_string()),
+        }
+    }
+
+    fn signals_cache(&self, username: &str) -> PathBuf {
+        self.cache_dir().with_file_name(format!(
+            "github-{}-signals.json",
+            username.to_ascii_lowercase()
+        ))
+    }
+
+    /// Languages and topics from the last download, whatever its age.
+    /// Reads only the local cache, so ranking never waits for the network.
+    pub fn cached_github_signals(&self) -> Option<GitHubSignals> {
+        let config = self.config();
+        let username = config
+            .github
+            .username
+            .as_deref()
+            .filter(|u| valid_username(u))?;
+        let bytes = std::fs::read(self.signals_cache(username)).ok()?;
+        serde_json::from_slice(&bytes).ok()
+    }
+
+    /// Downloads repository languages and topics when the cache is older
+    /// than a day. Returns `Ok(None)` when no username is configured.
+    pub async fn refresh_github_signals(&self) -> Result<Option<GitHubSignals>, AppError> {
+        self.refresh_github_signals_at(API).await
+    }
+
+    async fn refresh_github_signals_at(
+        &self,
+        api: &str,
+    ) -> Result<Option<GitHubSignals>, AppError> {
+        let config = self.config();
+        let Some(username) = config.github.username.as_deref().filter(|u| !u.is_empty()) else {
+            return Ok(None);
+        };
+        if !valid_username(username) {
+            return Err(AppError::Profile(format!(
+                "{username:?} is not a valid GitHub username"
+            )));
+        }
+        let cache = self.signals_cache(username);
+        if is_fresh(&cache)
+            && let Some(signals) = self.cached_github_signals()
+        {
+            return Ok(Some(signals));
+        }
+        let body = self
+            .github_get(
+                api,
+                &format!("users/{username}/repos?type=owner&sort=pushed&per_page=30"),
+            )
+            .await?;
+        let signals = GitHubSignals::from_repos(&body)?;
+        if let Ok(json) = serde_json::to_vec(&signals) {
+            write_cache(&cache, &json);
+        }
+        Ok(Some(signals))
+    }
+
+    async fn github_get(&self, api: &str, path: &str) -> Result<Vec<u8>, AppError> {
+        let url = Url::parse(api)
+            .and_then(|base| base.join(path))
             .map_err(|e| AppError::Profile(e.to_string()))?;
         let headers = [("accept", "application/vnd.github+json".to_owned())];
-        let page = self.http().get_with(&url, &headers).await?;
-        let profile = parse(&page.body)?;
-        if let Some(parent) = cache.parent() {
-            let _ = std::fs::create_dir_all(parent);
-        }
-        if let Err(error) = std::fs::write(&cache, &page.body) {
-            tracing::debug!(%error, "could not cache GitHub profile");
-        }
-        Ok(Some(profile))
+        Ok(self.http().get_with(&url, &headers).await?.body)
     }
 
     /// The avatar, requested at [`crate::image_source::REQUESTED_EDGE`]
@@ -170,6 +375,109 @@ impl Sentri {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use wiremock::matchers::{path, query_param};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    async fn app(dir: &std::path::Path, username: Option<&str>) -> Sentri {
+        let mut config = crate::Config::parse("", std::path::Path::new("test")).unwrap();
+        config.ui.cache_dir = Some(dir.join("images"));
+        config.github.username = username.map(str::to_owned);
+        let store = sentri_storage::Store::in_memory().await.unwrap();
+        Sentri::with_store(config, store, true).unwrap()
+    }
+
+    const PROFILE: &str = r#"{"login":"octocat","name":"The Octocat","html_url":"https://github.com/octocat",
+        "avatar_url":"https://avatars.githubusercontent.com/u/583231?v=4","public_repos":8}"#;
+
+    #[tokio::test]
+    async fn onboarding_lookup_handles_found_missing_invalid_and_offline() {
+        let server = MockServer::start().await;
+        Mock::given(path("/users/octocat"))
+            .respond_with(ResponseTemplate::new(200).set_body_raw(PROFILE, "application/json"))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(path("/users/ghost-user"))
+            .respond_with(ResponseTemplate::new(404))
+            .mount(&server)
+            .await;
+        Mock::given(path("/users/busy"))
+            .respond_with(ResponseTemplate::new(403))
+            .mount(&server)
+            .await;
+        let dir = tempfile::tempdir().unwrap();
+        let app = app(dir.path(), None).await;
+        let api = format!("{}/", server.uri());
+        let Lookup::Found(p) = app.lookup_github_at(&api, "octocat").await else {
+            panic!("expected a profile");
+        };
+        assert_eq!(p.public_repos, 8);
+        // The second lookup is served from the shared cache (expect(1)).
+        assert!(matches!(
+            app.lookup_github_at(&api, "OctoCat").await,
+            Lookup::Found(_)
+        ));
+        assert_eq!(
+            app.lookup_github_at(&api, "ghost-user").await,
+            Lookup::NotFound
+        );
+        assert_eq!(
+            app.lookup_github_at(&api, "bad name").await,
+            Lookup::Invalid
+        );
+        assert!(matches!(
+            app.lookup_github_at(&api, "busy").await,
+            Lookup::Unavailable(_)
+        ));
+    }
+
+    #[tokio::test]
+    async fn repo_signals_are_downloaded_once_and_read_from_cache() {
+        let server = MockServer::start().await;
+        let repos = r#"[
+            {"language":"Rust","topics":["cli","tui"],"fork":false},
+            {"language":"Rust","topics":["cli"],"fork":false},
+            {"language":"Go","topics":[],"fork":false},
+            {"language":"PHP","topics":["wordpress"],"fork":true},
+            {"language":null}
+        ]"#;
+        Mock::given(path("/users/octocat/repos"))
+            .and(query_param("per_page", "30"))
+            .respond_with(ResponseTemplate::new(200).set_body_raw(repos, "application/json"))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let dir = tempfile::tempdir().unwrap();
+        let app = app(dir.path(), Some("octocat")).await;
+        assert_eq!(app.cached_github_signals(), None);
+        let api = format!("{}/", server.uri());
+        let signals = app.refresh_github_signals_at(&api).await.unwrap().unwrap();
+        assert_eq!(signals.languages, ["rust", "go"], "forks are ignored");
+        assert_eq!(signals.topics, ["cli", "tui"]);
+        assert_eq!(app.cached_github_signals(), Some(signals.clone()));
+        let again = app.refresh_github_signals_at(&api).await.unwrap();
+        assert_eq!(again, Some(signals));
+
+        let nobody = self::app(dir.path(), None).await;
+        assert_eq!(nobody.refresh_github_signals_at(&api).await.unwrap(), None);
+        assert_eq!(nobody.cached_github_signals(), None);
+    }
+
+    #[test]
+    fn signals_become_an_open_source_interest() {
+        let empty = GitHubSignals::default();
+        assert_eq!(empty.interest(), None);
+        let signals = GitHubSignals::from_repos(
+            br#"[{"language":"Rust","topics":["<script>","machine-learning"]}]"#,
+        )
+        .unwrap();
+        assert_eq!(signals.topics, ["machine-learning"], "unsafe terms dropped");
+        let interest = signals.interest().unwrap();
+        assert_eq!(interest.name, "your GitHub languages: rust");
+        assert_eq!(interest.categories, [Category::OpenSource]);
+        assert!(interest.keywords.contains(&"machine-learning".to_owned()));
+        assert!(GitHubSignals::from_repos(b"{}").is_err());
+    }
 
     #[test]
     fn validates_usernames() {

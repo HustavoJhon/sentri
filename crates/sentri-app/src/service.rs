@@ -127,14 +127,29 @@ impl Sentri {
         }
         let items = self.store.list(&storage_query, now).await?;
         let config = self.config();
+        let profile = self.personal_profile(&config);
         Ok(rank(
             items,
             query,
-            &config.profile,
+            &profile,
+            &config.discovery,
             &config.scoring,
             &affinity,
             now,
         ))
+    }
+
+    /// The configured profile plus what public GitHub repositories add
+    /// (cached languages and topics; never fetched here).
+    fn personal_profile(&self, config: &Config) -> sentri_core::Profile {
+        let mut profile = config.profile.clone();
+        if let Some(interest) = self
+            .cached_github_signals()
+            .and_then(|signals| signals.interest())
+        {
+            profile.interests.push(interest);
+        }
+        profile
     }
 
     /// How many items each view holds right now (no search or filters), for
@@ -164,6 +179,7 @@ impl Sentri {
             vec![item],
             &FeedQuery::default(),
             &config.profile,
+            &config.discovery,
             &config.scoring,
             &affinity,
             Utc::now(),
