@@ -7,6 +7,7 @@
 
 pub mod graphics;
 pub mod input;
+pub mod observer;
 mod runtime;
 pub mod state;
 pub mod terminal;
