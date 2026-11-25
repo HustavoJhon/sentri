@@ -32,6 +32,33 @@ un orden desde el primer día; la fase 6 lo amplía con personalización.
    se dejará documentado sin inventar credenciales).
 5. Afinidad: excluir la propia oportunidad al explicar "similar a lo que guardaste".
 
+## Fase 12: despertar del Observer y onboarding personalizado (2026-11-25)
+
+Hecho:
+
+- Pantalla de arranque con un ward Observer original en Unicode y ASCII: el
+  ojo se abre según pasos reales de inicialización, nunca bloquea más de 4 s,
+  se salta con cualquier tecla, es estática con `SENTRI_NO_ANIMATION`/`CI` y se
+  desactiva con `[onboarding] startup_animation = false`.
+- Asistente de primera ejecución (GitHub, ubicación ISO, zona horaria, ámbitos,
+  modalidades e intereses) que guarda cada página y retoma tras una
+  interrupción. Los usuarios existentes no pasan por él; se repite con `O` en
+  Settings o `sentri onboarding`.
+- Scoring: intereses elegidos (`scoring.topic`), ámbito local/nacional/
+  internacional (`scoring.international`) sin ocultar nada, nombres del país
+  desde su código ISO y lenguajes de los repositorios públicos de GitHub para
+  open source.
+- `config.toml` se escribe de forma atómica; `docs/privacy.md` y
+  `docs/onboarding.md`.
+- `sentri` sin terminal interactiva ya no intenta abrir la interfaz.
+
+Validado en Alacritty 0.17 dentro de tmux 3.8: primera ejecución, interrupción
+y reanudación, final del asistente, arranque directo al dashboard, `O` en
+Settings y la pantalla ASCII estática.
+
+Pendiente: usar `profile.timezone` para mostrar fechas (hoy se guarda y las
+fechas siguen la zona del sistema).
+
 ## Fase 11: comentarios de la comunidad, transparencia sobre IA y documentación (2026-11-21)
 
 Hecho:
