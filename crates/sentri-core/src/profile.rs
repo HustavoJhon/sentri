@@ -61,6 +61,13 @@ pub struct Profile {
     pub home_city: Option<String>,
     /// Country of participation (e.g. "Peru"), used for eligibility.
     pub country: Option<String>,
+    /// ISO 3166-1 alpha-2 code (e.g. "PE"); adds the country's English and
+    /// local names to location matching.
+    pub country_code: Option<String>,
+    /// Region or state (e.g. "Cusco" or "California"), optional.
+    pub region: Option<String>,
+    /// IANA time zone (e.g. "America/Lima"), optional.
+    pub timezone: Option<String>,
     /// Extra names that refer to the home city or country (e.g. "Perú").
     pub location_aliases: Vec<String>,
     pub preferred_modalities: Vec<Modality>,
@@ -72,13 +79,46 @@ pub struct Profile {
 impl Profile {
     /// All the names that identify the user's location, lowercased.
     pub fn location_terms(&self) -> Vec<String> {
-        self.home_city
+        let from_code = self
+            .country_code
+            .as_deref()
+            .map(crate::country::names)
+            .unwrap_or_default();
+        let mut terms: Vec<String> = Vec::new();
+        for term in self
+            .home_city
             .iter()
-            .chain(self.country.iter())
-            .chain(self.location_aliases.iter())
-            .map(|s| s.to_lowercase())
-            .filter(|s| !s.is_empty())
-            .collect()
+            .map(String::as_str)
+            .chain(self.region.as_deref())
+            .chain(self.country.as_deref())
+            .chain(from_code)
+            .chain(self.location_aliases.iter().map(String::as_str))
+        {
+            let term = term.trim().to_lowercase();
+            if !term.is_empty() && !terms.contains(&term) {
+                terms.push(term);
+            }
+        }
+        terms
+    }
+
+    /// Names of the user's country only (no city or region), lowercased.
+    pub fn country_terms(&self) -> Vec<String> {
+        let mut terms: Vec<String> = self
+            .country
+            .iter()
+            .map(|c| c.trim().to_lowercase())
+            .filter(|c| !c.is_empty())
+            .collect();
+        if let Some(code) = self.country_code.as_deref() {
+            for name in crate::country::names(code) {
+                let name = name.to_lowercase();
+                if !terms.contains(&name) {
+                    terms.push(name);
+                }
+            }
+        }
+        terms
     }
 }
 
@@ -126,5 +166,22 @@ mod tests {
         let p: Profile = serde_json::from_str(r#"{"home_city":"Cusco"}"#).unwrap();
         assert_eq!(p.location_terms(), vec!["cusco"]);
         assert_eq!(p.interests, Vec::<Interest>::new());
+    }
+
+    #[test]
+    fn country_code_adds_english_and_local_names() {
+        let p = Profile {
+            home_city: Some("Cusco".into()),
+            region: Some("  ".into()),
+            country_code: Some("pe".into()),
+            ..Profile::default()
+        };
+        assert_eq!(p.location_terms(), ["cusco", "peru", "perú"]);
+        assert_eq!(p.country_terms(), ["peru", "perú"]);
+        let unknown = Profile {
+            country_code: Some("ZZ".into()),
+            ..Profile::default()
+        };
+        assert_eq!(unknown.location_terms(), Vec::<String>::new());
     }
 }

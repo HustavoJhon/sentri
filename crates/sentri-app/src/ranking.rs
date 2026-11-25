@@ -1,7 +1,9 @@
 //! Orders feed items by relevance and attaches the explanation.
 
 use chrono::{DateTime, Utc};
-use sentri_core::{Affinity, FeedItem, FeedQuery, Profile, Relevance, Scorer, SortOrder, Weights};
+use sentri_core::{
+    Affinity, Discovery, FeedItem, FeedQuery, Profile, Relevance, Scorer, SortOrder, Weights,
+};
 
 /// A feed item with its relevance and the reasons behind it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -19,12 +21,14 @@ pub fn rank(
     items: Vec<FeedItem>,
     query: &FeedQuery,
     profile: &Profile,
+    discovery: &Discovery,
     weights: &Weights,
     affinity: &Affinity,
     now: DateTime<Utc>,
 ) -> Vec<Ranked> {
     let scorer = Scorer {
         profile,
+        discovery,
         weights,
         affinity,
         now,
@@ -89,6 +93,7 @@ mod tests {
             items,
             &FeedQuery::default(),
             &profile(),
+            &Discovery::default(),
             &Weights::default(),
             &Affinity::default(),
             Utc::now(),
@@ -108,6 +113,7 @@ mod tests {
             items.clone(),
             &query,
             &profile(),
+            &Discovery::default(),
             &Weights::default(),
             &Affinity::default(),
             Utc::now(),
@@ -123,6 +129,7 @@ mod tests {
             items,
             &newest,
             &profile(),
+            &Discovery::default(),
             &Weights::default(),
             &Affinity::default(),
             Utc::now(),

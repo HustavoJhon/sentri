@@ -3,7 +3,9 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-use sentri_core::{CanonicalUrl, Category, ContentKind, Profile, SourceKind, Stance, Weights};
+use sentri_core::{
+    CanonicalUrl, Category, ContentKind, Discovery, Profile, SourceKind, Stance, Weights,
+};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -325,6 +327,7 @@ const fn default_max_items() -> usize {
 pub struct Config {
     pub storage: StorageConfig,
     pub profile: Profile,
+    pub discovery: Discovery,
     pub scoring: Weights,
     pub http: HttpConfig,
     pub daemon: DaemonConfig,

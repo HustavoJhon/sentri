@@ -10,7 +10,7 @@ use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::profile::contains_term;
-use crate::{Category, Eligibility, InteractionState, Modality, Opportunity, Profile};
+use crate::{Category, Discovery, Eligibility, InteractionState, Modality, Opportunity, Profile};
 
 /// Points awarded by each rule. Configurable from `config.toml`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -42,6 +42,10 @@ pub struct Weights {
     pub news_fresh: i32,
     /// News older than a week.
     pub news_stale: i32,
+    /// When the item belongs to a topic chosen during onboarding.
+    pub topic: i32,
+    /// Opportunities abroad that are open to you (`discovery.international`).
+    pub international: i32,
 }
 
 impl Default for Weights {
@@ -66,6 +70,8 @@ impl Default for Weights {
             deadline_soon_days: 14,
             news_fresh: 12,
             news_stale: -15,
+            topic: 8,
+            international: 4,
         }
     }
 }
@@ -156,6 +162,7 @@ impl Relevance {
 #[derive(Debug, Clone)]
 pub struct Scorer<'a> {
     pub profile: &'a Profile,
+    pub discovery: &'a Discovery,
     pub weights: &'a Weights,
     pub affinity: &'a Affinity,
     pub now: DateTime<Utc>,
@@ -166,6 +173,7 @@ impl Scorer<'_> {
         let mut r = Relevance::default();
         let haystack = o.haystack();
         self.interests(o, &haystack, &mut r);
+        self.topic(o, &mut r);
         self.location(o, &mut r);
         self.conditions(o, &mut r);
         self.deadline(o, &mut r);
@@ -202,8 +210,20 @@ impl Scorer<'_> {
         }
     }
 
+    fn topic(&self, o: &Opportunity, r: &mut Relevance) {
+        if let Some(topic) = self.discovery.topic_for(o) {
+            r.add(
+                self.weights.topic,
+                format!("Matches your interest in {topic}"),
+            );
+        }
+    }
+
+    /// Local, national and international scope. Scope only adds points:
+    /// switching one off withholds its bonus but never hides an item.
     fn location(&self, o: &Opportunity, r: &mut Relevance) {
         let w = self.weights;
+        let d = self.discovery;
         let place = [o.location.as_deref(), o.country.as_deref()]
             .into_iter()
             .flatten()
@@ -214,16 +234,24 @@ impl Scorer<'_> {
             .profile
             .home_city
             .as_deref()
-            .is_some_and(|c| contains_term(&place, &c.to_lowercase()));
-        if in_city {
+            .is_some_and(|c| contains_term(&place, &c.trim().to_lowercase()));
+        let in_country = in_city
+            || self
+                .profile
+                .location_terms()
+                .iter()
+                .any(|t| contains_term(&place, t));
+        if in_city && d.local {
             r.add(w.home_city, "Takes place in your city");
-        } else if self
-            .profile
-            .location_terms()
-            .iter()
-            .any(|t| contains_term(&place, t))
-        {
+        } else if in_country && d.national {
             r.add(w.home_country, "Takes place in your country");
+        } else if !in_country
+            && d.international
+            && is_abroad(&place, o.modality)
+            && o.eligibility != Eligibility::NotEligible
+            && !self.profile.location_terms().is_empty()
+        {
+            r.add(w.international, "International opportunity open to you");
         }
         if o.modality != Modality::Unknown
             && self.profile.preferred_modalities.contains(&o.modality)
@@ -319,6 +347,15 @@ impl Scorer<'_> {
     }
 }
 
+/// Whether a known place names somewhere concrete (not just "online").
+fn is_abroad(place: &str, modality: Modality) -> bool {
+    modality != Modality::Online
+        && !place.trim().is_empty()
+        && !["online", "remote", "virtual", "remoto"]
+            .iter()
+            .any(|t| contains_term(place, t))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -351,14 +388,20 @@ mod tests {
                 priority: Priority::High,
             }],
             avoid_keywords: vec!["senior".into()],
+            ..Profile::default()
         }
     }
 
     fn score(o: &Opportunity, affinity: &Affinity) -> Relevance {
+        score_with(o, affinity, &Discovery::default())
+    }
+
+    fn score_with(o: &Opportunity, affinity: &Affinity, discovery: &Discovery) -> Relevance {
         let p = profile();
         let w = Weights::default();
         Scorer {
             profile: &p,
+            discovery,
             weights: &w,
             affinity,
             now: now(),
@@ -387,6 +430,81 @@ mod tests {
         let mut travel = opp("Fellowship", Category::Fellowship);
         travel.perks.travel_covered = Some(true);
         assert_eq!(score(&travel, &base).score, 12);
+    }
+
+    #[test]
+    fn scope_preferences_only_add_points() {
+        let mut local = opp("Meetup", Category::Meetup);
+        local.location = Some("Cusco, Perú".into());
+        let mut abroad = opp("Summit", Category::Meetup);
+        abroad.location = Some("Berlin, Germany".into());
+        let mut online = opp("Webinar", Category::Meetup);
+        online.location = Some("Online".into());
+        let base = Affinity::default();
+        let all = Discovery::default();
+        assert_eq!(score_with(&abroad, &base, &all).score, 4);
+        assert!(
+            score_with(&abroad, &base, &all)
+                .reasons
+                .iter()
+                .any(|r| r.text.contains("International"))
+        );
+        assert_eq!(
+            score_with(&online, &base, &all).score,
+            0,
+            "online is not abroad"
+        );
+
+        let national_only = Discovery {
+            local: false,
+            international: false,
+            ..Discovery::default()
+        };
+        assert_eq!(
+            score_with(&local, &base, &national_only).score,
+            8,
+            "the city still counts as your country"
+        );
+        assert_eq!(score_with(&abroad, &base, &national_only).score, 0);
+
+        let nothing = Discovery {
+            local: false,
+            national: false,
+            international: false,
+            topics: Vec::new(),
+        };
+        assert_eq!(score_with(&local, &base, &nothing).score, 0);
+
+        let mut closed = abroad.clone();
+        closed.eligibility = Eligibility::NotEligible;
+        assert!(
+            !score_with(&closed, &base, &all)
+                .reasons
+                .iter()
+                .any(|r| r.text.contains("International"))
+        );
+    }
+
+    #[test]
+    fn chosen_topics_raise_relevance_with_a_reason() {
+        let hack = opp("Build night", Category::Hackathon);
+        let job = opp("Backend role", Category::Job);
+        let discovery = Discovery {
+            topics: vec![crate::Topic::Hackathons],
+            ..Discovery::default()
+        };
+        let base = Affinity::default();
+        let r = score_with(&hack, &base, &discovery);
+        assert!(
+            r.reasons
+                .iter()
+                .any(|x| x.text == "Matches your interest in Hackathons")
+        );
+        assert_eq!(
+            r.score,
+            score(&hack, &base).score + Weights::default().topic
+        );
+        assert_eq!(score_with(&job, &base, &discovery).score, 0);
     }
 
     #[test]
