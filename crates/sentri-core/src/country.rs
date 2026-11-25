@@ -312,6 +312,26 @@ pub fn names(code: &str) -> Vec<&'static str> {
     out
 }
 
+/// The code of a country written by name (`Perú`, `peru`, `Mexico`), for
+/// configurations that predate `country_code`.
+pub fn code_for_name(name: &str) -> Option<&'static str> {
+    let name = name.trim();
+    if name.is_empty() {
+        return None;
+    }
+    COUNTRIES
+        .iter()
+        .map(|(code, _)| *code)
+        .find(|code| names(code).iter().any(|n| n.eq_ignore_ascii_case(name)))
+        .or_else(|| {
+            let lower = name.to_lowercase();
+            COUNTRIES
+                .iter()
+                .map(|(code, _)| *code)
+                .find(|code| names(code).iter().any(|n| n.to_lowercase() == lower))
+        })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -335,6 +355,11 @@ mod tests {
         assert_eq!(names("DE"), ["Germany"]);
         assert_eq!(name("XX"), None);
         assert_eq!(name("PER"), None, "alpha-3 is not accepted");
+        assert_eq!(code_for_name("Perú"), Some("PE"));
+        assert_eq!(code_for_name("PERÚ"), Some("PE"));
+        assert_eq!(code_for_name(" peru "), Some("PE"));
+        assert_eq!(code_for_name("México"), Some("MX"));
+        assert_eq!(code_for_name("Atlantis"), None);
         assert_eq!(names(""), Vec::<&str>::new());
     }
 }
