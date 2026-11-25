@@ -6,6 +6,7 @@
 pub mod calendar;
 pub mod category;
 pub mod classify;
+pub mod country;
 pub mod dates;
 pub mod edit;
 pub mod error;
