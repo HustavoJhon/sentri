@@ -28,12 +28,28 @@ async fn main() -> Result<()> {
             terminal(&Config::load(&config_path)?);
             Ok(())
         }
+        Some(Command::Onboarding) => {
+            init_logging(LogTarget::Stderr);
+            let saved = sentri_app::settings::restart_onboarding(&config_path)?;
+            println!("Setup will open the next time you run `sentri`.");
+            if let Some(backup) = saved.backup {
+                println!("Backup: {}", backup.display());
+            }
+            Ok(())
+        }
         Some(command) => {
             init_logging(LogTarget::Stderr);
             let app = open(&config_path).await?;
             run(&app, command).await
         }
         None => {
+            use std::io::IsTerminal;
+            if !(std::io::stdin().is_terminal() && std::io::stdout().is_terminal()) {
+                anyhow::bail!(
+                    "the interface needs an interactive terminal; in scripts use a command \
+                     such as `sentri feed` or `sentri collect` (see `sentri --help`)"
+                );
+            }
             // The interface owns the terminal: logs written to stderr would
             // be drawn over it, so they go to a file next to the database.
             let log = Config::load(&config_path)
@@ -199,7 +215,7 @@ async fn run(app: &Sentri, command: Command) -> Result<()> {
                 .await?;
         }
         Command::Backup { target } => backup(app, target).await?,
-        Command::Config(_) | Command::Terminal => {
+        Command::Config(_) | Command::Terminal | Command::Onboarding => {
             unreachable!("handled before opening the database")
         }
     }
