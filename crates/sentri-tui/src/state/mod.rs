@@ -23,6 +23,7 @@ pub mod calendar;
 pub mod collect;
 pub mod editor;
 pub mod history;
+pub mod onboarding;
 pub mod presentation;
 pub mod settings;
 pub mod sources;

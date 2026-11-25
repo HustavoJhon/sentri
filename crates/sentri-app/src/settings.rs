@@ -443,7 +443,6 @@ const INTERNAL: &[(&str, SettingKind)] = &[
             max: crate::config::ONBOARDING_LAST_STEP as i64,
         },
     ),
-    ("profile.home_city", SettingKind::Text),
     ("profile.country", SettingKind::Text),
 ];
 
@@ -589,6 +588,10 @@ fn to_item(key: &str, kind: SettingKind, text: &str) -> Result<Option<Item>, Set
         message,
     };
     let text = text.trim();
+    if key == "onboarding.step" && text.is_empty() {
+        // Onboarding finished: nothing left to resume.
+        return Ok(None);
+    }
     Ok(Some(match kind {
         SettingKind::Bool => match text {
             "true" | "yes" | "on" => value(true),
