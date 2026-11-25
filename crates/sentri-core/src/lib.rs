@@ -8,6 +8,7 @@ pub mod category;
 pub mod classify;
 pub mod country;
 pub mod dates;
+pub mod discovery;
 pub mod edit;
 pub mod error;
 pub mod interaction;
@@ -22,6 +23,7 @@ pub mod text;
 
 pub use calendar::{CalendarEntry, EntryKind, SyncPolicy};
 pub use category::Category;
+pub use discovery::{Discovery, Topic};
 pub use edit::{Annotations, EditError, Field, FieldKind};
 pub use error::ParseError;
 pub use interaction::{Action, Flag, InteractionState};
