@@ -1,7 +1,9 @@
-//! Draws the onboarding wizard.
+//! Draws the onboarding wizard in the same visual language as the startup
+//! console: dark panel, orange accent bar, a stepper across the top and the
+//! rotating Observer on the Welcome page.
 
 use ratatui::Frame;
-use ratatui::layout::{Constraint, Flex, Layout};
+use ratatui::layout::{Constraint, Flex, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders, Padding, Paragraph, Wrap};
@@ -9,7 +11,7 @@ use sentri_app::Lookup;
 use sentri_core::Topic;
 
 use crate::input::LineInput;
-use crate::observer::{self, Eye, Part};
+use crate::observer::{self, Eye};
 use crate::state::onboarding::{Field, GitHubCheck, Onboarding, Page, SCOPES};
 use crate::theme::Theme;
 
@@ -105,49 +107,156 @@ fn checkbox<'a>(
     ])
 }
 
+/// The Welcome text: what SENTRI is and what the next pages ask.
 fn welcome(unicode: bool, theme: &Theme) -> Vec<Line<'static>> {
-    let mut lines: Vec<Line> = observer::frame(Eye::Open, 0, unicode)
-        .into_iter()
-        .skip(1)
-        .take(6)
-        .map(|segments| {
-            Line::from(
-                segments
-                    .into_iter()
-                    .map(|(part, text)| {
-                        let color = match part {
-                            Part::Wing => theme.p.aqua,
-                            Part::Eye | Part::Ray => theme.p.orange,
-                            _ => theme.p.yellow,
-                        };
-                        Span::styled(text, Style::new().fg(color))
-                    })
-                    .collect::<Vec<_>>(),
-            )
-        })
-        .collect();
-    lines.push(Line::default());
-    let bullet = if unicode { "  · " } else { "  - " };
-    lines.extend([
+    let bullet = if unicode { "  › " } else { "  > " };
+    let item = |text: &'static str| {
+        Line::from(vec![
+            Span::styled(bullet, Style::new().fg(theme.p.orange)),
+            Span::styled(text, Style::new().fg(theme.p.fg)),
+        ])
+    };
+    vec![
         Line::styled(
-            "The Observer is awake. A few questions help it watch the right places:",
-            Style::new().fg(theme.p.fg),
+            "Welcome. The Observer is awake.",
+            Style::new().fg(theme.p.yellow).add_modifier(Modifier::BOLD),
         ),
-        Line::from(format!(
-            "{bullet}your GitHub profile (optional, public data only)"
-        )),
-        Line::from(format!(
-            "{bullet}where you are, to favor nearby opportunities"
-        )),
-        Line::from(format!("{bullet}how far to look, and what interests you")),
         Line::default(),
         Line::styled(
-            "Answers stay in config.toml on this computer; every one can be skipped and \
-             changed later in Settings.",
-            theme.muted(),
+            "SENTRI watches jobs, events, hackathons, scholarships and open \
+             source, and ranks what fits you.",
+            Style::new().fg(theme.p.fg4),
         ),
-    ]);
-    lines
+        Line::default(),
+        Line::styled("Five short pages tell it where to look:", theme.muted()),
+        item("your GitHub profile (optional, public only)"),
+        item("where you are, to favor nearby events"),
+        item("how far to look and what interests you"),
+        Line::default(),
+        Line::styled(
+            "Answers stay in config.toml on this computer; \
+             skip any, change them later in Settings.",
+            theme.dim(),
+        ),
+        Line::default(),
+        Line::from(vec![
+            Span::styled(" Enter ", theme.badge(theme.p.yellow)),
+            Span::styled(
+                if unicode {
+                    "  begin setup  →"
+                } else {
+                    "  begin setup  ->"
+                },
+                Style::new().fg(theme.p.yellow),
+            ),
+        ]),
+    ]
+}
+
+/// Welcome page with the rotating Observer beside the wordmark and text;
+/// text only when the panel is narrow.
+fn welcome_page(
+    frame: &mut Frame,
+    area: Rect,
+    w: &Onboarding,
+    unicode: bool,
+    motion: bool,
+    theme: &Theme,
+) {
+    if area.width < 80 || area.height < 16 {
+        frame.render_widget(
+            Paragraph::new(welcome(unicode, theme)).wrap(Wrap { trim: false }),
+            area,
+        );
+        return;
+    }
+    let [art, _, text] = Layout::horizontal([
+        Constraint::Length(40),
+        Constraint::Length(2),
+        Constraint::Min(0),
+    ])
+    .areas(area);
+    let rows = art.height.min(16);
+    let target = super::startup::centered(art, 40, rows);
+    // A still frame without motion: the tick only drives animation.
+    let tick = if motion { w.tick } else { 0 };
+    let mut scene = observer::scene(Eye::Open, tick, 1.0, motion, unicode);
+    scene.radar = false;
+    let canvas = observer::render::render(
+        &scene,
+        usize::from(target.width),
+        usize::from(target.height),
+    );
+    super::startup::blit(frame.buffer_mut(), target, &canvas, theme);
+    let mark_rows = if unicode { 3 } else { 1 };
+    let [mark, tag, _, body] = Layout::vertical([
+        Constraint::Length(mark_rows),
+        Constraint::Length(1),
+        Constraint::Length(1),
+        Constraint::Min(0),
+    ])
+    .areas(text);
+    frame.render_widget(
+        Paragraph::new(super::startup::wordmark(unicode, theme)),
+        mark,
+    );
+    frame.render_widget(
+        Paragraph::new(Line::styled(
+            super::startup::TAGLINE,
+            Style::new().fg(theme.p.fg4),
+        )),
+        tag,
+    );
+    frame.render_widget(
+        Paragraph::new(welcome(unicode, theme)).wrap(Wrap { trim: false }),
+        body,
+    );
+}
+
+/// Page names across the top: done in green, the current one highlighted,
+/// the rest dimmed. Falls back to dots when narrow.
+fn stepper(w: &Onboarding, width: u16, unicode: bool, theme: &Theme) -> Line<'static> {
+    let step = w.step();
+    let total = Page::ALL.len();
+    let count = Span::styled(format!("   step {} of {total}", step + 1), theme.muted());
+    let names: Vec<&str> = Page::ALL
+        .iter()
+        .map(|p| match p {
+            Page::GitHub => "GitHub",
+            other => other.title(),
+        })
+        .collect();
+    let divider = if unicode { " ─ " } else { " - " };
+    let full: usize = names.iter().map(|n| n.len()).sum::<usize>() + 3 * (total - 1) + 16;
+    let mut spans = Vec::new();
+    if usize::from(width) >= full {
+        for (i, name) in names.iter().enumerate() {
+            if i > 0 {
+                spans.push(Span::styled(divider, Style::new().fg(theme.p.bg3)));
+            }
+            let style = match i.cmp(&step) {
+                std::cmp::Ordering::Less => Style::new().fg(theme.p.green),
+                std::cmp::Ordering::Equal => {
+                    Style::new().fg(theme.p.yellow).add_modifier(Modifier::BOLD)
+                }
+                std::cmp::Ordering::Greater => theme.dim(),
+            };
+            spans.push(Span::styled((*name).to_owned(), style));
+        }
+    } else {
+        let dots: String = (0..total)
+            .map(|i| match (i <= step, unicode) {
+                (true, true) => "●",
+                (false, true) => "○",
+                (true, false) => "#",
+                (false, false) => ".",
+            })
+            .collect::<Vec<_>>()
+            .join(" ");
+        spans.push(Span::styled(dots, Style::new().fg(theme.p.yellow)));
+    }
+    spans.push(count);
+    Line::from(spans)
 }
 
 fn location(w: &Onboarding, theme: &Theme) -> Vec<Line<'static>> {
@@ -249,6 +358,7 @@ fn review(w: &Onboarding, theme: &Theme) -> Vec<Line<'static>> {
 
 fn body(w: &Onboarding, unicode: bool, theme: &Theme) -> Vec<Line<'static>> {
     match w.page {
+        // Drawn by `welcome_page`; the text alone serves narrow panels.
         Page::Welcome => welcome(unicode, theme),
         Page::GitHub => {
             let mut spans = vec![Span::styled("  @ ", theme.accent())];
@@ -330,29 +440,20 @@ fn hints(page: Page) -> &'static str {
     }
 }
 
-/// Draws the wizard over the whole screen.
-pub fn render(frame: &mut Frame, w: &Onboarding, unicode: bool, theme: &Theme) {
+/// Draws the wizard over the whole screen. `motion` turns the Observer on
+/// the Welcome page (off in static mode).
+pub fn render(frame: &mut Frame, w: &Onboarding, unicode: bool, motion: bool, theme: &Theme) {
     let area = frame.area();
     frame.render_widget(Block::new().style(theme.base()), area);
-    let width = area.width.min(86);
-    let height = area.height.min(26);
+    let width = area.width.min(96);
+    let height = area.height.min(28);
     let [column] = Layout::horizontal([Constraint::Length(width)])
         .flex(Flex::Center)
         .areas(area);
     let [panel] = Layout::vertical([Constraint::Length(height)])
         .flex(Flex::Center)
         .areas(column);
-    let step = w.step();
-    let total = Page::ALL.len();
-    let dots: String = (0..total)
-        .map(|i| match (i <= step, unicode) {
-            (true, true) => "●",
-            (false, true) => "○",
-            (true, false) => "#",
-            (false, false) => ".",
-        })
-        .collect::<Vec<_>>()
-        .join(" ");
+    let glyph = if unicode { "◉" } else { "@" };
     let block = Block::new()
         .borders(Borders::ALL)
         .border_type(if unicode {
@@ -360,14 +461,15 @@ pub fn render(frame: &mut Frame, w: &Onboarding, unicode: bool, theme: &Theme) {
         } else {
             BorderType::Plain
         })
-        .border_style(theme.border(true))
+        .border_style(Style::new().fg(theme.p.bg3))
         .title(Line::from(vec![
-            Span::styled(" SENTRI ", theme.badge(theme.p.orange)),
-            Span::styled(format!(" Setup · {} ", w.page.title()), theme.title()),
+            Span::styled(format!(" {glyph} "), Style::new().fg(theme.p.orange)),
+            Span::styled("SENTRI", theme.title()),
+            Span::styled(format!(" · SETUP · {} ", w.page.title()), theme.muted()),
         ]))
         .title_bottom(Line::styled(format!(" {} ", hints(w.page)), theme.muted()))
         .padding(Padding::new(2, 2, 1, 0))
-        .style(theme.panel());
+        .style(Style::new().bg(theme.p.bg0_h).fg(theme.p.fg));
     let inner = block.inner(panel);
     frame.render_widget(block, panel);
     let [progress, content, error] = Layout::vertical([
@@ -377,22 +479,23 @@ pub fn render(frame: &mut Frame, w: &Onboarding, unicode: bool, theme: &Theme) {
     ])
     .areas(inner);
     frame.render_widget(
-        Paragraph::new(Line::from(vec![
-            Span::styled(dots, Style::new().fg(theme.p.yellow)),
-            Span::styled(format!("   step {} of {total}", step + 1), theme.muted()),
-        ])),
+        Paragraph::new(stepper(w, progress.width, unicode, theme)),
         progress,
     );
-    frame.render_widget(
-        Paragraph::new(body(w, unicode, theme)).wrap(Wrap { trim: false }),
-        content,
-    );
+    if w.page == Page::Welcome {
+        welcome_page(frame, content, w, unicode, motion, theme);
+    } else {
+        frame.render_widget(
+            Paragraph::new(body(w, unicode, theme)).wrap(Wrap { trim: false }),
+            content,
+        );
+    }
     let status = match (&w.error, w.finishing) {
         (Some(e), _) => Line::styled(e.clone(), Style::new().fg(theme.p.red)),
         (None, true) => Line::styled("Saving your profile…", theme.muted()),
         (None, false) => Line::styled(
             "Ctrl-C quits; answers saved so far are kept and onboarding resumes next time.",
-            theme.muted(),
+            theme.dim(),
         ),
     };
     frame.render_widget(Paragraph::new(status).wrap(Wrap { trim: true }), error);
@@ -416,7 +519,7 @@ mod tests {
     fn screen(w: &Onboarding, unicode: bool) -> String {
         let mut terminal = Terminal::new(TestBackend::new(100, 30)).unwrap();
         terminal
-            .draw(|f| render(f, w, unicode, &Theme::new(Palette::TRUECOLOR)))
+            .draw(|f| render(f, w, unicode, true, &Theme::new(Palette::TRUECOLOR)))
             .unwrap();
         terminal
             .backend()
@@ -473,5 +576,69 @@ mod tests {
         assert!(s.contains("Events"));
         assert!(s.contains("Cusco"));
         assert!(s.is_ascii(), "ASCII mode draws no Unicode");
+    }
+
+    fn sized(w: &Onboarding, unicode: bool, motion: bool, width: u16, height: u16) -> String {
+        let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+        terminal
+            .draw(|f| render(f, w, unicode, motion, &Theme::new(Palette::TRUECOLOR)))
+            .unwrap();
+        terminal
+            .backend()
+            .buffer()
+            .content()
+            .chunks(usize::from(width))
+            .map(|row| {
+                row.iter()
+                    .map(ratatui::buffer::Cell::symbol)
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[test]
+    fn welcome_presents_the_observer_wordmark_and_next_step() {
+        let mut w = wizard();
+        let wide = sized(&w, true, true, 110, 32);
+        assert!(wide.contains("█▀▀"), "wordmark\n{wide}");
+        assert!(wide.contains(crate::ui::startup::TAGLINE));
+        assert!(wide.contains("begin setup"));
+        assert!(wide.contains('◉'), "the Observer's open eye\n{wide}");
+        // The Observer turns with the clock, and only with motion.
+        let first = sized(&w, true, true, 110, 32);
+        w.tick = 20;
+        assert_ne!(first, sized(&w, true, true, 110, 32), "it rotates");
+        assert_eq!(
+            sized(&w, true, false, 110, 32),
+            sized(&wizard(), true, false, 110, 32)
+        );
+        let narrow = sized(&wizard(), true, true, 60, 30);
+        assert!(
+            narrow.contains("The Observer is awake"),
+            "text survives\n{narrow}"
+        );
+        assert!(!narrow.contains("█▀▀"));
+        assert!(sized(&wizard(), false, true, 110, 32).is_ascii());
+    }
+
+    #[test]
+    fn the_stepper_names_every_page_and_marks_the_current_one() {
+        let mut w = wizard();
+        w.page = Page::Location;
+        let s = sized(&w, true, true, 110, 32);
+        for name in [
+            "Welcome",
+            "GitHub",
+            "Location",
+            "Where to look",
+            "Interests",
+            "Review",
+        ] {
+            assert!(s.contains(name), "{name}");
+        }
+        assert!(s.contains("step 3 of 6"));
+        let small = sized(&w, true, true, 70, 30);
+        assert!(small.contains("● ● ● ○ ○ ○"), "dots when narrow\n{small}");
     }
 }
