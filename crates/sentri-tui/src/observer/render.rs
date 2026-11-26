@@ -280,16 +280,18 @@ impl Raster {
 }
 
 fn body(r: &mut Raster, view: View, scene: &Scene) {
-    let model_light = scene.light;
     for &Sample { p, n, part } in model::ward() {
         let nc = view.turn(n);
         // Surfaces turned away are hidden by the ones in front.
         if nc[2] > 0.3 {
             continue;
         }
-        let lum = shade(nc, model_light);
+        // The shape always comes from full light so it stays crisp while
+        // the Observer wakes; the light only decides how bright it looks.
+        let form = shade(nc, 1.0);
+        let lit = form * scene.light;
         let cell = if part == Part::Shell {
-            eye_cell(n, lum, scene)
+            eye_cell(n, lit, scene)
         } else {
             None
         };
@@ -300,7 +302,8 @@ fn body(r: &mut Raster, view: View, scene: &Scene) {
             } else {
                 0.0
             };
-            let (ch, level) = ramp(lum + boost);
+            let (ch, _) = ramp(form + boost);
+            let (_, level) = ramp(lit + boost);
             Cell { ch, part, level }
         });
         r.plot(view.turn(p), cell);
