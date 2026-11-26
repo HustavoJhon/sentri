@@ -83,11 +83,16 @@ async fn event_loop(
     execute(&app, &state, Effect::LoadProfile, &config_path, &msg_tx);
 
     while !state.quit {
+        // Checked before drawing: a splash frame on screen always gets one
+        // more wake-up, so the dashboard replaces it even when the splash
+        // expires between this draw and the next timer.
+        let splash = state.splash_visible();
         terminal.draw(|frame| ui::draw(frame, &mut state, &theme))?;
         let timer = state
             .startup
             .as_ref()
-            .and_then(|s| s.timer(std::time::Instant::now()));
+            .filter(|_| splash)
+            .map(crate::state::startup::Startup::interval);
         let effects = tokio::select! {
             () = wait(timer) => {
                 state.on_timer();
@@ -121,12 +126,14 @@ async fn wait(timer: Option<Duration>) {
 /// event loop starts (theme and terminal detection run synchronously).
 fn startup_screen(app: &Sentri, state: &State, palette: Palette) -> crate::state::startup::Startup {
     use crate::observer::SplashEnv;
-    use crate::state::startup::{Startup, Status, Step};
+    use crate::state::startup::{Context, Startup, Status, Step};
     let env = SplashEnv::detect();
     let config = app.config();
     let mode = env.mode(config.onboarding.startup_animation);
     let now = std::time::Instant::now();
     let mut startup = Startup::new(mode, env.unicode(config.ui.ascii_icons), now);
+    startup.context = Context::from_config(&config.profile, &config.discovery);
+    startup.context.first_run = config.needs_onboarding();
     let colors = if palette == Palette::INDEXED {
         "256 colors"
     } else {

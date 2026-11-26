@@ -16,7 +16,24 @@ pub enum Part {
     Eye,
     Staff,
     Base,
+    /// The pupil at the centre of the eye.
+    Pupil,
+    /// The energy core floating on the staff.
+    Core,
+    /// The orbiting energy rings.
+    Ring,
+    /// The radar circle and its sweep on the ground.
+    Radar,
+    /// Ambient particles drifting around the ward.
+    Particle,
 }
+
+pub mod model;
+pub mod render;
+
+/// Cosine of the eye's angular radius on the head: model normals whose
+/// `|z|` exceeds it belong to the lens.
+pub const EYE_EDGE: f32 = 0.78;
 
 /// How awake the Observer is, from initialization progress.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -28,6 +45,16 @@ pub enum Eye {
 }
 
 impl Eye {
+    /// The next stage of opening (an open eye stays open).
+    #[must_use]
+    pub const fn next(self) -> Self {
+        match self {
+            Self::Closed => Self::Stirring,
+            Self::Stirring => Self::Half,
+            Self::Half | Self::Open => Self::Open,
+        }
+    }
+
     /// `done` of `total` steps resolved.
     pub const fn from_progress(done: usize, total: usize) -> Self {
         if total == 0 || done >= total {
@@ -100,6 +127,64 @@ impl SplashEnv {
             l.contains("utf-8") || l.contains("utf8")
         });
         !ascii_icons && utf8 && !self.dumb() && self.term.as_deref() != Some("linux")
+    }
+}
+
+/// Rotation speed once spun up: one turn every 64 frames.
+const SPIN: f32 = std::f32::consts::TAU / 64.0;
+/// Frames the Observer takes to reach full rotation speed.
+const SPIN_UP: f32 = 18.0;
+/// Resting angle: a three-quarter view shows depth best.
+pub const REST_YAW: f32 = -0.5;
+
+/// Angle of the ward after `tick` frames: it starts still, accelerates
+/// smoothly, then turns at a constant speed.
+#[allow(clippy::cast_precision_loss)]
+pub fn yaw(tick: u64) -> f32 {
+    const SPIN_UP_TICKS: u64 = 18;
+    let turned = if tick < SPIN_UP_TICKS {
+        let t = tick as f32;
+        SPIN * t * t / (2.0 * SPIN_UP)
+    } else {
+        // Whole turns are dropped (64 frames each) so the angle keeps its
+        // precision in very long sessions.
+        let t = ((tick - SPIN_UP_TICKS) % (64 * 1024)) as f32 + SPIN_UP;
+        SPIN * (t - SPIN_UP / 2.0)
+    };
+    REST_YAW + turned
+}
+
+/// Illumination the Observer settles to for an eye state.
+pub const fn glow_target(eye: Eye) -> f32 {
+    match eye {
+        Eye::Closed => 0.45,
+        Eye::Stirring => 0.65,
+        Eye::Half => 0.85,
+        Eye::Open => 1.0,
+    }
+}
+
+/// The 3D scene for this moment of the awakening. Effects join as the eye
+/// opens: rings once it stirs, the radar once it is half open, and more
+/// motes when fully awake.
+pub fn scene(eye: Eye, tick: u64, glow: f32, animated: bool, unicode: bool) -> render::Scene {
+    render::Scene {
+        yaw: if animated { yaw(tick) } else { REST_YAW },
+        light: glow,
+        eye,
+        tick,
+        rings: match eye {
+            Eye::Closed => 0,
+            Eye::Stirring => 1,
+            Eye::Half | Eye::Open => 2,
+        },
+        radar: eye >= Eye::Half,
+        particles: match (animated, eye) {
+            (true, Eye::Open) => 12,
+            (true, Eye::Half) => 8,
+            _ => 4,
+        },
+        unicode,
     }
 }
 
@@ -243,6 +328,38 @@ mod tests {
             closed[1].iter().all(|(_, t)| t.trim().is_empty()),
             "no rays yet"
         );
+    }
+
+    #[test]
+    fn rotation_spins_up_smoothly_then_turns_steadily() {
+        assert!((yaw(0) - REST_YAW).abs() < f32::EPSILON);
+        let steps: Vec<f32> = (0..80).map(|t| yaw(t + 1) - yaw(t)).collect();
+        for pair in steps.windows(2).take(17) {
+            assert!(pair[1] >= pair[0], "accelerates: {pair:?}");
+        }
+        for step in &steps[20..] {
+            assert!((step - SPIN).abs() < 1e-4, "steady: {step}");
+        }
+        // Very long sessions keep turning without jumps in speed.
+        let wrap = |a: f32| a.rem_euclid(std::f32::consts::TAU);
+        for far in [64 * 1024 * 3 + 5, 64 * 1024 + 17] {
+            let step = wrap(yaw(far + 1) - yaw(far));
+            assert!((step - SPIN).abs() < 1e-3, "{far}: {step}");
+        }
+    }
+
+    #[test]
+    fn effects_follow_the_eye() {
+        let closed = scene(Eye::Closed, 0, 0.4, true, true);
+        assert_eq!((closed.rings, closed.radar), (0, false));
+        let half = scene(Eye::Half, 10, 0.8, true, true);
+        assert_eq!((half.rings, half.radar), (2, true));
+        let still = scene(Eye::Open, 99, 1.0, false, false);
+        assert!(
+            (still.yaw - REST_YAW).abs() < f32::EPSILON,
+            "static stays still"
+        );
+        assert!(glow_target(Eye::Closed) < glow_target(Eye::Open));
     }
 
     #[test]

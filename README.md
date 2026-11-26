@@ -131,10 +131,13 @@ cargo run -p sentri-cli -- --help   # lists the commands
 sentri               # first run: the Observer awakens, then a setup wizard
 ```
 
-While SENTRI starts, an ASCII Observer ward opens its eye as real startup
-steps finish (terminal detection, sources, profile, dashboard); any key skips
-it, and it never waits more than a few seconds for optional work such as
-GitHub. On the first run, a six-page wizard then asks for:
+While SENTRI starts, the Observer awakens: an original 3D ward drawn with
+terminal characters (depth-shaded, no images) that spins up, lights up and
+turns a full 360°, with energy rings, a radar sweep and drifting motes. Its eye
+opens in stages but never ahead of the real startup steps (terminal detection,
+sources, profile, dashboard), shown in an initialization panel with your
+location and discovery scope. Any key skips it, and it never waits more than a
+few seconds for optional work such as GitHub. On the first run, a six-page wizard then asks for:
 
 1. your **GitHub username** (optional; public profile only, never a token);
 2. your **location**: ISO country code, city, region and time zone (detected

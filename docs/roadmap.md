@@ -32,6 +32,30 @@ un orden desde el primer día; la fase 6 lo amplía con personalización.
    se dejará documentado sin inventar credenciales).
 5. Afinidad: excluir la propia oportunidad al explicar "similar a lo que guardaste".
 
+## Fase 13: Observer 3D e identidad visual (2026-11-25)
+
+Hecho:
+
+- Modelo 3D original del ward (cabeza con ojo-lente en ambas caras, alas con
+  plumas barridas hacia atrás, cresta, bastón con núcleo de energía y base)
+  muestreado en puntos con normales y renderizado con rotación, perspectiva,
+  búfer de profundidad y sombreado por densidad de caracteres; determinista.
+- Despertar: aceleración suave hasta una vuelta cada ~5 s, luz que se aviva
+  según el progreso, ojo que se abre por etapas sin adelantarse a los pasos
+  reales, anillos de energía, radar y partículas que se suman con el ojo.
+- Pantalla de arranque con marca SENTRI, lema, panel INITIALIZATION (pasos,
+  ubicación, ámbitos, progreso) y tres distribuciones según el tamaño; el ward
+  plano de la fase 12 queda para terminales pequeñas. ASCII completo.
+- Corregido: la pantalla podía quedarse congelada si caducaba entre un
+  dibujado y el siguiente temporizador.
+- `cargo run -p sentri-tui --example observer_frames` para revisar fotogramas.
+
+Validado en Alacritty dentro de tmux: 120×46, 160×34 (lado a lado), 80×24
+(ward plano), `LANG=C` (ASCII), `SENTRI_NO_ANIMATION=1`, primera ejecución con
+el asistente después del Observer, y `sentri` sin terminal.
+
+Pendiente: en tmux la detección de gráficos retrasa ~1 s el primer fotograma.
+
 ## Fase 12: despertar del Observer y onboarding personalizado (2026-11-25)
 
 Hecho:

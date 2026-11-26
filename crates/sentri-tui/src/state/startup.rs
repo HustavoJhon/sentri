@@ -60,11 +60,66 @@ pub const PROFILE_GRACE: Duration = Duration::from_millis(1500);
 /// Nothing keeps the splash on screen longer than this.
 pub const MAX_WAIT: Duration = Duration::from_secs(4);
 /// The open eye stays visible this long once everything is ready.
-pub const LINGER: Duration = Duration::from_millis(450);
-/// Frame interval while animated.
-pub const FRAME: Duration = Duration::from_millis(90);
+pub const LINGER: Duration = Duration::from_millis(600);
+/// An animated splash shows at least this long (any key still skips it at
+/// once). The work behind it never waits: the dashboard loads meanwhile.
+pub const MIN_ANIMATED: Duration = Duration::from_millis(1500);
+/// Frames between two stages of the eye opening (about a third of a second).
+const EYE_STAGE: u64 = 4;
+/// Frame interval while animated (12.5 frames per second).
+pub const FRAME: Duration = Duration::from_millis(80);
 /// Timer interval for the static splash (timeouts only).
 pub const STATIC_TIMER: Duration = Duration::from_millis(250);
+
+/// Facts from the configuration shown beside the steps. Read once at
+/// startup; nothing here is guessed.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Context {
+    /// "City, Country" when the profile has a location.
+    pub location: Option<String>,
+    /// Discovery scopes that are enabled, in order (local, national,
+    /// international).
+    pub scopes: Vec<&'static str>,
+    /// Topics chosen during onboarding.
+    pub topics: usize,
+    /// The onboarding wizard opens after the splash.
+    pub first_run: bool,
+}
+
+impl Context {
+    pub fn from_config(profile: &sentri_core::Profile, discovery: &sentri_core::Discovery) -> Self {
+        let clean = |v: Option<&str>| {
+            v.map(str::trim)
+                .filter(|v| !v.is_empty())
+                .map(str::to_owned)
+        };
+        let country = clean(profile.country.as_deref()).or_else(|| {
+            clean(profile.country_code.as_deref()).map(|code| {
+                sentri_core::country::names(&code)
+                    .first()
+                    .map_or_else(|| code.to_uppercase(), |name| (*name).to_owned())
+            })
+        });
+        let parts: Vec<String> = [clean(profile.home_city.as_deref()), country]
+            .into_iter()
+            .flatten()
+            .collect();
+        let scopes = [
+            (discovery.local, "local"),
+            (discovery.national, "national"),
+            (discovery.international, "international"),
+        ]
+        .into_iter()
+        .filter_map(|(on, name)| on.then_some(name))
+        .collect();
+        Self {
+            location: (!parts.is_empty()).then(|| parts.join(", ")),
+            scopes,
+            topics: discovery.topics.len(),
+            first_run: false,
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct Startup {
@@ -72,6 +127,12 @@ pub struct Startup {
     pub unicode: bool,
     pub steps: Vec<(Step, Status)>,
     pub tick: u64,
+    /// Current illumination; eases towards the eye's target each frame.
+    pub glow: f32,
+    /// The eye as drawn: it opens one stage at a time and never ahead of
+    /// real progress, so even an instant startup shows the awakening.
+    shown: Eye,
+    pub context: Context,
     started: Instant,
     finished: Option<Instant>,
     dismissed: bool,
@@ -84,6 +145,13 @@ impl Startup {
             unicode,
             steps: Step::ALL.iter().map(|s| (*s, Status::Pending)).collect(),
             tick: 0,
+            glow: if mode == SplashMode::Animated {
+                0.15
+            } else {
+                1.0
+            },
+            shown: Eye::Closed,
+            context: Context::default(),
             started: now,
             finished: None,
             dismissed: mode == SplashMode::Off,
@@ -117,10 +185,25 @@ impl Startup {
         Eye::from_progress(self.resolved(), self.steps.len())
     }
 
+    /// The eye to draw: the real one without animation, otherwise the
+    /// stage the awakening has reached (never past the real one).
+    pub fn display_eye(&self) -> Eye {
+        if self.animated() {
+            self.shown.min(self.eye())
+        } else {
+            self.eye()
+        }
+    }
+
     /// Advances the animation and applies the grace periods.
     pub fn on_timer(&mut self, now: Instant) {
         if self.mode == SplashMode::Animated {
             self.tick = self.tick.wrapping_add(1);
+            if self.tick.is_multiple_of(EYE_STAGE) && self.shown < self.eye() {
+                self.shown = self.shown.next();
+            }
+            let target = crate::observer::glow_target(self.shown);
+            self.glow += (target - self.glow) * 0.18;
         }
         let waited = now.saturating_duration_since(self.started);
         if waited >= PROFILE_GRACE && self.status(Step::Profile).is_pending() {
@@ -149,10 +232,17 @@ impl Startup {
     }
 
     pub fn visible(&self, now: Instant) -> bool {
-        !self.dismissed
-            && self
-                .finished
-                .is_none_or(|at| now.saturating_duration_since(at) < LINGER)
+        let lingering = self
+            .finished
+            .is_none_or(|at| now.saturating_duration_since(at) < LINGER);
+        let showing = self.mode == SplashMode::Animated
+            && now.saturating_duration_since(self.started) < MIN_ANIMATED;
+        !self.dismissed && (lingering || showing)
+    }
+
+    /// Whether frames advance on a timer.
+    pub fn animated(&self) -> bool {
+        self.mode == SplashMode::Animated
     }
 
     /// How often the event loop should wake up, while the splash shows.
@@ -160,10 +250,16 @@ impl Startup {
         if !self.visible(now) {
             return None;
         }
-        Some(match self.mode {
+        Some(self.interval())
+    }
+
+    /// Time between wake-ups: a frame while animated, otherwise just often
+    /// enough to apply the grace periods.
+    pub fn interval(&self) -> Duration {
+        match self.mode {
             SplashMode::Animated => FRAME,
             _ => STATIC_TIMER,
-        })
+        }
     }
 }
 
@@ -193,8 +289,14 @@ mod tests {
             s.visible(t0 + Duration::from_millis(100)),
             "lingers briefly"
         );
-        assert!(!s.visible(t0 + LINGER), "then gets out of the way");
-        assert_eq!(s.timer(t0 + LINGER), None);
+        let gone = t0 + LINGER.max(MIN_ANIMATED);
+        let almost = t0
+            + LINGER
+                .max(MIN_ANIMATED)
+                .saturating_sub(Duration::from_millis(1));
+        assert!(s.visible(almost), "brief minimum");
+        assert!(!s.visible(gone), "then gets out of the way");
+        assert_eq!(s.timer(gone), None);
     }
 
     #[test]
@@ -216,6 +318,78 @@ mod tests {
         s.on_timer(t0 + MAX_WAIT);
         assert_eq!(s.resolved(), Step::ALL.len());
         assert!(!s.visible(t0 + MAX_WAIT + LINGER), "never blocks startup");
+    }
+
+    #[test]
+    fn a_static_splash_leaves_as_soon_as_work_is_done() {
+        let (mut s, t0) = startup(SplashMode::Static);
+        for step in Step::ALL {
+            s.resolve(step, Status::Done("ok".into()), t0);
+        }
+        assert!(!s.visible(t0 + LINGER), "no minimum without animation");
+    }
+
+    #[test]
+    fn the_drawn_eye_opens_in_stages_but_never_ahead_of_progress() {
+        let (mut s, t0) = startup(SplashMode::Animated);
+        s.resolve(Step::Observer, Status::Done("ok".into()), t0);
+        for _ in 0..40 {
+            s.on_timer(t0);
+        }
+        assert_eq!(s.display_eye(), Eye::Stirring, "capped by real progress");
+        for step in Step::ALL {
+            s.resolve(step, Status::Done("ok".into()), t0);
+        }
+        assert_eq!(s.eye(), Eye::Open);
+        let mut stages = vec![s.display_eye()];
+        for _ in 0..12 {
+            s.on_timer(t0);
+            if stages.last() != Some(&s.display_eye()) {
+                stages.push(s.display_eye());
+            }
+        }
+        assert_eq!(stages, [Eye::Stirring, Eye::Half, Eye::Open]);
+        let (mut still, t0) = startup(SplashMode::Static);
+        still.resolve(Step::Observer, Status::Done("ok".into()), t0);
+        assert_eq!(still.display_eye(), still.eye());
+    }
+
+    #[test]
+    fn light_eases_up_with_progress() {
+        let (mut s, t0) = startup(SplashMode::Animated);
+        let dark = s.glow;
+        s.on_timer(t0);
+        assert!(s.glow > dark, "it warms up");
+        assert!(s.glow < crate::observer::glow_target(Eye::Closed));
+        for step in Step::ALL {
+            s.resolve(step, Status::Done("ok".into()), t0);
+        }
+        for _ in 0..40 {
+            s.on_timer(t0);
+        }
+        assert!((s.glow - 1.0).abs() < 0.01, "fully lit: {}", s.glow);
+        let (still, _) = startup(SplashMode::Static);
+        assert!((still.glow - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn context_reports_the_configured_location_and_scopes() {
+        use sentri_core::{Discovery, Profile};
+        let profile = Profile {
+            home_city: Some("Cusco".into()),
+            country_code: Some("pe".into()),
+            ..Profile::default()
+        };
+        let discovery = Discovery {
+            international: false,
+            ..Discovery::default()
+        };
+        let c = Context::from_config(&profile, &discovery);
+        assert_eq!(c.location.as_deref(), Some("Cusco, Peru"));
+        assert_eq!(c.scopes, ["local", "national"]);
+        let empty = Context::from_config(&Profile::default(), &Discovery::default());
+        assert_eq!(empty.location, None, "nothing is invented");
+        assert_eq!(empty.scopes.len(), 3);
     }
 
     #[test]
