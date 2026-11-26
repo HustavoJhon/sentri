@@ -29,6 +29,7 @@ pub enum Part {
 }
 
 pub mod model;
+pub mod render;
 
 /// Cosine of the eye's angular radius on the head: model normals whose
 /// `|z|` exceeds it belong to the lens.

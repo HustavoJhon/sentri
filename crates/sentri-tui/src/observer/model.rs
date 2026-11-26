@@ -99,15 +99,16 @@ fn wing(out: &mut Vec<Sample>, side: f32) {
     let spine = |u: f32| -> [f32; 3] {
         [
             side * 2.35f32.mul_add(u, 0.8),
-            HEAD[1] + 0.95 * u.powf(1.6) - 0.1,
-            // The tips curl forward, cupping the eye.
-            -0.55 * u * u + 0.1,
+            HEAD[1] + 1.45 * u.powf(1.4) - 0.3,
+            // Swept back, so the wings still show in profile.
+            (-0.35 * u).mul_add(u, 1.35 * u) + 0.1,
         ]
     };
-    let top = |u: f32| 0.62f32.mul_add((1.0 - u).powf(0.7), 0.05);
+    let top = |u: f32| 0.5f32.mul_add((1.0 - u).powf(0.7), 0.05);
     let bottom = |u: f32| {
-        let feathers = 0.3f32.mul_add((u * 3.0 * PI).sin().abs(), 0.7);
-        0.85 * (1.0 - u).powf(0.9) * feathers + 0.04
+        // Four feathers scallop the trailing edge.
+        let feathers = 0.45f32.mul_add((u * 4.0 * PI).sin().abs(), 0.55);
+        0.95 * (1.0 - u).powf(0.8) * feathers + 0.04
     };
     let along = steps(2.6);
     for i in 0..=along {
@@ -129,13 +130,17 @@ fn wing(out: &mut Vec<Sample>, side: f32) {
         let across = steps(hi - lo);
         for j in 0..=across {
             let v = (hi - lo).mul_add(frac(j, across), lo);
-            for normal in [front, [-front[0], -front[1], -front[2]]] {
+            // Diagonal feather ridges: only the shading normal is bent, so
+            // the silhouette stays clean.
+            let ridge = 0.6 * (TAU * u.mul_add(4.0, v * 0.9)).sin();
+            for face in [front, [-front[0], -front[1], -front[2]]] {
+                let normal = normalize([face[0], face[1] + ridge, face[2]]);
                 // Each face sits half the wing's thickness off the spine.
                 out.push(Sample {
                     p: [
-                        normal[0].mul_add(0.045, c[0]),
-                        normal[1].mul_add(0.045, c[1] + v),
-                        normal[2].mul_add(0.045, c[2]),
+                        face[0].mul_add(0.045, c[0]),
+                        c[1] + v,
+                        face[2].mul_add(0.045, c[2]),
                     ],
                     n: normal,
                     part: Part::Wing,
@@ -211,7 +216,7 @@ pub fn ward() -> &'static [Sample] {
             &mut out,
             -1.55,
             -0.75,
-            |y| 0.42 * (1.0 - ((y + 1.15) / 0.4).abs()) + 0.15,
+            |y| 0.3f32.mul_add(1.0 - ((y + 1.15) / 0.4).abs(), 0.14),
             Part::Core,
         );
         // Weighted base.
@@ -219,7 +224,7 @@ pub fn ward() -> &'static [Sample] {
             &mut out,
             BOTTOM,
             -2.55,
-            |y| 0.25 + 0.65 * ((-2.55 - y) / 0.4),
+            |y| 0.5f32.mul_add((-2.55 - y) / 0.4, 0.2),
             Part::Base,
         );
         out
