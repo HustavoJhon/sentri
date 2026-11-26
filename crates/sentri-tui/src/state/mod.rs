@@ -1522,6 +1522,7 @@ impl State {
         let now = std::time::Instant::now();
         match msg {
             Msg::Overview(o) => {
+                let fresh = s.status(Step::Sources).is_pending();
                 let enabled = o.config.sources.iter().filter(|s| s.enabled).count();
                 let total = o.config.sources.len();
                 s.resolve(
@@ -1529,8 +1530,24 @@ impl State {
                     Status::Done(format!("{enabled} of {total} sources enabled")),
                     now,
                 );
+                if fresh {
+                    log_source_health(s, o, now);
+                }
             }
             Msg::Profile(p) => {
+                if let ProfileState::Ready(profile, _) = p
+                    && s.status(Step::Profile).is_pending()
+                {
+                    s.log(
+                        now,
+                        startup::Level::Info,
+                        "github",
+                        format!(
+                            "@{} · {} public repos · {} followers",
+                            profile.login, profile.public_repos, profile.followers
+                        ),
+                    );
+                }
                 let status = match p {
                     ProfileState::Ready(profile, _) => Status::Done(format!("@{}", profile.login)),
                     ProfileState::NotConfigured => {
@@ -1728,6 +1745,42 @@ impl State {
             }
         }
         Vec::new()
+    }
+}
+
+/// Logs how the enabled sources stood at their last collection: only what
+/// the database recorded.
+fn log_source_health(s: &mut startup::Startup, o: &Overview, now: std::time::Instant) {
+    use startup::Level;
+    let mut healthy = 0usize;
+    let mut never = 0usize;
+    let mut failing: Vec<(&str, i64)> = Vec::new();
+    for source in o.config.sources.iter().filter(|s| s.enabled) {
+        match o.states.iter().find(|st| st.source_name == source.name) {
+            Some(st) if st.consecutive_failures > 0 => {
+                failing.push((&source.name, st.consecutive_failures));
+            }
+            Some(st) if st.last_success_at.is_some() => healthy += 1,
+            _ => never += 1,
+        }
+    }
+    let mut parts = vec![format!("{healthy} healthy")];
+    if !failing.is_empty() {
+        parts.push(format!("{} failing", failing.len()));
+    }
+    if never > 0 {
+        parts.push(format!("{never} not collected yet"));
+    }
+    let summary = parts.join(" · ");
+    s.log(now, Level::Info, "sources", summary);
+    for (name, failures) in failing.into_iter().take(3) {
+        let times = if failures == 1 { "time" } else { "times" };
+        s.log(
+            now,
+            Level::Failed,
+            "sources",
+            format!("{name} failed {failures} {times} in a row"),
+        );
     }
 }
 

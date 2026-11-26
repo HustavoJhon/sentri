@@ -1,30 +1,26 @@
-//! Draws the Observer awakening: the rotating ward, the SENTRI wordmark and
-//! a panel with the real startup steps, location and discovery scope.
+//! Draws the Observer awakening as an observation console: the rotating ward
+//! and the SENTRI wordmark in the centre, the real initialization steps on
+//! the left, an event log on the right and a status bar along the bottom.
 //!
-//! Three layouts keep the screen balanced at any size: the ward above the
-//! text when the terminal is tall, beside it when it is wide, and the small
-//! flat ward (or just the steps) when space is short.
+//! Side panels sit on the darker Gruvbox background instead of boxes, so the
+//! screen has depth without a frame around everything. Smaller terminals
+//! drop the log, then shrink to the flat ward, then to the steps alone.
 
 use ratatui::Frame;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Flex, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, BorderType, Borders, Paragraph};
+use ratatui::widgets::{Block, Paragraph, Wrap};
 
 use crate::observer::render::{self, Canvas, Cell};
 use crate::observer::{self, Eye, Part};
-use crate::state::startup::{Startup, Status};
+use crate::state::startup::{Level, Startup, Status};
 use crate::theme::Theme;
 
 pub const TAGLINE: &str = "THE WORLD IS FULL OF OPPORTUNITIES";
-/// Inner width of the initialization panel.
-const PANEL_WIDTH: u16 = 66;
-/// Panel height: 5 steps, a rule, location, discovery and progress, plus
-/// the border.
-const PANEL_HEIGHT: u16 = 11;
 /// Smallest 3D ward worth drawing; below it the flat ward is clearer.
-const MIN_ART_ROWS: u16 = 14;
+const MIN_ART_ROWS: u16 = 11;
 /// Columns per row the 3D ward needs to keep its proportions.
 const ART_RATIO: f32 = 2.5;
 
@@ -59,7 +55,7 @@ fn cell_style(cell: Cell, theme: &Theme) -> Style {
 }
 
 /// Copies a rendered frame into the buffer at `area`.
-fn blit(buf: &mut Buffer, area: Rect, canvas: &Canvas, theme: &Theme) {
+pub(super) fn blit(buf: &mut Buffer, area: Rect, canvas: &Canvas, theme: &Theme) {
     for y in 0..canvas.height.min(usize::from(area.height)) {
         for x in 0..canvas.width.min(usize::from(area.width)) {
             let Some(cell) = canvas.get(x, y) else {
@@ -125,7 +121,7 @@ const LETTERS: [[&str; 3]; 6] = [
 
 /// The SENTRI wordmark: block letters warming from yellow to orange, or
 /// spaced capitals without Unicode.
-fn wordmark(unicode: bool, theme: &Theme) -> Vec<Line<'static>> {
+pub(super) fn wordmark(unicode: bool, theme: &Theme) -> Vec<Line<'static>> {
     let p = &theme.p;
     let colors = [p.yellow, p.yellow, p.yellow, p.orange, p.orange, p.orange];
     if !unicode {
@@ -161,7 +157,7 @@ fn wordmark(unicode: bool, theme: &Theme) -> Vec<Line<'static>> {
         .collect()
 }
 
-fn wordmark_width(unicode: bool) -> u16 {
+pub(super) fn wordmark_width(unicode: bool) -> u16 {
     if unicode {
         // Letters plus one space after each.
         LETTERS
@@ -173,7 +169,7 @@ fn wordmark_width(unicode: bool) -> u16 {
     }
 }
 
-fn tagline(width: u16, unicode: bool, theme: &Theme) -> Line<'static> {
+pub(super) fn tagline(width: u16, unicode: bool, theme: &Theme) -> Line<'static> {
     let text = u16::try_from(TAGLINE.len()).unwrap_or(u16::MAX);
     let rule = if unicode { "─" } else { "-" };
     let mut spans = Vec::new();
@@ -201,145 +197,268 @@ fn spinner(tick: u64, unicode: bool) -> &'static str {
     }
 }
 
-fn step_line<'a>(label: &'a str, status: &'a Status, startup: &Startup, theme: &Theme) -> Line<'a> {
-    let unicode = startup.unicode;
-    let pending_mark = if startup.animated() {
-        spinner(startup.tick, unicode)
-    } else if unicode {
-        "◌"
-    } else {
-        "."
-    };
-    let (mark, mark_style, detail) = match status {
-        Status::Pending => (pending_mark, Style::new().fg(theme.p.yellow), ""),
-        Status::Done(d) => (
-            if unicode { "✓" } else { "+" },
-            Style::new().fg(theme.p.green),
-            d.as_str(),
+/// Width of the initialization column, and of the event log.
+const SIDE: u16 = 34;
+/// Width of the initialization column when the log is hidden.
+const SIDE_NARROW: u16 = 30;
+/// Rows of the bottom status bar.
+const BAR: u16 = 2;
+
+fn mark(status: &Status, startup: &Startup, theme: &Theme) -> (&'static str, Style) {
+    let u = startup.unicode;
+    match status {
+        Status::Pending => (
+            if startup.animated() {
+                spinner(startup.tick, u)
+            } else if u {
+                "◌"
+            } else {
+                "."
+            },
+            Style::new().fg(theme.p.yellow),
         ),
-        Status::Background(d) => (
-            if unicode { "↻" } else { "~" },
-            Style::new().fg(theme.p.blue),
-            d.as_str(),
-        ),
-        Status::Failed(d) => (
-            if unicode { "✗" } else { "x" },
-            Style::new().fg(theme.p.red),
-            d.as_str(),
-        ),
-    };
-    let label_style = if status.is_pending() {
-        theme.dim()
-    } else {
-        Style::new().fg(theme.p.fg)
-    };
-    let mut spans = vec![
-        Span::styled(format!(" {mark} "), mark_style),
-        Span::styled(format!("{label:<31}"), label_style),
-    ];
-    if !detail.is_empty() {
-        spans.push(Span::styled(detail, theme.muted()));
+        Status::Done(_) => (if u { "✓" } else { "+" }, Style::new().fg(theme.p.green)),
+        Status::Background(_) => (if u { "↻" } else { "~" }, Style::new().fg(theme.p.blue)),
+        Status::Failed(_) => (if u { "✗" } else { "x" }, Style::new().fg(theme.p.red)),
     }
-    Line::from(spans)
 }
 
-/// Location, discovery scope and overall progress, from real state.
-fn context_lines(startup: &Startup, theme: &Theme) -> Vec<Line<'static>> {
-    let c = &startup.context;
-    let u = startup.unicode;
-    let key = |icon_u: &'static str, icon_a: &'static str, name: &'static str| {
-        vec![
+fn detail(status: &Status) -> &str {
+    match status {
+        Status::Pending => "",
+        Status::Done(d) | Status::Background(d) | Status::Failed(d) => d,
+    }
+}
+
+/// Cuts `text` to `width` columns, with an ellipsis when it is longer.
+fn fit(text: &str, width: usize) -> String {
+    if text.chars().count() <= width {
+        return text.to_owned();
+    }
+    let mut out: String = text.chars().take(width.saturating_sub(1)).collect();
+    out.push('…');
+    out
+}
+
+fn heading(title: &'static str, width: u16, unicode: bool, theme: &Theme) -> Vec<Line<'static>> {
+    let rule = if unicode { "─" } else { "-" };
+    vec![
+        Line::from(vec![
             Span::styled(
-                format!(" {} ", if u { icon_u } else { icon_a }),
-                Style::new().fg(theme.p.aqua),
+                if unicode { "▍" } else { "|" },
+                Style::new().fg(theme.p.orange),
             ),
-            Span::styled(format!("{name:<11}"), theme.muted()),
-        ]
-    };
-    let mut location = key("◎", "o", "Location");
-    match (&c.location, c.first_run) {
-        (Some(place), _) => location.push(Span::styled(place.clone(), Style::new().fg(theme.p.fg))),
-        (None, true) => location.push(Span::styled(
-            "not set yet · onboarding opens next",
-            theme.dim(),
-        )),
-        (None, false) => location.push(Span::styled("not set · Settings › Profile", theme.dim())),
+            Span::styled(title, theme.title()),
+        ]),
+        Line::styled(
+            rule.repeat(usize::from(width)),
+            Style::new().fg(theme.p.bg2),
+        ),
+    ]
+}
+
+/// The initialization column: every step, with what it found below it when
+/// there is room.
+fn steps_column(frame: &mut Frame, area: Rect, startup: &Startup, theme: &Theme) {
+    let width = area.width.saturating_sub(2);
+    let mut lines = heading(" INITIALIZATION", width, startup.unicode, theme);
+    let roomy = area.height > 2 + 2 * u16::try_from(startup.steps.len()).unwrap_or(6);
+    for (step, status) in &startup.steps {
+        let (m, style) = mark(status, startup, theme);
+        let label = if status.is_pending() {
+            theme.dim()
+        } else {
+            Style::new().fg(theme.p.fg)
+        };
+        lines.push(Line::from(vec![
+            Span::styled(format!("{m} "), style),
+            Span::styled(step.label(), label),
+        ]));
+        if roomy {
+            let text = detail(status);
+            let shown = if text.is_empty() { "…" } else { text };
+            lines.push(Line::styled(
+                format!("  {}", fit(shown, usize::from(width).saturating_sub(2))),
+                theme.muted(),
+            ));
+        }
     }
-    let mut discovery = key("◈", "*", "Discovery");
-    if c.scopes.is_empty() {
-        discovery.push(Span::styled("no location bonus", theme.dim()));
-    } else {
-        discovery.push(Span::styled(
-            c.scopes.join(" · "),
-            Style::new().fg(theme.p.green),
-        ));
+    frame.render_widget(
+        Paragraph::new(lines).style(Style::new().bg(theme.p.bg0_h)),
+        area.inner(ratatui::layout::Margin::new(1, 0)),
+    );
+}
+
+fn level_style(level: Level, theme: &Theme) -> Style {
+    Style::new().fg(match level {
+        Level::Info => theme.p.aqua,
+        Level::Done => theme.p.green,
+        Level::Background => theme.p.blue,
+        Level::Failed => theme.p.red,
+    })
+}
+
+/// The event log: newest at the bottom; the latest line types itself in.
+fn log_column(frame: &mut Frame, area: Rect, startup: &Startup, theme: &Theme) {
+    let inner = area.inner(ratatui::layout::Margin::new(1, 0));
+    let width = usize::from(inner.width);
+    let mut body: Vec<Line> = Vec::new();
+    let last = startup.events.len().saturating_sub(1);
+    for (i, e) in startup.events.iter().enumerate() {
+        let secs = e.at.as_secs_f32();
+        body.push(Line::from(vec![
+            Span::styled(format!("{secs:>5.2}s "), theme.dim()),
+            Span::styled(
+                e.tag,
+                level_style(e.level, theme).add_modifier(Modifier::BOLD),
+            ),
+        ]));
+        let mut text = e.text.clone();
+        if i == last && startup.animated() {
+            // About 90 characters per second: a typing effect, nothing more.
+            let since = startup.clock.saturating_sub(e.at).as_millis();
+            let shown = usize::try_from(since / 11).unwrap_or(usize::MAX);
+            text = text.chars().take(shown.max(1)).collect();
+        }
+        for chunk in wrap(&text, width.saturating_sub(2).max(8)) {
+            body.push(Line::styled(
+                format!("  {chunk}"),
+                Style::new().fg(theme.p.fg4),
+            ));
+        }
     }
-    if c.topics > 0 {
-        let s = if c.topics == 1 { "" } else { "s" };
-        discovery.push(Span::styled(
-            format!("  {} topic{s}", c.topics),
-            theme.muted(),
-        ));
+    let mut lines = heading(" EVENT LOG", inner.width, startup.unicode, theme);
+    let room = usize::from(inner.height).saturating_sub(lines.len());
+    let skip = body.len().saturating_sub(room);
+    lines.extend(body.into_iter().skip(skip));
+    frame.render_widget(
+        Paragraph::new(lines).style(Style::new().bg(theme.p.bg0_h)),
+        inner,
+    );
+}
+
+/// Splits `text` into lines of at most `width` columns, at spaces.
+fn wrap(text: &str, width: usize) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut line = String::new();
+    for word in text.split(' ') {
+        let needed = line.chars().count() + usize::from(!line.is_empty()) + word.chars().count();
+        if !line.is_empty() && needed > width {
+            out.push(std::mem::take(&mut line));
+        }
+        if !line.is_empty() {
+            line.push(' ');
+        }
+        line.push_str(word);
     }
+    if !line.is_empty() || out.is_empty() {
+        out.push(line);
+    }
+    out.into_iter().map(|l| fit(&l, width)).collect()
+}
+
+/// Status bar: progress, location, discovery scope and the skip hint.
+fn status_bar(frame: &mut Frame, area: Rect, startup: &Startup, theme: &Theme) {
+    let u = startup.unicode;
+    let c = &startup.context;
     let done = startup.resolved();
     let total = startup.steps.len();
     let (full, empty) = if u { ("▰", "▱") } else { ("#", "-") };
-    let progress = vec![
-        Span::styled(
-            format!(" {}", full.repeat(done)),
-            Style::new().fg(theme.p.yellow),
-        ),
-        Span::styled(empty.repeat(total - done), theme.dim()),
+    let label = |t: &'static str| Span::styled(t, theme.muted());
+    let mut top = vec![
+        label(" SYSTEM "),
+        Span::styled(full.repeat(done), Style::new().fg(theme.p.yellow)),
+        Span::styled(empty.repeat(total - done), Style::new().fg(theme.p.bg3)),
         Span::styled(
             format!(
-                "  {done}/{total} {}",
+                " {done}/{total} {}",
                 if done == total {
                     "ready"
                 } else {
                     "initializing"
                 }
             ),
+            Style::new().fg(if done == total {
+                theme.p.green
+            } else {
+                theme.p.fg
+            }),
+        ),
+        label("    LOCATION "),
+    ];
+    match (&c.location, c.first_run) {
+        (Some(place), _) => top.push(Span::styled(place.clone(), Style::new().fg(theme.p.fg))),
+        (None, true) => top.push(Span::styled("not set · onboarding next", theme.dim())),
+        (None, false) => top.push(Span::styled("not set", theme.dim())),
+    }
+    top.push(label("    DISCOVERY "));
+    let (on, off) = if u { ("●", "○") } else { ("*", "o") };
+    for (name, scope) in [
+        ("local", "local"),
+        ("national", "national"),
+        ("global", "international"),
+    ] {
+        let enabled = c.scopes.contains(&scope);
+        top.push(Span::styled(
+            format!("{} ", if enabled { on } else { off }),
+            Style::new().fg(if enabled { theme.p.green } else { theme.p.bg3 }),
+        ));
+        top.push(Span::styled(
+            format!("{name}  "),
+            if enabled {
+                Style::new().fg(theme.p.fg)
+            } else {
+                theme.dim()
+            },
+        ));
+    }
+    let secs = startup.clock.as_secs_f32();
+    let bottom = Line::from(vec![
+        Span::styled(format!(" T+{secs:.1}s"), theme.dim()),
+        Span::styled(
+            "   any key skips · work continues in the background",
             theme.muted(),
         ),
-    ];
-    vec![
-        Line::from(location),
-        Line::from(discovery),
-        Line::from(progress),
-    ]
+    ]);
+    frame.render_widget(
+        Paragraph::new(vec![Line::from(top), bottom]).style(Style::new().bg(theme.p.bg0_h)),
+        area,
+    );
 }
 
-fn panel(frame: &mut Frame, area: Rect, startup: &Startup, theme: &Theme) {
-    let rule = if startup.unicode { '─' } else { '-' };
-    let block = Block::new()
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::new().fg(theme.p.bg3))
-        .title(Span::styled(" INITIALIZATION ", theme.title()))
-        .style(theme.base());
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-    let mut lines: Vec<Line> = startup
-        .steps
-        .iter()
-        .map(|(step, status)| step_line(step.label(), status, startup, theme))
-        .collect();
-    lines.push(Line::styled(
-        rule.to_string().repeat(usize::from(inner.width)),
-        Style::new().fg(theme.p.bg2),
-    ));
-    lines.extend(context_lines(startup, theme));
-    frame.render_widget(Paragraph::new(lines), inner);
+/// One line across the top: name and version, and when nothing is ready
+/// yet, the state of the Observer.
+fn header(frame: &mut Frame, area: Rect, startup: &Startup, theme: &Theme) {
+    let eye = startup.display_eye();
+    let state = match eye {
+        Eye::Closed => "dormant",
+        Eye::Stirring => "stirring",
+        Eye::Half => "waking",
+        Eye::Open => "awake · scanning",
+    };
+    let glyph = if startup.unicode { "◉" } else { "@" };
+    let line = Line::from(vec![
+        Span::styled(format!(" {glyph} "), Style::new().fg(theme.p.orange)),
+        Span::styled("SENTRI", theme.title()),
+        Span::styled(" · OBSERVER CONSOLE", theme.muted()),
+        Span::styled(format!(" · v{}", env!("CARGO_PKG_VERSION")), theme.dim()),
+        Span::styled("    observer ", theme.muted()),
+        Span::styled(
+            state,
+            Style::new().fg(if eye == Eye::Open {
+                theme.p.green
+            } else {
+                theme.p.yellow
+            }),
+        ),
+    ]);
+    frame.render_widget(
+        Paragraph::new(line).style(Style::new().bg(theme.p.bg0_h)),
+        area,
+    );
 }
 
-fn hint(theme: &Theme) -> Line<'static> {
-    Line::styled(
-        "any key skips · work continues in the background",
-        theme.muted(),
-    )
-}
-
-fn centered(r: Rect, w: u16, h: u16) -> Rect {
+pub(super) fn centered(r: Rect, w: u16, h: u16) -> Rect {
     let [col] = Layout::horizontal([Constraint::Length(w.min(r.width))])
         .flex(Flex::Center)
         .areas(r);
@@ -352,78 +471,52 @@ fn centered(r: Rect, w: u16, h: u16) -> Rect {
 /// How the screen is arranged for a terminal size.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Arrangement {
-    /// 3D ward of `rows` above the text.
-    Stacked { rows: u16 },
-    /// 3D ward of `rows` beside the text.
-    Side { rows: u16 },
-    /// Flat ward above the steps.
+    /// Steps, ward and event log side by side.
+    Console,
+    /// Steps and ward; no log.
+    Duo,
+    /// Flat ward above a compact list of steps.
     Flat,
     /// Steps only.
     Steps,
 }
 
-/// Rows of wordmark, tagline, panel, hint and the gaps between them.
-const fn text_height(unicode: bool) -> u16 {
-    let mark = if unicode { 3 } else { 1 };
-    mark + 1 + 1 + 1 + PANEL_HEIGHT + 1 + 1
+/// Rows the centre needs besides the ward: wordmark, gap and tagline.
+const fn lockup(unicode: bool) -> u16 {
+    if unicode { 5 } else { 3 }
 }
 
 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-fn arrange(area: Rect, unicode: bool) -> Arrangement {
-    let rows_for = |cols: u16| (f32::from(cols) / ART_RATIO) as u16;
-    let text = text_height(unicode);
-    let panel = PANEL_WIDTH + 2;
-    let stacked = area
+fn art_rows(center: Rect, unicode: bool) -> u16 {
+    let by_width = (f32::from(center.width.saturating_sub(2)) / ART_RATIO) as u16;
+    center
         .height
-        .saturating_sub(text + 1)
-        .min(rows_for(area.width.saturating_sub(2)))
-        .min(30);
-    let side = area
-        .height
-        .saturating_sub(2)
-        .min(rows_for(area.width.saturating_sub(panel + 6)))
-        .min(34);
-    let side_fits = area.height >= text && area.width >= panel + 6;
-    if side_fits && side >= MIN_ART_ROWS && side > stacked + 2 {
-        Arrangement::Side { rows: side }
-    } else if stacked >= MIN_ART_ROWS && area.width >= panel {
-        Arrangement::Stacked { rows: stacked }
-    } else {
-        let flat = u16::try_from(observer::HEIGHT).unwrap_or(11);
-        if area.height >= flat + 2 + PANEL_HEIGHT && area.width >= 40 {
-            Arrangement::Flat
-        } else {
-            Arrangement::Steps
-        }
-    }
+        .saturating_sub(lockup(unicode) + 1)
+        .min(by_width)
+        .min(34)
 }
 
-/// Draws the wordmark, tagline, panel and hint into `area`, centered.
-fn text_column(frame: &mut Frame, area: Rect, startup: &Startup, theme: &Theme) {
-    let unicode = startup.unicode;
-    let mark_rows = if unicode { 3 } else { 1 };
-    let width = (PANEL_WIDTH + 2).min(area.width);
-    let column = centered(area, width, text_height(unicode));
-    let parts = Layout::vertical([
-        Constraint::Length(mark_rows),
-        Constraint::Length(1),
-        Constraint::Length(1),
-        Constraint::Length(1),
-        Constraint::Length(PANEL_HEIGHT),
-        Constraint::Length(1),
-        Constraint::Length(1),
-    ])
-    .split(column);
-    frame.render_widget(
-        Paragraph::new(wordmark(unicode, theme)),
-        centered(parts[0], wordmark_width(unicode), mark_rows),
-    );
-    frame.render_widget(
-        Paragraph::new(tagline(column.width, unicode, theme)).centered(),
-        parts[2],
-    );
-    panel(frame, parts[4], startup, theme);
-    frame.render_widget(Paragraph::new(hint(theme)).centered(), parts[6]);
+fn arrange(area: Rect, unicode: bool) -> Arrangement {
+    let body = |side: u16| {
+        Rect::new(
+            0,
+            0,
+            area.width.saturating_sub(side),
+            area.height.saturating_sub(1 + BAR),
+        )
+    };
+    if area.width >= 118 && area.height >= 28 && art_rows(body(2 * SIDE + 2), unicode) >= 16 {
+        Arrangement::Console
+    } else if area.width >= 76
+        && area.height >= 22
+        && art_rows(body(SIDE_NARROW + 1), unicode) >= MIN_ART_ROWS
+    {
+        Arrangement::Duo
+    } else if area.width >= 44 && area.height >= 21 {
+        Arrangement::Flat
+    } else {
+        Arrangement::Steps
+    }
 }
 
 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
@@ -445,34 +538,99 @@ fn ward_3d(frame: &mut Frame, area: Rect, rows: u16, startup: &Startup, theme: &
     blit(frame.buffer_mut(), target, &canvas, theme);
 }
 
+/// The ward with the wordmark and tagline beneath it.
+fn centre(frame: &mut Frame, area: Rect, startup: &Startup, theme: &Theme) {
+    let unicode = startup.unicode;
+    let rows = art_rows(area, unicode);
+    let mark_rows = if unicode { 3 } else { 1 };
+    let [art, mark, _, tag] = Layout::vertical([
+        Constraint::Length(rows),
+        Constraint::Length(mark_rows),
+        Constraint::Length(1),
+        Constraint::Length(1),
+    ])
+    .flex(Flex::Center)
+    .areas(area);
+    ward_3d(frame, art, rows, startup, theme);
+    frame.render_widget(
+        Paragraph::new(wordmark(unicode, theme)),
+        centered(mark, wordmark_width(unicode), mark_rows),
+    );
+    frame.render_widget(
+        Paragraph::new(tagline(area.width, unicode, theme)).centered(),
+        tag,
+    );
+}
+
+/// Steps as single lines, for small terminals.
+fn compact_steps(startup: &Startup, theme: &Theme) -> Vec<Line<'static>> {
+    startup
+        .steps
+        .iter()
+        .map(|(step, status)| {
+            let (m, style) = mark(status, startup, theme);
+            let label = if status.is_pending() {
+                theme.dim()
+            } else {
+                Style::new().fg(theme.p.fg)
+            };
+            Line::from(vec![
+                Span::styled(format!("{m} "), style),
+                Span::styled(format!("{:<23}", step.label()), label),
+                Span::styled(fit(detail(status), 28), theme.muted()),
+            ])
+        })
+        .collect()
+}
+
 /// Draws the whole screen.
 pub fn render(frame: &mut Frame, startup: &Startup, theme: &Theme) {
     let area = frame.area();
     frame.render_widget(Block::new().style(theme.base()), area);
-    match arrange(area, startup.unicode) {
-        Arrangement::Stacked { rows } => {
-            let text = text_height(startup.unicode);
-            let [art, rest] =
-                Layout::vertical([Constraint::Length(rows + 1), Constraint::Length(text)])
-                    .flex(Flex::Center)
-                    .areas(area);
-            ward_3d(frame, art, rows, startup, theme);
-            text_column(frame, rest, startup, theme);
-        }
-        Arrangement::Side { rows } => {
-            let [art, rest] =
-                Layout::horizontal([Constraint::Fill(1), Constraint::Length(PANEL_WIDTH + 4)])
-                    .areas(area.inner(ratatui::layout::Margin::new(1, 0)));
-            ward_3d(frame, art, rows, startup, theme);
-            text_column(frame, rest, startup, theme);
+    let arrangement = arrange(area, startup.unicode);
+    match arrangement {
+        Arrangement::Console | Arrangement::Duo => {
+            let [top, body, bar] = Layout::vertical([
+                Constraint::Length(1),
+                Constraint::Min(0),
+                Constraint::Length(BAR),
+            ])
+            .areas(area);
+            header(frame, top, startup, theme);
+            status_bar(frame, bar, startup, theme);
+            if arrangement == Arrangement::Console {
+                let [left, _, mid, _, right] = Layout::horizontal([
+                    Constraint::Length(SIDE),
+                    Constraint::Length(1),
+                    Constraint::Min(0),
+                    Constraint::Length(1),
+                    Constraint::Length(SIDE),
+                ])
+                .areas(body);
+                steps_column(frame, left, startup, theme);
+                centre(frame, mid, startup, theme);
+                log_column(frame, right, startup, theme);
+            } else {
+                let [left, _, mid] = Layout::horizontal([
+                    Constraint::Length(SIDE_NARROW),
+                    Constraint::Length(1),
+                    Constraint::Min(0),
+                ])
+                .areas(body);
+                steps_column(frame, left, startup, theme);
+                centre(frame, mid, startup, theme);
+            }
         }
         Arrangement::Flat => {
             let flat = u16::try_from(observer::HEIGHT).unwrap_or(11);
             let width = u16::try_from(observer::WIDTH).unwrap_or(25);
-            let [art, title, steps] = Layout::vertical([
-                Constraint::Length(flat + 1),
+            let steps = u16::try_from(startup.steps.len()).unwrap_or(6);
+            let [art, title, list, _, bar] = Layout::vertical([
+                Constraint::Length(flat),
                 Constraint::Length(1),
-                Constraint::Length(PANEL_HEIGHT),
+                Constraint::Length(steps),
+                Constraint::Length(1),
+                Constraint::Length(BAR),
             ])
             .flex(Flex::Center)
             .areas(area);
@@ -481,25 +639,27 @@ pub fn render(frame: &mut Frame, startup: &Startup, theme: &Theme) {
                 centered(art, width, flat),
             );
             frame.render_widget(Paragraph::new(wordmark(false, theme)).centered(), title);
-            panel(
-                frame,
-                centered(steps, PANEL_WIDTH + 2, PANEL_HEIGHT),
-                startup,
-                theme,
+            frame.render_widget(
+                Paragraph::new(compact_steps(startup, theme)),
+                centered(list, 56, steps),
             );
+            status_bar(frame, bar, startup, theme);
         }
         Arrangement::Steps => {
-            let [title, steps] =
-                Layout::vertical([Constraint::Length(1), Constraint::Length(PANEL_HEIGHT)])
-                    .flex(Flex::Center)
-                    .areas(area);
+            let steps = u16::try_from(startup.steps.len()).unwrap_or(6);
+            let [title, list, bar] = Layout::vertical([
+                Constraint::Length(1),
+                Constraint::Length(steps),
+                Constraint::Length(BAR),
+            ])
+            .flex(Flex::Center)
+            .areas(area);
             frame.render_widget(Paragraph::new(wordmark(false, theme)).centered(), title);
-            panel(
-                frame,
-                centered(steps, PANEL_WIDTH + 2, PANEL_HEIGHT),
-                startup,
-                theme,
+            frame.render_widget(
+                Paragraph::new(compact_steps(startup, theme)).wrap(Wrap { trim: true }),
+                list,
             );
+            status_bar(frame, bar, startup, theme);
         }
     }
     if !startup.unicode {
@@ -509,7 +669,7 @@ pub fn render(frame: &mut Frame, startup: &Startup, theme: &Theme) {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Instant;
+    use std::time::{Duration, Instant};
 
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
@@ -546,6 +706,7 @@ mod tests {
             Status::Background("GitHub later".into()),
             now,
         );
+        s.log(now, Level::Info, "sources", "12 healthy · 1 failing".into());
         s.context = Context {
             location: Some("Cusco, Peru".into()),
             scopes: vec!["local", "national"],
@@ -556,21 +717,27 @@ mod tests {
     }
 
     #[test]
-    fn shows_every_step_with_its_real_state() {
+    fn the_console_shows_steps_log_and_status_from_real_state() {
         let s = sample(SplashMode::Static, true);
-        let screen = text(100, 44, &s);
+        let screen = text(140, 40, &s);
         for step in Step::ALL {
             assert!(screen.contains(step.label()), "{}", step.label());
         }
         assert!(screen.contains("✓ Initializing Observer"));
-        assert!(screen.contains("↻ Loading personal profile"));
+        assert!(screen.contains("↻ Loading user profile"));
         assert!(screen.contains("◌ Preparing dashboard"));
-        assert!(screen.contains("2/5 initializing"), "{screen}");
+        assert!(screen.contains("2/6 initializing"), "{screen}");
+        assert!(screen.contains("EVENT LOG"));
+        assert!(
+            screen.contains("12 healthy · 1 failing"),
+            "logged facts appear"
+        );
+        assert!(screen.contains("GitHub later"), "step details appear");
         assert!(screen.contains(TAGLINE));
         assert!(screen.contains("Cusco, Peru"));
-        assert!(screen.contains("local · national"));
-        assert!(screen.contains("2 topics"));
+        assert!(screen.contains("● local") && screen.contains("○ global"));
         assert!(screen.contains("█▀▀"), "the wordmark is drawn");
+        assert!(screen.contains("OBSERVER CONSOLE"));
     }
 
     #[test]
@@ -578,18 +745,21 @@ mod tests {
         let now = Instant::now();
         let mut s = Startup::new(SplashMode::Static, true, now);
         s.context.first_run = true;
-        let screen = text(100, 44, &s);
-        assert!(screen.contains("0/5 initializing"));
+        let screen = text(140, 40, &s);
+        assert!(screen.contains("0/6 initializing"));
         assert!(!screen.contains('✓'), "no step is marked done");
-        assert!(screen.contains("onboarding opens next"));
+        assert!(screen.contains("onboarding next"));
+        assert!(screen.contains("dormant"));
     }
 
     #[test]
     fn arrangement_follows_the_terminal_size() {
         let r = |w, h| arrange(Rect::new(0, 0, w, h), true);
-        assert!(matches!(r(100, 44), Arrangement::Stacked { rows } if rows >= 20));
-        assert!(matches!(r(160, 30), Arrangement::Side { rows } if rows >= 20));
-        assert_eq!(r(80, 24), Arrangement::Flat);
+        assert_eq!(r(140, 40), Arrangement::Console);
+        assert_eq!(r(200, 60), Arrangement::Console);
+        assert_eq!(r(100, 30), Arrangement::Duo);
+        assert_eq!(r(80, 24), Arrangement::Duo);
+        assert_eq!(r(60, 22), Arrangement::Flat);
         assert_eq!(r(50, 14), Arrangement::Steps);
         assert_eq!(r(30, 8), Arrangement::Steps);
     }
@@ -602,7 +772,7 @@ mod tests {
                 for (w, h) in [
                     (1, 1),
                     (20, 5),
-                    (60, 20),
+                    (60, 22),
                     (80, 24),
                     (120, 40),
                     (200, 60),
@@ -611,8 +781,8 @@ mod tests {
                     s.on_timer(Instant::now());
                     let screen = text(w, h, &s);
                     if !unicode {
-                        let ward: String = screen.chars().filter(|c| !c.is_ascii()).collect();
-                        assert!(ward.is_empty(), "{w}x{h}: {ward:?}");
+                        let odd: String = screen.chars().filter(|c| !c.is_ascii()).collect();
+                        assert!(odd.is_empty(), "{w}x{h}: {odd:?}");
                     }
                 }
             }
@@ -620,26 +790,53 @@ mod tests {
     }
 
     #[test]
-    fn the_3d_ward_fills_large_terminals() {
-        let s = sample(SplashMode::Static, true);
-        let screen = text(120, 48, &s);
-        let ward_rows = screen
-            .lines()
-            .take_while(|l| !l.contains('█'))
-            .filter(|l| !l.trim().is_empty())
-            .count();
-        assert!(ward_rows >= 20, "{ward_rows}\n{screen}");
+    fn the_newest_event_types_itself_in() {
+        let mut s = sample(SplashMode::Animated, true);
+        let t0 = Instant::now();
+        s.log(
+            t0,
+            Level::Done,
+            "dashboard",
+            "157 opportunities ranked".into(),
+        );
+        let at = s.events.last().unwrap().at;
+        s.clock = at;
+        assert!(!text(140, 40, &s).contains("157 opportunities ranked"));
+        s.clock = at + Duration::from_secs(1);
+        assert!(text(140, 40, &s).contains("157 opportunities ranked"));
     }
 
     #[test]
-    fn ascii_fallback_and_tiny_terminals() {
+    fn the_log_keeps_the_newest_entries_when_full() {
+        let mut s = sample(SplashMode::Static, true);
+        let t0 = Instant::now();
+        for i in 0..40 {
+            s.log(t0, Level::Info, "sources", format!("entry {i:02}"));
+        }
+        let screen = text(140, 40, &s);
+        assert!(screen.contains("entry 39"));
+        assert!(!screen.contains("entry 00"));
+    }
+
+    #[test]
+    fn wrap_breaks_at_spaces_and_fits() {
+        assert_eq!(wrap("a bb ccc", 4), ["a bb", "ccc"]);
+        assert_eq!(wrap("", 5), [""]);
+        assert_eq!(wrap("abcdefgh", 4), ["abc…"]);
+    }
+
+    #[test]
+    fn ascii_fallback_and_small_terminals() {
         let s = sample(SplashMode::Static, false);
-        let screen = text(100, 44, &s);
+        let screen = text(140, 40, &s);
         assert!(screen.contains("S  E  N  T  R  I"));
         assert!(screen.contains("+ Initializing Observer"));
-        let flat = text(80, 24, &s);
-        assert!(flat.contains("<##--|"), "the flat ward on small screens");
-        let small = text(50, 12, &s);
+        let flat = text(60, 22, &s);
+        assert!(
+            flat.contains("<##--|"),
+            "the flat ward on small screens\n{flat}"
+        );
+        let small = text(50, 14, &s);
         assert!(small.contains("Preparing dashboard"), "steps survive");
         assert!(!small.contains("<##"), "the drawing is dropped");
     }
