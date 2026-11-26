@@ -45,6 +45,16 @@ pub enum Eye {
 }
 
 impl Eye {
+    /// The next stage of opening (an open eye stays open).
+    #[must_use]
+    pub const fn next(self) -> Self {
+        match self {
+            Self::Closed => Self::Stirring,
+            Self::Stirring => Self::Half,
+            Self::Half | Self::Open => Self::Open,
+        }
+    }
+
     /// `done` of `total` steps resolved.
     pub const fn from_progress(done: usize, total: usize) -> Self {
         if total == 0 || done >= total {

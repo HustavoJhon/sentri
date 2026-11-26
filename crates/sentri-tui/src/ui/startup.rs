@@ -97,7 +97,7 @@ fn flat_style(part: Part, eye: Eye, tick: u64, theme: &Theme) -> Style {
 }
 
 fn flat_ward(startup: &Startup, theme: &Theme) -> Vec<Line<'static>> {
-    let eye = startup.eye();
+    let eye = startup.display_eye();
     observer::frame(eye, startup.tick, startup.unicode)
         .into_iter()
         .map(|segments| {
@@ -431,7 +431,7 @@ fn ward_3d(frame: &mut Frame, area: Rect, rows: u16, startup: &Startup, theme: &
     let cols = ((f32::from(rows) * ART_RATIO) as u16).min(area.width);
     let target = centered(area, cols, rows);
     let scene = observer::scene(
-        startup.eye(),
+        startup.display_eye(),
         startup.tick,
         startup.glow,
         startup.animated(),

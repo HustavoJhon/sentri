@@ -64,6 +64,8 @@ pub const LINGER: Duration = Duration::from_millis(600);
 /// An animated splash shows at least this long (any key still skips it at
 /// once). The work behind it never waits: the dashboard loads meanwhile.
 pub const MIN_ANIMATED: Duration = Duration::from_millis(1500);
+/// Frames between two stages of the eye opening (about a third of a second).
+const EYE_STAGE: u64 = 4;
 /// Frame interval while animated (12.5 frames per second).
 pub const FRAME: Duration = Duration::from_millis(80);
 /// Timer interval for the static splash (timeouts only).
@@ -127,6 +129,9 @@ pub struct Startup {
     pub tick: u64,
     /// Current illumination; eases towards the eye's target each frame.
     pub glow: f32,
+    /// The eye as drawn: it opens one stage at a time and never ahead of
+    /// real progress, so even an instant startup shows the awakening.
+    shown: Eye,
     pub context: Context,
     started: Instant,
     finished: Option<Instant>,
@@ -145,6 +150,7 @@ impl Startup {
             } else {
                 1.0
             },
+            shown: Eye::Closed,
             context: Context::default(),
             started: now,
             finished: None,
@@ -179,11 +185,24 @@ impl Startup {
         Eye::from_progress(self.resolved(), self.steps.len())
     }
 
+    /// The eye to draw: the real one without animation, otherwise the
+    /// stage the awakening has reached (never past the real one).
+    pub fn display_eye(&self) -> Eye {
+        if self.animated() {
+            self.shown.min(self.eye())
+        } else {
+            self.eye()
+        }
+    }
+
     /// Advances the animation and applies the grace periods.
     pub fn on_timer(&mut self, now: Instant) {
         if self.mode == SplashMode::Animated {
             self.tick = self.tick.wrapping_add(1);
-            let target = crate::observer::glow_target(self.eye());
+            if self.tick.is_multiple_of(EYE_STAGE) && self.shown < self.eye() {
+                self.shown = self.shown.next();
+            }
+            let target = crate::observer::glow_target(self.shown);
             self.glow += (target - self.glow) * 0.18;
         }
         let waited = now.saturating_duration_since(self.started);
@@ -308,6 +327,31 @@ mod tests {
             s.resolve(step, Status::Done("ok".into()), t0);
         }
         assert!(!s.visible(t0 + LINGER), "no minimum without animation");
+    }
+
+    #[test]
+    fn the_drawn_eye_opens_in_stages_but_never_ahead_of_progress() {
+        let (mut s, t0) = startup(SplashMode::Animated);
+        s.resolve(Step::Observer, Status::Done("ok".into()), t0);
+        for _ in 0..40 {
+            s.on_timer(t0);
+        }
+        assert_eq!(s.display_eye(), Eye::Stirring, "capped by real progress");
+        for step in Step::ALL {
+            s.resolve(step, Status::Done("ok".into()), t0);
+        }
+        assert_eq!(s.eye(), Eye::Open);
+        let mut stages = vec![s.display_eye()];
+        for _ in 0..12 {
+            s.on_timer(t0);
+            if stages.last() != Some(&s.display_eye()) {
+                stages.push(s.display_eye());
+            }
+        }
+        assert_eq!(stages, [Eye::Stirring, Eye::Half, Eye::Open]);
+        let (mut still, t0) = startup(SplashMode::Static);
+        still.resolve(Step::Observer, Status::Done("ok".into()), t0);
+        assert_eq!(still.display_eye(), still.eye());
     }
 
     #[test]
