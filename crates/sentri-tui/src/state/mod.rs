@@ -1522,7 +1522,10 @@ impl State {
         let now = std::time::Instant::now();
         match msg {
             Msg::Overview(o) => {
-                let fresh = s.status(Step::Sources).is_pending();
+                // Health first, so "all systems ready" stays the last line.
+                if s.status(Step::Sources).is_pending() {
+                    log_source_health(s, o, now);
+                }
                 let enabled = o.config.sources.iter().filter(|s| s.enabled).count();
                 let total = o.config.sources.len();
                 s.resolve(
@@ -1530,9 +1533,6 @@ impl State {
                     Status::Done(format!("{enabled} of {total} sources enabled")),
                     now,
                 );
-                if fresh {
-                    log_source_health(s, o, now);
-                }
             }
             Msg::Profile(p) => {
                 if let ProfileState::Ready(profile, _) = p
@@ -1763,6 +1763,10 @@ fn log_source_health(s: &mut startup::Startup, o: &Overview, now: std::time::Ins
             Some(st) if st.last_success_at.is_some() => healthy += 1,
             _ => never += 1,
         }
+    }
+    if healthy + never + failing.len() == 0 {
+        s.log(now, Level::Info, "sources", "no sources enabled".into());
+        return;
     }
     let mut parts = vec![format!("{healthy} healthy")];
     if !failing.is_empty() {
