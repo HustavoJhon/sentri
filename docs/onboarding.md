@@ -2,10 +2,31 @@
 
 ## El Observer
 
-Al abrir `sentri`, un *ward* observador dibujado con caracteres (diseño propio,
-sin imágenes ni protocolos gráficos) despierta mientras SENTRI se inicia. Su
-ojo se abre a medida que terminan pasos **reales**; nada se marca como hecho
-antes de tiempo:
+Al abrir `sentri`, un *ward* observador en 3D dibujado con caracteres (diseño
+propio, sin imágenes ni protocolos gráficos) despierta mientras SENTRI se
+inicia: una cabeza con un ojo en forma de lente en ambas caras, dos alas con
+plumas barridas hacia atrás, una cresta y un bastón con un núcleo de energía
+sobre una base. El modelo se muestrea como puntos con normales; cada fotograma
+lo gira 360° sobre su eje vertical, lo proyecta con perspectiva y búfer de
+profundidad, y elige el carácter según la luz (`.,:;=+*#%`), así que la forma
+se mantiene estable entre fotogramas (nada es aleatorio).
+
+El despertar: el ward arranca quieto y oscuro, acelera hasta girar una vuelta
+cada ~5 s y se ilumina poco a poco. El ojo se abre por etapas (cerrado,
+entreabierto, medio, abierto) **sin adelantarse nunca al progreso real**; con
+el ojo entreabierto aparecen anillos de energía alrededor del núcleo, con el
+ojo a medias un radar barre el suelo, y despierto del todo pulsa el iris y
+flotan más partículas. Colores Gruvbox Dark: amarillo y naranja en la cabeza,
+el ojo y el bastón; verde y aqua en las alas, los anillos y el radar.
+
+Alrededor del Observer: la marca **SENTRI**, el lema *THE WORLD IS FULL OF
+OPPORTUNITIES* y un panel **INITIALIZATION** con los pasos, tu ubicación
+configurada (o «not set»), los ámbitos de descubrimiento activos y una barra de
+progreso. Según el tamaño de la terminal el Observer va encima del panel, a su
+lado (terminales anchas y bajas) o, si no cabe, se usa el ward plano de la
+fase 12 o solo el panel.
+
+Los pasos se marcan solo cuando termina el trabajo real:
 
 | Paso | Se completa cuando… |
 |---|---|
@@ -15,21 +36,28 @@ antes de tiempo:
 | Loading personal profile | se cargó el perfil de GitHub (o se confirmó que no hay usuario). |
 | Preparing dashboard | el feed quedó ordenado según tu perfil. |
 
-Marcas: `✓` hecho, `↻` sigue en segundo plano, `✗` falló, `◌` pendiente.
+Marcas: `✓` hecho, `↻` sigue en segundo plano, `✗` falló, `◌` pendiente (un
+spinner mientras está animado).
 
-- **No retrasa el arranque.** GitHub tiene 1,5 s de margen; pasado ese tiempo
-  continúa en segundo plano. Ningún paso retiene la pantalla más de 4 s, y
-  cualquier tecla la salta (el trabajo sigue). Cuando todo termina, el ojo
-  abierto queda visible ~0,45 s.
-- **Modos.** Animado por defecto (un fotograma cada 90 ms). Estático, sin
-  temporizador de animación, si `SENTRI_NO_ANIMATION` o `CI` están definidas o
+- **No retrasa el arranque.** El dashboard se carga detrás desde el primer
+  instante. GitHub tiene 1,5 s de margen; pasado ese tiempo continúa en segundo
+  plano. Ningún paso retiene la pantalla más de 4 s, y cualquier tecla la salta
+  al momento (el trabajo sigue). Animada, la pantalla dura al menos 1,5 s y el
+  ojo abierto queda visible ~0,6 s al terminar; estática, se va en cuanto todo
+  termina (~0,6 s).
+- **Modos.** Animado por defecto (12,5 fotogramas por segundo, cada 80 ms).
+  Estático, un solo fotograma en vista de tres cuartos redibujado solo cuando
+  cambia el progreso, si `SENTRI_NO_ANIMATION` o `CI` están definidas o
   `TERM=dumb`. Sin pantalla si la salida no es una terminal o si
   `[onboarding] startup_animation = false` (también en **Settings ›
-  Appearance › Startup animation**).
+  Appearance › Startup animation**). Se adapta al redimensionar.
 - **Sin Unicode.** Con `ui.ascii_icons = true`, un locale que no es UTF-8 o la
-  consola de Linux (`TERM=linux`), el dibujo y las marcas son ASCII.
-- **Terminales pequeñas** (menos de 21 filas o 40 columnas): se omite el dibujo
-  y quedan los pasos.
+  consola de Linux (`TERM=linux`), el dibujo, la marca y las marcas son ASCII.
+- **Vista previa.** `cargo run -p sentri-tui --example observer_frames -- 60 26 8`
+  imprime ocho fotogramas de la rotación en texto plano (ancho, alto, número).
+- **Terminales pequeñas:** por debajo de ~33 filas (o ~68 columnas) se usa el
+  ward plano de la fase 12; con menos de 24 filas o 40 columnas solo quedan la
+  marca y el panel.
 
 `sentri` sin terminal interactiva (por ejemplo en un script o con la salida
 redirigida) no abre la interfaz y sugiere los comandos equivalentes
