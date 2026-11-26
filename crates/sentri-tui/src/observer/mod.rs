@@ -16,7 +16,23 @@ pub enum Part {
     Eye,
     Staff,
     Base,
+    /// The pupil at the centre of the eye.
+    Pupil,
+    /// The energy core floating on the staff.
+    Core,
+    /// The orbiting energy rings.
+    Ring,
+    /// The radar circle and its sweep on the ground.
+    Radar,
+    /// Ambient particles drifting around the ward.
+    Particle,
 }
+
+pub mod model;
+
+/// Cosine of the eye's angular radius on the head: model normals whose
+/// `|z|` exceeds it belong to the lens.
+pub const EYE_EDGE: f32 = 0.78;
 
 /// How awake the Observer is, from initialization progress.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

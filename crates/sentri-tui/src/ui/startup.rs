@@ -26,6 +26,9 @@ fn part_style(part: Part, eye: Eye, tick: u64, theme: &Theme) -> Style {
         },
         Part::Staff => Style::new().fg(if awake { p.orange } else { p.bg3 }),
         Part::Base => Style::new().fg(p.bg2),
+        Part::Pupil | Part::Core | Part::Ring | Part::Radar | Part::Particle => {
+            Style::new().fg(p.aqua)
+        }
     };
     style.bg(p.bg0)
 }
