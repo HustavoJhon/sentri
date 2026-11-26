@@ -119,6 +119,8 @@ pub struct Onboarding {
     pub backed_up: bool,
     /// Waiting for the final save.
     pub finishing: bool,
+    /// Animation frames shown on the Welcome page.
+    pub tick: u64,
 }
 
 fn opt(value: Option<&String>) -> String {
@@ -174,6 +176,7 @@ impl Onboarding {
             error: None,
             backed_up: false,
             finishing: false,
+            tick: 0,
         }
     }
 

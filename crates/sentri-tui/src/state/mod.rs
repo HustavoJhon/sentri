@@ -1506,10 +1506,48 @@ impl State {
             .is_some_and(|s| s.visible(std::time::Instant::now()))
     }
 
-    /// Splash timer: animation frames and grace periods.
+    /// Splash timer: animation frames and grace periods; it also turns the
+    /// Observer on the onboarding Welcome page.
     pub fn on_timer(&mut self) {
         if let Some(startup) = &mut self.startup {
             startup.on_timer(std::time::Instant::now());
+        }
+        if self.welcome_animated()
+            && let Some(wizard) = &mut self.onboarding
+        {
+            wizard.tick = wizard.tick.wrapping_add(1);
+        }
+    }
+
+    /// Whether the startup animation is on (off in static mode, CI, or when
+    /// disabled in the configuration).
+    pub fn motion(&self) -> bool {
+        self.startup
+            .as_ref()
+            .is_some_and(startup::Startup::animated)
+    }
+
+    /// The onboarding Welcome page is on screen and animates.
+    fn welcome_animated(&self) -> bool {
+        self.motion()
+            && !self.splash_visible()
+            && self
+                .onboarding
+                .as_ref()
+                .is_some_and(|w| w.page == onboarding::Page::Welcome)
+    }
+
+    /// How long the event loop may sleep before the next frame, given
+    /// whether the frame just drawn was the splash. `None` waits for input.
+    pub fn wake_interval(&self, splash_drawn: bool) -> Option<std::time::Duration> {
+        if splash_drawn {
+            // One more wake-up even if the splash just expired, so the next
+            // screen replaces it.
+            self.startup.as_ref().map(startup::Startup::interval)
+        } else if self.welcome_animated() {
+            Some(startup::FRAME)
+        } else {
+            None
         }
     }
 

@@ -89,15 +89,10 @@ async fn event_loop(
 
     while !state.quit {
         // Checked before drawing: a splash frame on screen always gets one
-        // more wake-up, so the dashboard replaces it even when the splash
-        // expires between this draw and the next timer.
+        // more wake-up (see `State::wake_interval`).
         let splash = state.splash_visible();
         terminal.draw(|frame| ui::draw(frame, &mut state, &theme))?;
-        let timer = state
-            .startup
-            .as_ref()
-            .filter(|_| splash)
-            .map(crate::state::startup::Startup::interval);
+        let timer = state.wake_interval(splash);
         let effects = tokio::select! {
             () = wait(timer) => {
                 state.on_timer();

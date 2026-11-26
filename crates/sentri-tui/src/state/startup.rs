@@ -603,4 +603,47 @@ mod tests {
         assert!(!state.splash_visible());
         assert!(!state.quit);
     }
+
+    #[test]
+    fn the_welcome_page_animates_only_with_motion_and_only_there() {
+        use crate::state::State;
+        use crate::state::onboarding::{Onboarding, Page};
+        let config = sentri_app::Config::parse(
+            sentri_app::config::DEFAULT_CONFIG,
+            std::path::Path::new("d"),
+        )
+        .unwrap();
+        let mut startup = Startup::new(SplashMode::Animated, true, Instant::now());
+        startup.dismiss();
+        let mut state = State {
+            startup: Some(startup),
+            onboarding: Some(Onboarding::from_config(&config, None)),
+            ..State::default()
+        };
+        assert_eq!(state.wake_interval(false), Some(FRAME));
+        state.on_timer();
+        state.on_timer();
+        assert_eq!(state.onboarding.as_ref().unwrap().tick, 2);
+        assert_eq!(
+            state.wake_interval(true),
+            Some(FRAME),
+            "a splash frame always gets one more"
+        );
+        state.onboarding.as_mut().unwrap().page = Page::GitHub;
+        assert_eq!(
+            state.wake_interval(false),
+            None,
+            "other pages wait for input"
+        );
+        state.on_timer();
+        assert_eq!(state.onboarding.as_ref().unwrap().tick, 2);
+        state.onboarding.as_mut().unwrap().page = Page::Welcome;
+        state.startup = Some(Startup::new(SplashMode::Static, true, Instant::now()));
+        state.startup.as_mut().unwrap().dismiss();
+        assert_eq!(
+            state.wake_interval(false),
+            None,
+            "static mode never animates"
+        );
+    }
 }
