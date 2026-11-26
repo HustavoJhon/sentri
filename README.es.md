@@ -136,13 +136,15 @@ cargo run -p sentri-cli -- --help   # lista los comandos
 sentri               # primera vez: despierta el Observer y luego un asistente
 ```
 
-Mientras SENTRI se inicia, despierta el Observer: un ward original en 3D hecho
-con caracteres de terminal (sombreado por profundidad, sin imágenes) que
-acelera, se ilumina y gira 360°, con anillos de energía, un radar y partículas.
-Su ojo se abre por etapas pero nunca antes que los pasos reales (detección de
-la terminal, fuentes, perfil, dashboard), que aparecen en un panel de
-inicialización junto a tu ubicación y ámbito de descubrimiento. Cualquier tecla
-lo salta y nunca espera más de unos segundos por trabajo opcional como GitHub. En la primera ejecución, un asistente de seis páginas
+Mientras SENTRI se inicia se abre una consola de observación: el Observer, un
+ward original en 3D hecho con caracteres de terminal (sombreado por
+profundidad, sin imágenes), despierta, se ilumina y gira 360° con anillos de
+energía, un radar y partículas. A su alrededor, los pasos reales de arranque
+(izquierda), un registro de lo que de verdad ocurrió (derecha) y una barra con
+progreso, ubicación y descubrimiento local · national · global. El ojo se abre
+por etapas pero nunca antes que el progreso real. Dura unos 7 s
+(`[onboarding] startup_style = "brief"`: ~1,5 s), cualquier tecla lo salta y el
+dashboard se carga detrás desde el primer instante. En la primera ejecución, un asistente de seis páginas
 pregunta:
 
 1. tu **usuario de GitHub** (opcional; solo perfil público, nunca un token);
