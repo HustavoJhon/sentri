@@ -231,10 +231,16 @@ impl Startup {
         if !self.visible(now) {
             return None;
         }
-        Some(match self.mode {
+        Some(self.interval())
+    }
+
+    /// Time between wake-ups: a frame while animated, otherwise just often
+    /// enough to apply the grace periods.
+    pub fn interval(&self) -> Duration {
+        match self.mode {
             SplashMode::Animated => FRAME,
             _ => STATIC_TIMER,
-        })
+        }
     }
 }
 
