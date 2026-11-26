@@ -213,6 +213,27 @@ fn welcome_page(
     );
 }
 
+/// The page title in the console's section style: an orange bar, the name
+/// in capitals and a rule beneath.
+fn page_heading(page: Page, width: u16, unicode: bool, theme: &Theme) -> Vec<Line<'static>> {
+    let (bar, rule) = if unicode {
+        ("▍ ", "─")
+    } else {
+        ("| ", "-")
+    };
+    vec![
+        Line::from(vec![
+            Span::styled(bar, Style::new().fg(theme.p.orange)),
+            Span::styled(page.title().to_uppercase(), theme.title()),
+        ]),
+        Line::styled(
+            rule.repeat(usize::from(width)),
+            Style::new().fg(theme.p.bg2),
+        ),
+        Line::default(),
+    ]
+}
+
 /// Page names across the top: done in green, the current one highlighted,
 /// the rest dimmed. Falls back to dots when narrow.
 fn stepper(w: &Onboarding, width: u16, unicode: bool, theme: &Theme) -> Line<'static> {
@@ -446,7 +467,10 @@ pub fn render(frame: &mut Frame, w: &Onboarding, unicode: bool, motion: bool, th
     let area = frame.area();
     frame.render_widget(Block::new().style(theme.base()), area);
     let width = area.width.min(96);
-    let height = area.height.min(28);
+    // The Welcome page needs room for the Observer; the others stay compact.
+    let height = area
+        .height
+        .min(if w.page == Page::Welcome { 28 } else { 24 });
     let [column] = Layout::horizontal([Constraint::Length(width)])
         .flex(Flex::Center)
         .areas(area);
@@ -485,10 +509,9 @@ pub fn render(frame: &mut Frame, w: &Onboarding, unicode: bool, motion: bool, th
     if w.page == Page::Welcome {
         welcome_page(frame, content, w, unicode, motion, theme);
     } else {
-        frame.render_widget(
-            Paragraph::new(body(w, unicode, theme)).wrap(Wrap { trim: false }),
-            content,
-        );
+        let mut lines = page_heading(w.page, content.width, unicode, theme);
+        lines.extend(body(w, unicode, theme));
+        frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), content);
     }
     let status = match (&w.error, w.finishing) {
         (Some(e), _) => Line::styled(e.clone(), Style::new().fg(theme.p.red)),
