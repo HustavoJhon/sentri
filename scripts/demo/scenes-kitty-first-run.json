@@ -1,0 +1,8 @@
+{
+ "01-first-run": [[null, 9.8], [null, 4.0],
+   [["enter"], 1.4], [["TYPE:hustavojhon"], 1.4], [["enter"], 2.2],
+   [["enter"], 1.8], [["enter"], 1.8],
+   [["space"], 0.5], [["down"], 0.3], [["space"], 0.5], [["down"], 0.3], [["space"], 1.2],
+   [["enter"], 3.2], [["enter"], 9.0]],
+ "end": [[["q"], 0.8]]
+}
