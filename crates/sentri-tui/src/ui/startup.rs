@@ -34,7 +34,7 @@ fn level_colors(part: Part, theme: &Theme) -> [Color; 4] {
     match part {
         Part::Shell => [p.bg3, p.gray, p.yellow, p.fg],
         Part::Wing => [p.bg3, p.green, p.aqua, p.fg],
-        Part::Staff => [p.bg3, p.gray, p.orange, p.yellow],
+        Part::Staff => [p.bg3, p.orange, p.orange, p.yellow],
         Part::Core => [p.green, p.aqua, p.fg, p.yellow],
         Part::Base => [p.bg2, p.bg3, p.gray, p.fg4],
         Part::Eye => [p.gray, p.yellow, p.orange, p.yellow],
