@@ -6,8 +6,10 @@ sentri            # abre la TUI
 
 ## Arranque y onboarding
 
-Mientras SENTRI se inicia, el Observer despierta y muestra los pasos reales
-de inicialización; cualquier tecla lo salta. En la primera ejecución se abre
+Mientras SENTRI se inicia, el Observer, un ward en 3D hecho de caracteres,
+despierta girando junto a la marca SENTRI y un panel con los pasos reales de
+inicialización, tu ubicación y los ámbitos de descubrimiento; cualquier tecla
+lo salta. En la primera ejecución se abre
 después un asistente de seis páginas (GitHub, ubicación, ámbitos e intereses)
 que guarda cada página al continuar y retoma donde lo dejaste. `O` en Settings
 lo repite. Detalle en [onboarding.md](onboarding.md).
