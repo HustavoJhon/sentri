@@ -121,12 +121,14 @@ async fn wait(timer: Option<Duration>) {
 /// event loop starts (theme and terminal detection run synchronously).
 fn startup_screen(app: &Sentri, state: &State, palette: Palette) -> crate::state::startup::Startup {
     use crate::observer::SplashEnv;
-    use crate::state::startup::{Startup, Status, Step};
+    use crate::state::startup::{Context, Startup, Status, Step};
     let env = SplashEnv::detect();
     let config = app.config();
     let mode = env.mode(config.onboarding.startup_animation);
     let now = std::time::Instant::now();
     let mut startup = Startup::new(mode, env.unicode(config.ui.ascii_icons), now);
+    startup.context = Context::from_config(&config.profile, &config.discovery);
+    startup.context.first_run = config.needs_onboarding();
     let colors = if palette == Palette::INDEXED {
         "256 colors"
     } else {
