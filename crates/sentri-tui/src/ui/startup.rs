@@ -262,7 +262,7 @@ fn heading(title: &'static str, width: u16, unicode: bool, theme: &Theme) -> Vec
 fn steps_column(frame: &mut Frame, area: Rect, startup: &Startup, theme: &Theme) {
     let width = area.width.saturating_sub(2);
     let mut lines = heading(" INITIALIZATION", width, startup.unicode, theme);
-    let roomy = area.height > 2 + 2 * u16::try_from(startup.steps.len()).unwrap_or(6);
+    let roomy = area.height >= steps_height(startup);
     for (step, status) in &startup.steps {
         let (m, style) = mark(status, startup, theme);
         let label = if status.is_pending() {
@@ -505,7 +505,12 @@ fn arrange(area: Rect, unicode: bool) -> Arrangement {
             area.height.saturating_sub(1 + BAR),
         )
     };
-    if area.width >= 118 && area.height >= 28 && art_rows(body(2 * SIDE + 2), unicode) >= 16 {
+    let console = art_rows(body(2 * SIDE + 2), unicode);
+    let duo = art_rows(body(SIDE + 1), unicode);
+    let wide = area.width >= 118 && area.height >= 28 && console >= 16;
+    // In tall, narrow windows two columns give the Observer far more room;
+    // the log then moves under the steps.
+    if wide && console + 6 > duo {
         Arrangement::Console
     } else if area.width >= 76
         && area.height >= 22
@@ -517,6 +522,11 @@ fn arrange(area: Rect, unicode: bool) -> Arrangement {
     } else {
         Arrangement::Steps
     }
+}
+
+/// Rows the initialization column needs with a detail line per step.
+fn steps_height(startup: &Startup) -> u16 {
+    2 + 2 * u16::try_from(startup.steps.len()).unwrap_or(6) + 1
 }
 
 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
@@ -611,13 +621,26 @@ pub fn render(frame: &mut Frame, startup: &Startup, theme: &Theme) {
                 centre(frame, mid, startup, theme);
                 log_column(frame, right, startup, theme);
             } else {
+                // With room to spare, the log goes under the steps.
+                let stacked = body.height >= steps_height(startup) + 10;
+                let side = if stacked { SIDE } else { SIDE_NARROW };
                 let [left, _, mid] = Layout::horizontal([
-                    Constraint::Length(SIDE_NARROW),
+                    Constraint::Length(side),
                     Constraint::Length(1),
                     Constraint::Min(0),
                 ])
                 .areas(body);
-                steps_column(frame, left, startup, theme);
+                if stacked {
+                    let [steps, log] = Layout::vertical([
+                        Constraint::Length(steps_height(startup)),
+                        Constraint::Min(0),
+                    ])
+                    .areas(left);
+                    steps_column(frame, steps, startup, theme);
+                    log_column(frame, log, startup, theme);
+                } else {
+                    steps_column(frame, left, startup, theme);
+                }
                 centre(frame, mid, startup, theme);
             }
         }
@@ -762,6 +785,19 @@ mod tests {
         assert_eq!(r(60, 22), Arrangement::Flat);
         assert_eq!(r(50, 14), Arrangement::Steps);
         assert_eq!(r(30, 8), Arrangement::Steps);
+        // Tall and narrow: two columns give the Observer more room.
+        assert_eq!(r(120, 66), Arrangement::Duo);
+    }
+
+    #[test]
+    fn tall_two_column_screens_keep_the_log_under_the_steps() {
+        let s = sample(SplashMode::Static, true);
+        let screen = text(110, 60, &s);
+        assert!(screen.contains("EVENT LOG"), "{screen}");
+        assert!(screen.contains("12 healthy"));
+        let short = text(90, 26, &s);
+        assert!(!short.contains("EVENT LOG"), "no room for it");
+        assert!(short.contains("Preparing dashboard"));
     }
 
     #[test]
