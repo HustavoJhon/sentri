@@ -171,6 +171,14 @@ pub const SETTINGS: &[Setting] = &[
         false,
     ),
     s(
+        "onboarding.startup_style",
+        "Appearance",
+        "Startup pace",
+        SettingKind::Choice(&["cinematic", "brief"]),
+        "cinematic: about seven seconds; brief: about two (any key skips)",
+        false,
+    ),
+    s(
         "dashboard.layout",
         "Dashboard",
         "Layout",
@@ -529,6 +537,7 @@ pub fn current(config: &Config, key: &str) -> Option<String> {
             .collect::<Vec<_>>()
             .join(", "),
         "onboarding.startup_animation" => config.onboarding.startup_animation.to_string(),
+        "onboarding.startup_style" => config.onboarding.startup_style.clone(),
         "onboarding.completed" => config.onboarding.completed.to_string(),
         "onboarding.step" => config.onboarding.step.unwrap_or(0).to_string(),
         "github.username" => text(&config.github.username),

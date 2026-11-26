@@ -18,6 +18,7 @@ Las claves desconocidas son un error (para detectar erratas).
 |---|---|
 | `completed` | `false` abre el asistente de configuración al iniciar la TUI. La plantilla nueva trae `false`; un fichero **sin** esta sección (usuarios anteriores) cuenta como `true`. |
 | `startup_animation` | `true` (por defecto) muestra el despertar del Observer al iniciar. |
+| `startup_style` | `cinematic` (por defecto): despertar pausado de unos 7 s; `brief`: unos 2 s. Cualquier tecla lo salta y el trabajo real nunca espera a la animación. Los ficheros sin esta clave usan `cinematic`. |
 | `step` | Página en la que continuar un onboarding interrumpido (0–5). Se borra al terminar. |
 
 `sentri onboarding` (o `O` en Settings) vuelve a poner `completed = false`

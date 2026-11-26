@@ -13,6 +13,7 @@
 [onboarding]
 completed = false
 startup_animation = true  # the Observer awakening shown while SENTRI starts
+startup_style = "cinematic"  # cinematic (~7 s) or brief (~2 s); any key skips
 
 [profile]
 home_city = "Cusco"
