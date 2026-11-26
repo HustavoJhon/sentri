@@ -71,7 +71,12 @@ async fn event_loop(
         },
         ..State::default()
     };
-    state.startup = Some(startup_screen(&app, &state, palette));
+    state.startup = Some(startup_screen(
+        &app,
+        &state,
+        palette,
+        std::path::Path::new(&config_path),
+    ));
     if app.config().needs_onboarding() {
         state.onboarding = Some(crate::state::onboarding::Onboarding::from_config(
             &app.config(),
@@ -84,15 +89,10 @@ async fn event_loop(
 
     while !state.quit {
         // Checked before drawing: a splash frame on screen always gets one
-        // more wake-up, so the dashboard replaces it even when the splash
-        // expires between this draw and the next timer.
+        // more wake-up (see `State::wake_interval`).
         let splash = state.splash_visible();
         terminal.draw(|frame| ui::draw(frame, &mut state, &theme))?;
-        let timer = state
-            .startup
-            .as_ref()
-            .filter(|_| splash)
-            .map(crate::state::startup::Startup::interval);
+        let timer = state.wake_interval(splash);
         let effects = tokio::select! {
             () = wait(timer) => {
                 state.on_timer();
@@ -124,9 +124,14 @@ async fn wait(timer: Option<Duration>) {
 
 /// The Observer awakening, with the steps that already finished before the
 /// event loop starts (theme and terminal detection run synchronously).
-fn startup_screen(app: &Sentri, state: &State, palette: Palette) -> crate::state::startup::Startup {
+fn startup_screen(
+    app: &Sentri,
+    state: &State,
+    palette: Palette,
+    config_path: &std::path::Path,
+) -> crate::state::startup::Startup {
     use crate::observer::SplashEnv;
-    use crate::state::startup::{Context, Startup, Status, Step};
+    use crate::state::startup::{Context, Level, Pace, Startup, Status, Step};
     let env = SplashEnv::detect();
     let config = app.config();
     let mode = env.mode(config.onboarding.startup_animation);
@@ -134,6 +139,7 @@ fn startup_screen(app: &Sentri, state: &State, palette: Palette) -> crate::state
     let mut startup = Startup::new(mode, env.unicode(config.ui.ascii_icons), now);
     startup.context = Context::from_config(&config.profile, &config.discovery);
     startup.context.first_run = config.needs_onboarding();
+    startup.pace = Pace::from_name(&config.onboarding.startup_style);
     let colors = if palette == Palette::INDEXED {
         "256 colors"
     } else {
@@ -154,7 +160,37 @@ fn startup_screen(app: &Sentri, state: &State, palette: Palette) -> crate::state
         environment.push_str(" · tmux");
     }
     startup.resolve(Step::Environment, Status::Done(environment), now);
+    // The configuration was read before the interface started.
+    let mut loaded = home_relative(config_path);
+    if !config_path.exists() {
+        loaded.push_str(" · built-in defaults");
+    }
+    if startup.context.first_run {
+        loaded.push_str(" · first run");
+    }
+    startup.resolve(Step::Configuration, Status::Done(loaded), now);
+    if let Some(place) = startup.context.location.clone() {
+        startup.log(now, Level::Info, "profile", format!("location {place}"));
+    }
+    let scopes = if startup.context.scopes.is_empty() {
+        "no location bonus".to_owned()
+    } else {
+        startup.context.scopes.join(" · ")
+    };
+    startup.log(now, Level::Info, "discovery", scopes);
     startup
+}
+
+/// `path` with the home directory shown as `~`.
+fn home_relative(path: &std::path::Path) -> String {
+    std::env::var_os("HOME")
+        .map(std::path::PathBuf::from)
+        .and_then(|home| {
+            path.strip_prefix(home)
+                .ok()
+                .map(|rest| format!("~/{}", rest.display()))
+        })
+        .unwrap_or_else(|| path.display().to_string())
 }
 
 fn spawn_terminal_reader(tx: UnboundedSender<Event>) {

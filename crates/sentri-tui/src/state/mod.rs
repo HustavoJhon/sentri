@@ -1506,10 +1506,48 @@ impl State {
             .is_some_and(|s| s.visible(std::time::Instant::now()))
     }
 
-    /// Splash timer: animation frames and grace periods.
+    /// Splash timer: animation frames and grace periods; it also turns the
+    /// Observer on the onboarding Welcome page.
     pub fn on_timer(&mut self) {
         if let Some(startup) = &mut self.startup {
             startup.on_timer(std::time::Instant::now());
+        }
+        if self.welcome_animated()
+            && let Some(wizard) = &mut self.onboarding
+        {
+            wizard.tick = wizard.tick.wrapping_add(1);
+        }
+    }
+
+    /// Whether the startup animation is on (off in static mode, CI, or when
+    /// disabled in the configuration).
+    pub fn motion(&self) -> bool {
+        self.startup
+            .as_ref()
+            .is_some_and(startup::Startup::animated)
+    }
+
+    /// The onboarding Welcome page is on screen and animates.
+    fn welcome_animated(&self) -> bool {
+        self.motion()
+            && !self.splash_visible()
+            && self
+                .onboarding
+                .as_ref()
+                .is_some_and(|w| w.page == onboarding::Page::Welcome)
+    }
+
+    /// How long the event loop may sleep before the next frame, given
+    /// whether the frame just drawn was the splash. `None` waits for input.
+    pub fn wake_interval(&self, splash_drawn: bool) -> Option<std::time::Duration> {
+        if splash_drawn {
+            // One more wake-up even if the splash just expired, so the next
+            // screen replaces it.
+            self.startup.as_ref().map(startup::Startup::interval)
+        } else if self.welcome_animated() {
+            Some(startup::FRAME)
+        } else {
+            None
         }
     }
 
@@ -1522,6 +1560,10 @@ impl State {
         let now = std::time::Instant::now();
         match msg {
             Msg::Overview(o) => {
+                // Health first, so "all systems ready" stays the last line.
+                if s.status(Step::Sources).is_pending() {
+                    log_source_health(s, o, now);
+                }
                 let enabled = o.config.sources.iter().filter(|s| s.enabled).count();
                 let total = o.config.sources.len();
                 s.resolve(
@@ -1531,6 +1573,19 @@ impl State {
                 );
             }
             Msg::Profile(p) => {
+                if let ProfileState::Ready(profile, _) = p
+                    && s.status(Step::Profile).is_pending()
+                {
+                    s.log(
+                        now,
+                        startup::Level::Info,
+                        "github",
+                        format!(
+                            "@{} · {} public repos · {} followers",
+                            profile.login, profile.public_repos, profile.followers
+                        ),
+                    );
+                }
                 let status = match p {
                     ProfileState::Ready(profile, _) => Status::Done(format!("@{}", profile.login)),
                     ProfileState::NotConfigured => {
@@ -1728,6 +1783,46 @@ impl State {
             }
         }
         Vec::new()
+    }
+}
+
+/// Logs how the enabled sources stood at their last collection: only what
+/// the database recorded.
+fn log_source_health(s: &mut startup::Startup, o: &Overview, now: std::time::Instant) {
+    use startup::Level;
+    let mut healthy = 0usize;
+    let mut never = 0usize;
+    let mut failing: Vec<(&str, i64)> = Vec::new();
+    for source in o.config.sources.iter().filter(|s| s.enabled) {
+        match o.states.iter().find(|st| st.source_name == source.name) {
+            Some(st) if st.consecutive_failures > 0 => {
+                failing.push((&source.name, st.consecutive_failures));
+            }
+            Some(st) if st.last_success_at.is_some() => healthy += 1,
+            _ => never += 1,
+        }
+    }
+    if healthy + never + failing.len() == 0 {
+        s.log(now, Level::Info, "sources", "no sources enabled".into());
+        return;
+    }
+    let mut parts = vec![format!("{healthy} healthy")];
+    if !failing.is_empty() {
+        parts.push(format!("{} failing", failing.len()));
+    }
+    if never > 0 {
+        parts.push(format!("{never} not collected yet"));
+    }
+    let summary = parts.join(" · ");
+    s.log(now, Level::Info, "sources", summary);
+    for (name, failures) in failing.into_iter().take(3) {
+        let times = if failures == 1 { "time" } else { "times" };
+        s.log(
+            now,
+            Level::Failed,
+            "sources",
+            format!("{name} failed {failures} {times} in a row"),
+        );
     }
 }
 

@@ -19,21 +19,28 @@ ojo a medias un radar barre el suelo, y despierto del todo pulsa el iris y
 flotan más partículas. Colores Gruvbox Dark: amarillo y naranja en la cabeza,
 el ojo y el bastón; verde y aqua en las alas, los anillos y el radar.
 
-Alrededor del Observer: la marca **SENTRI**, el lema *THE WORLD IS FULL OF
-OPPORTUNITIES* y un panel **INITIALIZATION** con los pasos, tu ubicación
-configurada (o «not set»), los ámbitos de descubrimiento activos y una barra de
-progreso. Según el tamaño de la terminal el Observer va encima del panel, a su
-lado (terminales anchas y bajas) o, si no cabe, se usa el ward plano de la
-fase 12 o solo el panel.
+La pantalla es una **consola de observación**: una franja superior con el
+estado del Observer (dormido, despertando, despierto · escaneando); a la
+izquierda **INITIALIZATION** con cada paso y lo que encontró; en el centro el
+Observer con la marca **SENTRI** y el lema *THE WORLD IS FULL OF
+OPPORTUNITIES*; a la derecha **EVENT LOG**, con lo que realmente ocurrió y en
+qué momento (terminal, configuración, ubicación, ámbitos, estado de cada fuente
+según la última recolección, perfil de GitHub, dashboard); y abajo una barra
+con el progreso, la ubicación, los ámbitos local · national · global y cómo
+saltar. Los paneles laterales usan el fondo oscuro de Gruvbox en lugar de
+bordes. En ventanas altas y estrechas el registro pasa debajo de los pasos para
+dar más espacio al Observer; con menos espacio se oculta el registro, luego se
+usa el ward plano de la fase 12 y, al final, solo la lista de pasos.
 
 Los pasos se marcan solo cuando termina el trabajo real:
 
 | Paso | Se completa cuando… |
 |---|---|
 | Initializing Observer | la terminal está lista y se eligió la paleta (truecolor o 256 colores). |
-| Detecting environment | terminó la detección de terminal, tmux y protocolo de imágenes. |
-| Connecting opportunity sources | se leyó el estado de las fuentes configuradas. |
-| Loading personal profile | se cargó el perfil de GitHub (o se confirmó que no hay usuario). |
+| Detecting terminal | terminó la detección de terminal, tmux y protocolo de imágenes. |
+| Loading configuration | se leyó `config.toml` (o se usan los valores por defecto). |
+| Loading user profile | se cargó el perfil de GitHub (o se confirmó que no hay usuario). |
+| Preparing sources | se leyó el estado de las fuentes configuradas. |
 | Preparing dashboard | el feed quedó ordenado según tu perfil. |
 
 Marcas: `✓` hecho, `↻` sigue en segundo plano, `✗` falló, `◌` pendiente (un
@@ -41,23 +48,30 @@ spinner mientras está animado).
 
 - **No retrasa el arranque.** El dashboard se carga detrás desde el primer
   instante. GitHub tiene 1,5 s de margen; pasado ese tiempo continúa en segundo
-  plano. Ningún paso retiene la pantalla más de 4 s, y cualquier tecla la salta
-  al momento (el trabajo sigue). Animada, la pantalla dura al menos 1,5 s y el
-  ojo abierto queda visible ~0,6 s al terminar; estática, se va en cuanto todo
-  termina (~0,6 s).
+  plano (`↻`) y, si termina mientras la pantalla sigue visible, el paso pasa a
+  `✓` y el registro lo anota. Cualquier tecla salta la pantalla al momento.
+- **Ritmo.** `[onboarding] startup_style = "cinematic"` (por defecto): unos 7 s;
+  el ojo avanza una etapa por segundo como mucho y nunca antes que el progreso
+  real, luego el Observer escanea hasta completar el tiempo. `"brief"`: unos
+  1,5 s. También en **Settings › Appearance › Startup pace**. La animación
+  consume ~2 % de CPU (compilación release, 12,5 fotogramas por segundo).
 - **Modos.** Animado por defecto (12,5 fotogramas por segundo, cada 80 ms).
   Estático, un solo fotograma en vista de tres cuartos redibujado solo cuando
   cambia el progreso, si `SENTRI_NO_ANIMATION` o `CI` están definidas o
   `TERM=dumb`. Sin pantalla si la salida no es una terminal o si
   `[onboarding] startup_animation = false` (también en **Settings ›
   Appearance › Startup animation**). Se adapta al redimensionar.
+- **Welcome del asistente.** La primera página muestra el Observer girando
+  junto a la marca, un saludo, qué hace SENTRI y `Enter` para empezar; sin
+  animación (modo estático) queda quieto, y en paneles estrechos solo el texto.
+  Todas las páginas comparten la cabecera de sección y una barra de pasos con
+  los nombres (o puntos si no caben).
 - **Sin Unicode.** Con `ui.ascii_icons = true`, un locale que no es UTF-8 o la
   consola de Linux (`TERM=linux`), el dibujo, la marca y las marcas son ASCII.
 - **Vista previa.** `cargo run -p sentri-tui --example observer_frames -- 60 26 8`
   imprime ocho fotogramas de la rotación en texto plano (ancho, alto, número).
-- **Terminales pequeñas:** por debajo de ~33 filas (o ~68 columnas) se usa el
-  ward plano de la fase 12; con menos de 24 filas o 40 columnas solo quedan la
-  marca y el panel.
+- **Terminales pequeñas:** desde 76×22 hay dos columnas (pasos y Observer);
+  por debajo, el ward plano con la lista de pasos (44×21) o solo la lista.
 
 `sentri` sin terminal interactiva (por ejemplo en un script o con la salida
 redirigida) no abre la interfaz y sugiere los comandos equivalentes

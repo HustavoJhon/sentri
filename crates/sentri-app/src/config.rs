@@ -272,6 +272,9 @@ pub struct OnboardingConfig {
     pub completed: bool,
     /// Show the Observer awakening while SENTRI starts.
     pub startup_animation: bool,
+    /// `cinematic` (a paced awakening of about seven seconds) or `brief`
+    /// (about two). Any key skips either.
+    pub startup_style: String,
     /// Step to resume an interrupted onboarding from (absent when done).
     pub step: Option<u8>,
 }
@@ -281,6 +284,7 @@ impl Default for OnboardingConfig {
         Self {
             completed: true,
             startup_animation: true,
+            startup_style: "cinematic".into(),
             step: None,
         }
     }
@@ -573,6 +577,11 @@ impl Config {
                 "calendar.default_view must be month, week, day or agenda".into(),
             ));
         }
+        if !["cinematic", "brief"].contains(&self.onboarding.startup_style.as_str()) {
+            return Err(ConfigError::Invalid(
+                "onboarding.startup_style must be cinematic or brief".into(),
+            ));
+        }
         if !["auto", "always", "never"].contains(&self.ui.collect_on_start.as_str()) {
             return Err(ConfigError::Invalid(
                 "ui.collect_on_start must be auto, always or never".into(),
@@ -698,6 +707,10 @@ mod tests {
         let config = Config::parse(text, Path::new("x")).unwrap();
         assert_eq!(config.onboarding.step, Some(2));
         assert!(!config.onboarding.startup_animation);
+        assert_eq!(
+            config.onboarding.startup_style, "cinematic",
+            "older files keep working"
+        );
         assert!(!config.discovery.international && config.discovery.local);
         assert_eq!(
             config.discovery.topics,

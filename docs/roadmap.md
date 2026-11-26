@@ -50,11 +50,29 @@ Hecho:
   dibujado y el siguiente temporizador.
 - `cargo run -p sentri-tui --example observer_frames` para revisar fotogramas.
 
-Validado en Alacritty dentro de tmux: 120×46, 160×34 (lado a lado), 80×24
-(ward plano), `LANG=C` (ASCII), `SENTRI_NO_ANIMATION=1`, primera ejecución con
-el asistente después del Observer, y `sentri` sin terminal.
+Segunda parte (consola de observación):
 
-Pendiente: en tmux la detección de gráficos retrasa ~1 s el primer fotograma.
+- Pantalla de arranque como consola: pasos reales a la izquierda (se añadió
+  «Loading configuration»), registro de eventos con tiempos y estado de las
+  fuentes a la derecha, barra de progreso/ubicación/ámbitos abajo y cabecera
+  con el estado del Observer. Ventanas altas y estrechas: dos columnas con el
+  registro bajo los pasos.
+- Ritmo `[onboarding] startup_style` (`cinematic` ~7 s por defecto, `brief`
+  ~1,5 s), con fila en Settings. Un paso en segundo plano puede pasar a hecho si
+  termina mientras la pantalla sigue visible.
+- Welcome del asistente con el Observer girando, marca, saludo y explicación;
+  barra de pasos con nombres y cabecera de sección en todas las páginas.
+
+Validado: tmux 3.8 en Alacritty (130×40, 150×44, 120×46, 80×24, `LANG=C`,
+`SENTRI_NO_ANIMATION=1`, `allow-passthrough` on/off), ventanas reales de
+kitty (protocolo kitty), foot (Sixel) y Alacritty (medios bloques); primera
+ejecución, interrupción y reanudación del asistente, guardado y arranque
+directo al dashboard, salto con una tecla, Ctrl-C durante la pantalla (la
+terminal vuelve a modo canónico con eco). Duración medida: 7,0 s cinematic,
+1,6 s brief; ~2 % de CPU en release.
+
+Pendiente: en tmux la detección de gráficos retrasa ~1 s el primer fotograma;
+no se probó kitty dentro de tmux con passthrough real.
 
 ## Fase 12: despertar del Observer y onboarding personalizado (2026-11-25)
 

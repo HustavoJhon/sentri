@@ -56,7 +56,7 @@ pub fn draw(frame: &mut Frame, state: &mut State, theme: &Theme) {
             .startup
             .as_ref()
             .map_or(!state.ui.ascii_icons, |s| s.unicode);
-        onboarding::render(frame, wizard, unicode, theme);
+        onboarding::render(frame, wizard, unicode, state.motion(), theme);
         return;
     }
     let area = frame.area();

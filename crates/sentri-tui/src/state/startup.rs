@@ -14,27 +14,97 @@ use crate::observer::{Eye, SplashMode};
 pub enum Step {
     Observer,
     Environment,
-    Sources,
+    Configuration,
     Profile,
+    Sources,
     Dashboard,
 }
 
 impl Step {
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
         Self::Observer,
         Self::Environment,
-        Self::Sources,
+        Self::Configuration,
         Self::Profile,
+        Self::Sources,
         Self::Dashboard,
     ];
 
     pub const fn label(self) -> &'static str {
         match self {
             Self::Observer => "Initializing Observer",
-            Self::Environment => "Detecting environment",
-            Self::Sources => "Connecting opportunity sources",
-            Self::Profile => "Loading personal profile",
+            Self::Environment => "Detecting terminal",
+            Self::Configuration => "Loading configuration",
+            Self::Profile => "Loading user profile",
+            Self::Sources => "Preparing sources",
             Self::Dashboard => "Preparing dashboard",
+        }
+    }
+
+    /// Short name used in the event log.
+    pub const fn tag(self) -> &'static str {
+        match self {
+            Self::Observer => "observer",
+            Self::Environment => "terminal",
+            Self::Configuration => "config",
+            Self::Profile => "profile",
+            Self::Sources => "sources",
+            Self::Dashboard => "dashboard",
+        }
+    }
+}
+
+/// How an event-log entry is marked.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Level {
+    Info,
+    Done,
+    Background,
+    Failed,
+}
+
+/// One line of the event log: something that really happened.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Event {
+    /// Time since the splash appeared.
+    pub at: Duration,
+    pub level: Level,
+    pub tag: &'static str,
+    pub text: String,
+}
+
+/// How long the awakening takes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Pace {
+    /// A paced awakening of about seven seconds.
+    #[default]
+    Cinematic,
+    /// About two seconds.
+    Brief,
+}
+
+impl Pace {
+    pub fn from_name(name: &str) -> Self {
+        if name == "brief" {
+            Self::Brief
+        } else {
+            Self::Cinematic
+        }
+    }
+
+    /// The animated splash shows at least this long (any key skips it).
+    pub const fn minimum(self) -> Duration {
+        match self {
+            Self::Cinematic => Duration::from_millis(7000),
+            Self::Brief => Duration::from_millis(1500),
+        }
+    }
+
+    /// Frames between two stages of the eye opening.
+    const fn eye_stage(self) -> u64 {
+        match self {
+            Self::Cinematic => 14,
+            Self::Brief => 4,
         }
     }
 }
@@ -61,11 +131,8 @@ pub const PROFILE_GRACE: Duration = Duration::from_millis(1500);
 pub const MAX_WAIT: Duration = Duration::from_secs(4);
 /// The open eye stays visible this long once everything is ready.
 pub const LINGER: Duration = Duration::from_millis(600);
-/// An animated splash shows at least this long (any key still skips it at
-/// once). The work behind it never waits: the dashboard loads meanwhile.
-pub const MIN_ANIMATED: Duration = Duration::from_millis(1500);
-/// Frames between two stages of the eye opening (about a third of a second).
-const EYE_STAGE: u64 = 4;
+/// Most event-log entries kept.
+const LOG_LIMIT: usize = 64;
 /// Frame interval while animated (12.5 frames per second).
 pub const FRAME: Duration = Duration::from_millis(80);
 /// Timer interval for the static splash (timeouts only).
@@ -133,6 +200,12 @@ pub struct Startup {
     /// real progress, so even an instant startup shows the awakening.
     shown: Eye,
     pub context: Context,
+    pub pace: Pace,
+    /// What happened, in order.
+    pub events: Vec<Event>,
+    /// Time since the splash appeared, as of the last timer (so a frame is
+    /// a pure function of the state).
+    pub clock: Duration,
     started: Instant,
     finished: Option<Instant>,
     dismissed: bool,
@@ -152,6 +225,9 @@ impl Startup {
             },
             shown: Eye::Closed,
             context: Context::default(),
+            pace: Pace::default(),
+            events: Vec::new(),
+            clock: Duration::ZERO,
             started: now,
             finished: None,
             dismissed: mode == SplashMode::Off,
@@ -165,16 +241,43 @@ impl Startup {
             .map_or(&Status::Pending, |(_, status)| status)
     }
 
-    /// Records the outcome of `step`; later reports do not overwrite one.
+    /// Records the outcome of `step`. A final outcome (done or failed) is
+    /// never overwritten; work that went to the background may still report
+    /// how it ended.
     pub fn resolve(&mut self, step: Step, status: Status, now: Instant) {
-        if let Some((_, slot)) = self.steps.iter_mut().find(|(s, _)| *s == step)
-            && slot.is_pending()
-        {
-            *slot = status;
+        let Some((_, slot)) = self.steps.iter_mut().find(|(s, _)| *s == step) else {
+            return;
+        };
+        let open = slot.is_pending()
+            || matches!(slot, Status::Background(_)) && !matches!(status, Status::Background(_));
+        if !open {
+            return;
         }
+        let (level, detail) = match &status {
+            Status::Pending => return,
+            Status::Done(d) => (Level::Done, d.clone()),
+            Status::Background(d) => (Level::Background, d.clone()),
+            Status::Failed(d) => (Level::Failed, d.clone()),
+        };
+        *slot = status;
+        self.log(now, level, step.tag(), detail);
         if self.finished.is_none() && self.steps.iter().all(|(_, s)| !s.is_pending()) {
             self.finished = Some(now);
+            self.log(now, Level::Info, "observer", "all systems ready".into());
         }
+    }
+
+    /// Adds a fact to the event log.
+    pub fn log(&mut self, now: Instant, level: Level, tag: &'static str, text: String) {
+        if self.events.len() >= LOG_LIMIT {
+            self.events.remove(0);
+        }
+        self.events.push(Event {
+            at: now.saturating_duration_since(self.started),
+            level,
+            tag,
+            text,
+        });
     }
 
     pub fn resolved(&self) -> usize {
@@ -197,9 +300,10 @@ impl Startup {
 
     /// Advances the animation and applies the grace periods.
     pub fn on_timer(&mut self, now: Instant) {
+        self.clock = self.elapsed(now);
         if self.mode == SplashMode::Animated {
             self.tick = self.tick.wrapping_add(1);
-            if self.tick.is_multiple_of(EYE_STAGE) && self.shown < self.eye() {
+            if self.tick.is_multiple_of(self.pace.eye_stage()) && self.shown < self.eye() {
                 self.shown = self.shown.next();
             }
             let target = crate::observer::glow_target(self.shown);
@@ -236,8 +340,13 @@ impl Startup {
             .finished
             .is_none_or(|at| now.saturating_duration_since(at) < LINGER);
         let showing = self.mode == SplashMode::Animated
-            && now.saturating_duration_since(self.started) < MIN_ANIMATED;
+            && now.saturating_duration_since(self.started) < self.pace.minimum();
         !self.dismissed && (lingering || showing)
+    }
+
+    /// Time since the splash appeared.
+    pub fn elapsed(&self, now: Instant) -> Duration {
+        now.saturating_duration_since(self.started)
     }
 
     /// Whether frames advance on a timer.
@@ -283,16 +392,17 @@ mod tests {
         s.resolve(Step::Profile, Status::Done("@octocat".into()), t0);
         assert_eq!(s.eye(), Eye::Half);
         assert!(s.visible(t0));
+        s.resolve(Step::Configuration, Status::Done("config.toml".into()), t0);
         s.resolve(Step::Dashboard, Status::Done("12 ranked".into()), t0);
         assert_eq!(s.eye(), Eye::Open);
         assert!(
             s.visible(t0 + Duration::from_millis(100)),
             "lingers briefly"
         );
-        let gone = t0 + LINGER.max(MIN_ANIMATED);
+        let gone = t0 + LINGER.max(Pace::Cinematic.minimum());
         let almost = t0
             + LINGER
-                .max(MIN_ANIMATED)
+                .max(Pace::Cinematic.minimum())
                 .saturating_sub(Duration::from_millis(1));
         assert!(s.visible(almost), "brief minimum");
         assert!(!s.visible(gone), "then gets out of the way");
@@ -308,6 +418,65 @@ mod tests {
     }
 
     #[test]
+    fn background_work_may_still_report_how_it_ended() {
+        let (mut s, t0) = startup(SplashMode::Animated);
+        s.resolve(Step::Profile, Status::Background("GitHub later".into()), t0);
+        s.resolve(Step::Profile, Status::Background("again".into()), t0);
+        assert_eq!(
+            s.status(Step::Profile),
+            &Status::Background("GitHub later".into())
+        );
+        s.resolve(Step::Profile, Status::Done("@octocat".into()), t0);
+        assert_eq!(s.status(Step::Profile), &Status::Done("@octocat".into()));
+        let tags: Vec<_> = s.events.iter().map(|e| (e.tag, e.level)).collect();
+        assert_eq!(
+            tags,
+            [("profile", Level::Background), ("profile", Level::Done)]
+        );
+    }
+
+    #[test]
+    fn the_log_records_only_what_happened_and_stays_bounded() {
+        let (mut s, t0) = startup(SplashMode::Animated);
+        assert!(s.events.is_empty(), "nothing before it happens");
+        for step in Step::ALL {
+            s.resolve(
+                step,
+                Status::Done("ok".into()),
+                t0 + Duration::from_millis(300),
+            );
+        }
+        assert_eq!(
+            s.events.len(),
+            Step::ALL.len() + 1,
+            "one per step, then ready"
+        );
+        assert_eq!(s.events[0].at, Duration::from_millis(300));
+        assert_eq!(s.events.last().unwrap().text, "all systems ready");
+        for i in 0..200 {
+            s.log(t0, Level::Info, "sources", format!("{i}"));
+        }
+        assert_eq!(s.events.len(), LOG_LIMIT);
+        assert_eq!(s.events.last().unwrap().text, "199");
+    }
+
+    #[test]
+    fn pace_sets_the_minimum_and_brief_is_short() {
+        assert_eq!(Pace::from_name("brief"), Pace::Brief);
+        assert_eq!(Pace::from_name("cinematic"), Pace::Cinematic);
+        assert_eq!(Pace::from_name("anything"), Pace::Cinematic);
+        let (mut s, t0) = startup(SplashMode::Animated);
+        s.pace = Pace::Brief;
+        for step in Step::ALL {
+            s.resolve(step, Status::Done("ok".into()), t0);
+        }
+        assert!(!s.visible(t0 + Duration::from_secs(2)));
+        s.pace = Pace::Cinematic;
+        assert!(s.visible(t0 + Duration::from_secs(6)), "cinematic lingers");
+        assert!(!s.visible(t0 + Duration::from_secs(7)));
+    }
+
+    #[test]
     fn slow_optional_work_moves_to_the_background() {
         let (mut s, t0) = startup(SplashMode::Animated);
         s.on_timer(t0 + Duration::from_millis(200));
@@ -317,7 +486,12 @@ mod tests {
         assert!(s.status(Step::Sources).is_pending());
         s.on_timer(t0 + MAX_WAIT);
         assert_eq!(s.resolved(), Step::ALL.len());
-        assert!(!s.visible(t0 + MAX_WAIT + LINGER), "never blocks startup");
+        // Nothing waits on the work: only the paced minimum remains, and
+        // any key skips even that.
+        let end = t0 + Pace::Cinematic.minimum().max(MAX_WAIT + LINGER);
+        assert!(!s.visible(end), "never blocks startup");
+        s.pace = Pace::Brief;
+        assert!(!s.visible(t0 + MAX_WAIT + LINGER));
     }
 
     #[test]
@@ -342,7 +516,7 @@ mod tests {
         }
         assert_eq!(s.eye(), Eye::Open);
         let mut stages = vec![s.display_eye()];
-        for _ in 0..12 {
+        for _ in 0..60 {
             s.on_timer(t0);
             if stages.last() != Some(&s.display_eye()) {
                 stages.push(s.display_eye());
@@ -364,7 +538,7 @@ mod tests {
         for step in Step::ALL {
             s.resolve(step, Status::Done("ok".into()), t0);
         }
-        for _ in 0..40 {
+        for _ in 0..90 {
             s.on_timer(t0);
         }
         assert!((s.glow - 1.0).abs() < 0.01, "fully lit: {}", s.glow);
@@ -428,5 +602,48 @@ mod tests {
         assert!(effects.is_empty(), "the key only skips the splash");
         assert!(!state.splash_visible());
         assert!(!state.quit);
+    }
+
+    #[test]
+    fn the_welcome_page_animates_only_with_motion_and_only_there() {
+        use crate::state::State;
+        use crate::state::onboarding::{Onboarding, Page};
+        let config = sentri_app::Config::parse(
+            sentri_app::config::DEFAULT_CONFIG,
+            std::path::Path::new("d"),
+        )
+        .unwrap();
+        let mut startup = Startup::new(SplashMode::Animated, true, Instant::now());
+        startup.dismiss();
+        let mut state = State {
+            startup: Some(startup),
+            onboarding: Some(Onboarding::from_config(&config, None)),
+            ..State::default()
+        };
+        assert_eq!(state.wake_interval(false), Some(FRAME));
+        state.on_timer();
+        state.on_timer();
+        assert_eq!(state.onboarding.as_ref().unwrap().tick, 2);
+        assert_eq!(
+            state.wake_interval(true),
+            Some(FRAME),
+            "a splash frame always gets one more"
+        );
+        state.onboarding.as_mut().unwrap().page = Page::GitHub;
+        assert_eq!(
+            state.wake_interval(false),
+            None,
+            "other pages wait for input"
+        );
+        state.on_timer();
+        assert_eq!(state.onboarding.as_ref().unwrap().tick, 2);
+        state.onboarding.as_mut().unwrap().page = Page::Welcome;
+        state.startup = Some(Startup::new(SplashMode::Static, true, Instant::now()));
+        state.startup.as_mut().unwrap().dismiss();
+        assert_eq!(
+            state.wake_interval(false),
+            None,
+            "static mode never animates"
+        );
     }
 }
