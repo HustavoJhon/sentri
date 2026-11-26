@@ -29,10 +29,10 @@ uno.
 > La versión en inglés ([README.md](README.md)) es la referencia. Si las dos
 > versiones no coinciden, vale la inglesa.
 
-![Recorrido por SENTRI: primer arranque, dashboard, Discover, Tech News, comunidades peruanas y calendario](docs/assets/demo/sentri.gif)
+![Recorrido por SENTRI: el despertar del Observer, dashboard, Discover, Tech News, comunidades peruanas y calendario](docs/assets/demo/sentri.gif)
 
 <p align="center">
-  <sub>Capturas reales de la TUI · tema Gruvbox Dark · usable por SSH sin Nerd Fonts</sub>
+  <sub>Grabado en kitty, así que las imágenes usan el protocolo gráfico de kitty · Gruvbox Dark · usable por SSH sin Nerd Fonts</sub>
 </p>
 
 ---
@@ -83,7 +83,7 @@ personal para decidir **qué oportunidad merece tu tiempo**.
 
 | Primer arranque | Dashboard |
 |---|---|
-| ![Al abrir por primera vez, SENTRI recolecta de todas las fuentes y el feed se llena en vivo](docs/assets/demo/01-first-run.gif) | ![Dashboard con contadores, gráficos, recomendaciones, próximas fechas y noticias](docs/assets/demo/02-dashboard.gif) |
+| ![Primera ejecución: despierta el Observer, el asistente hace unas preguntas y el feed se llena en vivo](docs/assets/demo/01-first-run.gif) | ![Dashboard con contadores, gráficos, recomendaciones, próximas fechas y noticias](docs/assets/demo/02-dashboard.gif) |
 | **Ecosistema peruano** | **Calendario** |
 | ![Comunidades y Call for Speakers de Perú](docs/assets/demo/07-peru-communities.gif) | ![Calendario con vistas de mes, semana, día y agenda](docs/assets/demo/08-calendar.gif) |
 
@@ -135,6 +135,8 @@ cargo run -p sentri-cli -- --help   # lista los comandos
 ```sh
 sentri               # primera vez: despierta el Observer y luego un asistente
 ```
+
+![El despertar del Observer: pasos de inicialización, el ward 3D girando y el registro de eventos](docs/assets/demo/00-observer-awakening.gif)
 
 Mientras SENTRI se inicia se abre una consola de observación: el Observer, un
 ward original en 3D hecho con caracteres de terminal (sombreado por
